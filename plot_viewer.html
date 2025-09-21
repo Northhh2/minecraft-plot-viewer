@@ -7,7 +7,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
-    <link rel="icon" type="image/x-icon" href="Red.ico">
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -241,6 +240,9 @@
                 Object.assign(initialViewBox, viewBox);
                 setViewBox(viewBox.x, viewBox.y, viewBox.w, viewBox.h);
 
+                // Draw district boundaries first (under plots)
+                drawDistrictBoundaries(plots);
+
                 const fragment = document.createDocumentFragment();
                 plots.forEach(plot => {
                     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -286,6 +288,56 @@
                     fragment.appendChild(g);
                 });
                 svg.appendChild(fragment);
+            }
+
+            function drawDistrictBoundaries(plots) {
+                // Group plots by district
+                const districts = {};
+                plots.forEach(plot => {
+                    if (plot.district && plot.district.trim() !== '') {
+                        const districtName = plot.district.trim();
+                        if (!districts[districtName]) {
+                            districts[districtName] = [];
+                        }
+                        districts[districtName].push(plot);
+                    }
+                });
+
+                // Draw boundary for each district
+                Object.entries(districts).forEach(([districtName, districtPlots]) => {
+                    if (districtPlots.length === 0) return;
+
+                    // Find district bounds
+                    const minX = Math.min(...districtPlots.map(p => p.x1));
+                    const maxX = Math.max(...districtPlots.map(p => p.x2));
+                    const minZ = Math.min(...districtPlots.map(p => p.z1));
+                    const maxZ = Math.max(...districtPlots.map(p => p.z2));
+
+                    // Create district boundary rectangle
+                    const districtRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    districtRect.setAttribute('x', minX - 5);
+                    districtRect.setAttribute('y', minZ - 5);
+                    districtRect.setAttribute('width', maxX - minX + 10);
+                    districtRect.setAttribute('height', maxZ - minZ + 10);
+                    districtRect.style.fill = 'none';
+                    districtRect.style.stroke = '#8b5cf6';
+                    districtRect.style.strokeWidth = '3';
+                    districtRect.style.strokeDasharray = '10,5';
+                    districtRect.style.opacity = '0.7';
+                    svg.appendChild(districtRect);
+
+                    // Add district label
+                    const districtLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    districtLabel.setAttribute('x', minX + (maxX - minX) / 2);
+                    districtLabel.setAttribute('y', minZ - 10);
+                    districtLabel.style.fill = '#8b5cf6';
+                    districtLabel.style.fontSize = '8px';
+                    districtLabel.style.fontWeight = 'bold';
+                    districtLabel.style.textAnchor = 'middle';
+                    districtLabel.style.pointerEvents = 'none';
+                    districtLabel.textContent = districtName;
+                    svg.appendChild(districtLabel);
+                });
             }
 
             function showTooltip(event, plotData) {
