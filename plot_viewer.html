@@ -372,8 +372,8 @@
                 const my = e.clientY - rect.top;
                 const w = viewBox.w;
                 const h = viewBox.h;
-                const dw = w * Math.sign(e.deltaY) * 0.1;
-                const dh = h * Math.sign(e.deltaY) * 0.1;
+                const dw = w * -Math.sign(e.deltaY) * 0.1; // Inverted sign
+                const dh = h * -Math.sign(e.deltaY) * 0.1; // Inverted sign
                 const dx = dw * mx / mapContainer.clientWidth;
                 const dy = dh * my / mapContainer.clientHeight;
                 setViewBox(viewBox.x + dx, viewBox.y + dy, viewBox.w - dw, viewBox.h - dh);
