@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>System Działek Minecraft</title>
+    <link rel="icon" type="image/x-icon" href="Red.ico">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
@@ -34,6 +35,13 @@
         }
         .plot-rect:hover {
             fill-opacity: 0.6;
+        }
+        .plot-rect.highlighted {
+            fill-opacity: 1 !important;
+            filter: brightness(1.2);
+        }
+        .plot-rect.dimmed {
+            fill-opacity: 0.2 !important;
         }
         .plot-text {
             font-size: 4px;
@@ -307,36 +315,116 @@
                 Object.entries(districts).forEach(([districtName, districtPlots]) => {
                     if (districtPlots.length === 0) return;
 
-                    // Find district bounds
-                    const minX = Math.min(...districtPlots.map(p => p.x1));
-                    const maxX = Math.max(...districtPlots.map(p => p.x2));
-                    const minZ = Math.min(...districtPlots.map(p => p.z1));
-                    const maxZ = Math.max(...districtPlots.map(p => p.z2));
+                    // Create clusters of plots that are close to each other
+                    const clusters = createDistrictClusters(districtPlots, 30);
 
-                    // Create district boundary rectangle
-                    const districtRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-                    districtRect.setAttribute('x', minX - 5);
-                    districtRect.setAttribute('y', minZ - 5);
-                    districtRect.setAttribute('width', maxX - minX + 10);
-                    districtRect.setAttribute('height', maxZ - minZ + 10);
-                    districtRect.style.fill = 'none';
-                    districtRect.style.stroke = '#8b5cf6';
-                    districtRect.style.strokeWidth = '3';
-                    districtRect.style.strokeDasharray = '10,5';
-                    districtRect.style.opacity = '0.7';
-                    svg.appendChild(districtRect);
+                    clusters.forEach((cluster, clusterIndex) => {
+                        // Find cluster bounds
+                        const minX = Math.min(...cluster.map(p => p.x1));
+                        const maxX = Math.max(...cluster.map(p => p.x2));
+                        const minZ = Math.min(...cluster.map(p => p.z1));
+                        const maxZ = Math.max(...cluster.map(p => p.z2));
 
-                    // Add district label
-                    const districtLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                    districtLabel.setAttribute('x', minX + (maxX - minX) / 2);
-                    districtLabel.setAttribute('y', minZ - 10);
-                    districtLabel.style.fill = '#8b5cf6';
-                    districtLabel.style.fontSize = '8px';
-                    districtLabel.style.fontWeight = 'bold';
-                    districtLabel.style.textAnchor = 'middle';
-                    districtLabel.style.pointerEvents = 'none';
-                    districtLabel.textContent = districtName;
-                    svg.appendChild(districtLabel);
+                        // Create district boundary rectangle
+                        const districtRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                        districtRect.setAttribute('x', minX - 3);
+                        districtRect.setAttribute('y', minZ - 3);
+                        districtRect.setAttribute('width', maxX - minX + 6);
+                        districtRect.setAttribute('height', maxZ - minZ + 6);
+                        districtRect.style.fill = 'none';
+                        districtRect.style.stroke = '#8b5cf6';
+                        districtRect.style.strokeWidth = '2';
+                        districtRect.style.strokeDasharray = '8,4';
+                        districtRect.style.opacity = '0.7';
+                        districtRect.style.cursor = 'pointer';
+                        districtRect.dataset.districtName = districtName;
+                        
+                        // Add hover effects for district highlighting
+                        districtRect.addEventListener('mouseenter', () => highlightDistrict(districtName));
+                        districtRect.addEventListener('mouseleave', () => clearHighlight());
+
+                        svg.appendChild(districtRect);
+
+                        // Add district label (only for the first cluster or if clusters are far apart)
+                        if (clusterIndex === 0 || clusters.length > 1) {
+                            const districtLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                            districtLabel.setAttribute('x', minX + (maxX - minX) / 2);
+                            districtLabel.setAttribute('y', minZ - 8);
+                            districtLabel.style.fill = '#8b5cf6';
+                            districtLabel.style.fontSize = '7px';
+                            districtLabel.style.fontWeight = 'bold';
+                            districtLabel.style.textAnchor = 'middle';
+                            districtLabel.style.pointerEvents = 'none';
+                            districtLabel.textContent = clusters.length > 1 ? `${districtName} (${clusterIndex + 1})` : districtName;
+                            svg.appendChild(districtLabel);
+                        }
+                    });
+                });
+            }
+
+            function createDistrictClusters(plots, maxDistance) {
+                if (plots.length === 0) return [];
+                
+                const clusters = [];
+                const processed = new Set();
+
+                plots.forEach((plot, index) => {
+                    if (processed.has(index)) return;
+
+                    const cluster = [plot];
+                    processed.add(index);
+
+                    // Find nearby plots
+                    const findNearbyPlots = (centerPlot) => {
+                        plots.forEach((otherPlot, otherIndex) => {
+                            if (processed.has(otherIndex)) return;
+
+                            // Calculate distance between plot centers
+                            const centerX1 = centerPlot.x1 + centerPlot.width / 2;
+                            const centerZ1 = centerPlot.z1 + centerPlot.height / 2;
+                            const centerX2 = otherPlot.x1 + otherPlot.width / 2;
+                            const centerZ2 = otherPlot.z1 + otherPlot.height / 2;
+                            
+                            const distance = Math.sqrt(
+                                Math.pow(centerX2 - centerX1, 2) + Math.pow(centerZ2 - centerZ1, 2)
+                            );
+
+                            if (distance <= maxDistance) {
+                                cluster.push(otherPlot);
+                                processed.add(otherIndex);
+                                // Recursively find plots near this newly added plot
+                                findNearbyPlots(otherPlot);
+                            }
+                        });
+                    };
+
+                    findNearbyPlots(plot);
+                    clusters.push(cluster);
+                });
+
+                return clusters;
+            }
+
+            function highlightDistrict(districtName) {
+                const allPlots = svg.querySelectorAll('.plot-rect');
+                allPlots.forEach(plotRect => {
+                    const plotGroup = plotRect.parentElement;
+                    const plotData = JSON.parse(plotGroup.dataset.plotData);
+                    
+                    if (plotData.district === districtName) {
+                        plotRect.classList.add('highlighted');
+                        plotRect.classList.remove('dimmed');
+                    } else {
+                        plotRect.classList.add('dimmed');
+                        plotRect.classList.remove('highlighted');
+                    }
+                });
+            }
+
+            function clearHighlight() {
+                const allPlots = svg.querySelectorAll('.plot-rect');
+                allPlots.forEach(plotRect => {
+                    plotRect.classList.remove('highlighted', 'dimmed');
                 });
             }
 
