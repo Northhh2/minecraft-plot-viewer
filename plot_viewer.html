@@ -2,7 +2,7 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>System Działek Minecraft</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
@@ -10,42 +10,67 @@
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            overflow: hidden; /* Prevent scrolling of the whole page */
-            user-select: none; /* Disable text selection */
+            overflow: hidden;
+            user-select: none;
             -webkit-user-select: none;
             -ms-user-select: none;
+            -webkit-touch-callout: none;
+            -webkit-tap-highlight-color: transparent;
         }
         #map-container {
             width: 100vw;
             height: 100vh;
+            touch-action: none;
         }
         #map-svg {
             display: block;
             width: 100%;
             height: 100%;
-            background-color: #111827; /* Dark background for the map itself */
+            background-color: #111827;
         }
         .plot-rect {
             stroke-width: 0.5;
             transition: fill 0.2s ease-in-out;
         }
         .plot-rect:hover {
-            fill-opacity: 0.6; /* Instead of changing fill, change opacity on hover */
+            fill-opacity: 0.6;
         }
         .plot-text {
             font-size: 4px;
             fill: #ffffff;
-            pointer-events: none; /* Make text non-interactive */
+            pointer-events: none;
             text-anchor: middle;
             dominant-baseline: middle;
         }
         #tooltip {
-            background-color: rgba(31, 41, 55, 0.9);
+            background-color: rgba(31, 41, 55, 0.95);
             backdrop-filter: blur(5px);
             border: 1px solid #4b5563;
+            transition: opacity 0.2s ease-in-out;
         }
         .grab { cursor: grab; }
         .grabbing { cursor: grabbing; }
+        
+        /* Mobile-specific styles */
+        @media (max-width: 768px) {
+            #tooltip {
+                font-size: 12px;
+                max-width: 90vw;
+                max-height: 50vh;
+                overflow-y: auto;
+            }
+            .plot-text {
+                font-size: 3px;
+            }
+            .controls {
+                bottom: 10px;
+                right: 10px;
+            }
+            .control-button {
+                width: 44px;
+                height: 44px;
+            }
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white">
@@ -56,7 +81,7 @@
     </div>
 
     <!-- Tooltip element -->
-    <div id="tooltip" class="hidden absolute p-4 rounded-lg shadow-xl text-sm z-10 max-w-xs pointer-events-none"></div>
+    <div id="tooltip" class="hidden absolute p-3 rounded-lg shadow-xl text-sm z-10 pointer-events-none"></div>
 
     <!-- Loading Indicator -->
     <div id="loader" class="absolute inset-0 bg-gray-900 bg-opacity-80 flex items-center justify-center z-20">
@@ -70,15 +95,15 @@
         </div>
     </div>
 
-     <!-- Controls -->
-    <div class="absolute bottom-5 right-5 flex flex-col space-y-2">
-        <button id="zoom-in" class="w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700 transition-colors shadow-lg border border-gray-600">
+    <!-- Controls -->
+    <div class="absolute controls flex flex-col space-y-2" style="bottom: 20px; right: 20px;">
+        <button id="zoom-in" class="control-button w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700 transition-colors shadow-lg border border-gray-600">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
         </button>
-        <button id="zoom-out" class="w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700 transition-colors shadow-lg border border-gray-600">
+        <button id="zoom-out" class="control-button w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700 transition-colors shadow-lg border border-gray-600">
            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
         </button>
-        <button id="reset-view" class="w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700 transition-colors shadow-lg border border-gray-600">
+        <button id="reset-view" class="control-button w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700 transition-colors shadow-lg border border-gray-600">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v6h6"></path><path d="M21 12A9 9 0 0 0 6 5.3L3 8"></path><path d="M21 22v-6h-6"></path><path d="M3 12a9 9 0 0 0 15 6.7l3-2.7"></path></svg>
         </button>
     </div>
@@ -90,9 +115,9 @@
             const URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`;
 
             // --- MAP IMAGE CONFIGURATION ---
-            const MAP_IMAGE_URL = 'map.png'; // <-- IMPORTANT: Place your map image file named "map.png" in the same folder as this HTML file.
-            const MAP_WIDTH = 4296; // Total width of the map in Minecraft blocks
-            const MAP_HEIGHT = 2360; // Total height of the map in Minecraft blocks
+            const MAP_IMAGE_URL = 'map.png';
+            const MAP_WIDTH = 4296;
+            const MAP_HEIGHT = 2360;
 
             const svg = document.getElementById('map-svg');
             const tooltip = document.getElementById('tooltip');
@@ -100,26 +125,51 @@
             const mapContainer = document.getElementById('map-container');
 
             let viewBox = { x: 0, y: 0, w: 0, h: 0 };
+            let mapBounds = { minX: -MAP_WIDTH / 2, maxX: MAP_WIDTH / 2, minY: -MAP_HEIGHT / 2, maxY: MAP_HEIGHT / 2 };
             let isPanning = false;
             let startPoint = { x: 0, y: 0 };
+            let touchDistance = 0;
+            let lastTouchTime = 0;
             const initialViewBox = {};
 
+            // Detect if device is mobile
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
+
             function setViewBox(x, y, w, h) {
+                // Constrain viewBox to map boundaries
+                const minZoom = Math.max(MAP_WIDTH, MAP_HEIGHT) * 0.1;
+                const maxZoom = Math.max(MAP_WIDTH, MAP_HEIGHT) * 2;
+                
+                // Limit zoom
+                w = Math.max(minZoom, Math.min(w, maxZoom));
+                h = Math.max(minZoom, Math.min(h, maxZoom));
+                
+                // Keep view within map bounds
+                if (x < mapBounds.minX) x = mapBounds.minX;
+                if (y < mapBounds.minY) y = mapBounds.minY;
+                if (x + w > mapBounds.maxX) x = mapBounds.maxX - w;
+                if (y + h > mapBounds.maxY) y = mapBounds.maxY - h;
+                
+                viewBox.x = x;
+                viewBox.y = y;
+                viewBox.w = w;
+                viewBox.h = h;
+                
                 svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
             }
 
             function getColorForType(type) {
-                const alpha = 0.8; // Base transparency
+                const alpha = 0.8;
                 switch (type) {
-                    case 'Parkowa':               return `rgba(34, 197, 94, ${alpha})`;    // green-500
-                    case 'Rolna':                 return `rgba(126, 42, 12, ${alpha})`;    // orange-900
-                    case 'Hotelowa':              return `rgba(6, 182, 212, ${alpha})`;    // cyan-500
-                    case 'Mieszkalna':            return `rgba(202, 138, 4, ${alpha})`;    // yellow-600
-                    case 'Sakralna':              return `rgba(168, 85, 247, ${alpha})`;   // purple-500
-                    case 'Przemysłowo-biurowa':   return `rgba(236, 72, 153, ${alpha})`;   // pink-500
-                    case 'Mieszkalno-usługowa':   return `rgba(59, 130, 246, ${alpha})`;   // blue-500
-                    case 'Publiczna':             return `rgba(249, 115, 22, ${alpha})`;    // orange-500
-                    case 'Medyczna':              return `rgba(251, 44, 54, ${alpha})`;    // red-500
+                    case 'Parkowa':               return `rgba(34, 197, 94, ${alpha})`;
+                    case 'Rolna':                 return `rgba(126, 42, 12, ${alpha})`;
+                    case 'Hotelowa':              return `rgba(6, 182, 212, ${alpha})`;
+                    case 'Mieszkalna':            return `rgba(202, 138, 4, ${alpha})`;
+                    case 'Sakralna':              return `rgba(168, 85, 247, ${alpha})`;
+                    case 'Przemysłowo-biurowa':   return `rgba(236, 72, 153, ${alpha})`;
+                    case 'Mieszkalno-usługowa':   return `rgba(59, 130, 246, ${alpha})`;
+                    case 'Publiczna':             return `rgba(249, 115, 22, ${alpha})`;
+                    case 'Medyczna':              return `rgba(251, 44, 54, ${alpha})`;
                     default:                      return `rgba(255, 255, 255, 0.1)`;
                 }
             }
@@ -175,7 +225,6 @@
                 mapImage.setAttribute('height', MAP_HEIGHT);
                 svg.appendChild(mapImage);
 
-
                 const padding = 50;
                 const minX = Math.min(...plots.map(p => p.x1));
                 const maxX = Math.max(...plots.map(p => p.x2));
@@ -216,29 +265,44 @@
                     g.appendChild(text);
                     g.dataset.plotData = JSON.stringify(plot);
 
-                    g.addEventListener('mouseenter', showTooltip);
-                    g.addEventListener('mouseleave', hideTooltip);
-                    g.addEventListener('mousemove', moveTooltip);
+                    // Event listeners for both mouse and touch
+                    if (isMobile) {
+                        g.addEventListener('touchstart', (e) => {
+                            e.preventDefault();
+                            showTooltip(e.touches[0], plot);
+                        });
+                        g.addEventListener('touchend', (e) => {
+                            e.preventDefault();
+                            setTimeout(hideTooltip, 3000); // Auto hide after 3 seconds on mobile
+                        });
+                    } else {
+                        g.addEventListener('mouseenter', (e) => showTooltip(e, plot));
+                        g.addEventListener('mouseleave', hideTooltip);
+                        g.addEventListener('mousemove', (e) => moveTooltip(e));
+                    }
 
                     fragment.appendChild(g);
                 });
                 svg.appendChild(fragment);
             }
 
-            function showTooltip(event) {
-                const plotData = JSON.parse(event.currentTarget.dataset.plotData);
+            function showTooltip(event, plotData) {
+                if (!plotData && event.currentTarget) {
+                    plotData = JSON.parse(event.currentTarget.dataset.plotData);
+                }
+                
                 const isOwned = plotData.owner && plotData.owner.trim() !== '' && plotData.owner.toLowerCase().trim() !== 'skarb miasta';
                 tooltip.innerHTML = `
-                    <h3 class="font-bold text-lg mb-2 border-b border-gray-600 pb-1">${plotData.name || `Działka nr ${plotData.id}`}</h3>
-                    <div class="grid grid-cols-2 gap-x-4 gap-y-1">
+                    <h3 class="font-bold text-base mb-2 border-b border-gray-600 pb-1">${plotData.name || `Działka nr ${plotData.id}`}</h3>
+                    <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
                         <span class="text-gray-400">Status:</span>
                         <span class="font-semibold ${isOwned ? 'text-red-400' : 'text-green-400'}">${isOwned ? 'Zajęta' : 'Wolna'}</span>
                         <span class="text-gray-400">Właściciel:</span>
-                        <span>${plotData.owner || 'Brak'}</span>
+                        <span class="break-words">${plotData.owner || 'Brak'}</span>
                         <span class="text-gray-400">Sektor:</span>
                         <span>${plotData.sector}</span>
                         <span class="text-gray-400">Typ:</span>
-                        <span>${plotData.type}</span>
+                        <span class="break-words">${plotData.type}</span>
                         <span class="text-gray-400">Pow.:</span>
                         <span>${plotData.area} m²</span>
                         <span class="text-gray-400">Wymiary:</span>
@@ -255,72 +319,164 @@
             }
             
             function moveTooltip(event) {
-                const PADDING = 20;
-                let x = event.clientX + PADDING;
-                let y = event.clientY + PADDING;
-                if (x + tooltip.offsetWidth > window.innerWidth) x = event.clientX - tooltip.offsetWidth - PADDING;
-                if (y + tooltip.offsetHeight > window.innerHeight) y = event.clientY - tooltip.offsetHeight - PADDING;
+                const PADDING = 15;
+                const rect = mapContainer.getBoundingClientRect();
+                
+                let clientX = event.clientX || (event.touches && event.touches[0] ? event.touches[0].clientX : 0);
+                let clientY = event.clientY || (event.touches && event.touches[0] ? event.touches[0].clientY : 0);
+                
+                // Get tooltip dimensions
+                tooltip.style.visibility = 'hidden';
+                tooltip.classList.remove('hidden');
+                const tooltipRect = tooltip.getBoundingClientRect();
+                tooltip.style.visibility = 'visible';
+                
+                let x = clientX + PADDING;
+                let y = clientY + PADDING;
+                
+                // Adjust if tooltip would go off screen
+                if (x + tooltipRect.width > window.innerWidth) {
+                    x = clientX - tooltipRect.width - PADDING;
+                }
+                if (y + tooltipRect.height > window.innerHeight) {
+                    y = clientY - tooltipRect.height - PADDING;
+                }
+                
+                // Ensure tooltip stays within screen bounds
+                x = Math.max(PADDING, Math.min(x, window.innerWidth - tooltipRect.width - PADDING));
+                y = Math.max(PADDING, Math.min(y, window.innerHeight - tooltipRect.height - PADDING));
+                
                 tooltip.style.left = `${x}px`;
                 tooltip.style.top = `${y}px`;
             }
-            
+
+            function getEventPoint(event) {
+                if (event.touches && event.touches.length > 0) {
+                    return { x: event.touches[0].clientX, y: event.touches[0].clientY };
+                }
+                return { x: event.clientX, y: event.clientY };
+            }
+
+            function getTouchDistance(touches) {
+                if (touches.length < 2) return 0;
+                const dx = touches[0].clientX - touches[1].clientX;
+                const dy = touches[0].clientY - touches[1].clientY;
+                return Math.sqrt(dx * dx + dy * dy);
+            }
+
+            // Mouse events
             mapContainer.addEventListener('wheel', (e) => {
                 e.preventDefault();
-                const w = viewBox.w; const h = viewBox.h;
-                const mx = e.offsetX; const my = e.offsetY;
+                const rect = mapContainer.getBoundingClientRect();
+                const mx = e.clientX - rect.left;
+                const my = e.clientY - rect.top;
+                const w = viewBox.w;
+                const h = viewBox.h;
                 const dw = w * Math.sign(e.deltaY) * 0.1;
                 const dh = h * Math.sign(e.deltaY) * 0.1;
                 const dx = dw * mx / mapContainer.clientWidth;
                 const dy = dh * my / mapContainer.clientHeight;
-                viewBox.x += dx; viewBox.y += dy;
-                viewBox.w -= dw; viewBox.h -= dh;
-                setViewBox(viewBox.x, viewBox.y, viewBox.w, viewBox.h);
+                setViewBox(viewBox.x + dx, viewBox.y + dy, viewBox.w - dw, viewBox.h - dh);
             });
 
             mapContainer.addEventListener('mousedown', (e) => {
                 isPanning = true;
-                mapContainer.classList.remove('grab'); mapContainer.classList.add('grabbing');
-                startPoint = { x: e.x, y: e.y };
+                mapContainer.classList.remove('grab');
+                mapContainer.classList.add('grabbing');
+                startPoint = getEventPoint(e);
             });
-
-
 
             mapContainer.addEventListener('mousemove', (e) => {
                 if (!isPanning) return;
-                const endPoint = { x: e.x, y: e.y };
+                const endPoint = getEventPoint(e);
                 const dx = (startPoint.x - endPoint.x) * (viewBox.w / mapContainer.clientWidth);
                 const dy = (startPoint.y - endPoint.y) * (viewBox.h / mapContainer.clientHeight);
-                viewBox.x += dx; viewBox.y += dy;
-                setViewBox(viewBox.x, viewBox.y, viewBox.w, viewBox.h);
-                startPoint = { x: e.x, y: e.y };
+                setViewBox(viewBox.x + dx, viewBox.y + dy, viewBox.w, viewBox.h);
+                startPoint = endPoint;
             });
 
             mapContainer.addEventListener('mouseup', () => {
                 isPanning = false;
-                mapContainer.classList.remove('grabbing'); mapContainer.classList.add('grab');
+                mapContainer.classList.remove('grabbing');
+                mapContainer.classList.add('grab');
             });
 
             mapContainer.addEventListener('mouseleave', () => {
                 if (isPanning) {
                     isPanning = false;
-                    mapContainer.classList.remove('grabbing'); mapContainer.classList.add('grab');
+                    mapContainer.classList.remove('grabbing');
+                    mapContainer.classList.add('grab');
                 }
             });
-            
+
+            // Touch events
+            mapContainer.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                const now = Date.now();
+                
+                if (e.touches.length === 1) {
+                    isPanning = true;
+                    startPoint = getEventPoint(e);
+                    
+                    // Handle double tap to zoom
+                    if (now - lastTouchTime < 300) {
+                        const w = viewBox.w;
+                        const h = viewBox.h;
+                        const dw = w * -0.3;
+                        const dh = h * -0.3;
+                        setViewBox(viewBox.x - dw/2, viewBox.y - dh/2, viewBox.w + dw, viewBox.h + dh);
+                    }
+                    lastTouchTime = now;
+                } else if (e.touches.length === 2) {
+                    isPanning = false;
+                    touchDistance = getTouchDistance(e.touches);
+                }
+            });
+
+            mapContainer.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                
+                if (e.touches.length === 1 && isPanning) {
+                    const endPoint = getEventPoint(e);
+                    const dx = (startPoint.x - endPoint.x) * (viewBox.w / mapContainer.clientWidth);
+                    const dy = (startPoint.y - endPoint.y) * (viewBox.h / mapContainer.clientHeight);
+                    setViewBox(viewBox.x + dx, viewBox.y + dy, viewBox.w, viewBox.h);
+                    startPoint = endPoint;
+                } else if (e.touches.length === 2) {
+                    const newDistance = getTouchDistance(e.touches);
+                    if (touchDistance > 0) {
+                        const scale = touchDistance / newDistance;
+                        const w = viewBox.w;
+                        const h = viewBox.h;
+                        const dw = w * (scale - 1);
+                        const dh = h * (scale - 1);
+                        setViewBox(viewBox.x + dw/2, viewBox.y + dh/2, viewBox.w - dw, viewBox.h - dh);
+                    }
+                    touchDistance = newDistance;
+                }
+            });
+
+            mapContainer.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                isPanning = false;
+                touchDistance = 0;
+            });
+
+            // Control buttons
             document.getElementById('zoom-in').addEventListener('click', () => {
-                const w = viewBox.w; const h = viewBox.h;
-                const dw = w * -0.2; const dh = h * -0.2;
-                viewBox.x -= dw/2; viewBox.y -= dh/2;
-                viewBox.w += dw; viewBox.h += dh;
-                setViewBox(viewBox.x, viewBox.y, viewBox.w, viewBox.h);
+                const w = viewBox.w;
+                const h = viewBox.h;
+                const dw = w * -0.2;
+                const dh = h * -0.2;
+                setViewBox(viewBox.x - dw/2, viewBox.y - dh/2, viewBox.w + dw, viewBox.h + dh);
             });
 
             document.getElementById('zoom-out').addEventListener('click', () => {
-                const w = viewBox.w; const h = viewBox.h;
-                const dw = w * 0.2; const dh = h * 0.2;
-                viewBox.x -= dw/2; viewBox.y -= dh/2;
-                viewBox.w += dw; viewBox.h += dh;
-                setViewBox(viewBox.x, viewBox.y, viewBox.w, viewBox.h);
+                const w = viewBox.w;
+                const h = viewBox.h;
+                const dw = w * 0.2;
+                const dh = h * 0.2;
+                setViewBox(viewBox.x - dw/2, viewBox.y - dh/2, viewBox.w + dw, viewBox.h + dh);
             });
 
             document.getElementById('reset-view').addEventListener('click', () => {
@@ -328,9 +484,15 @@
                 setViewBox(viewBox.x, viewBox.y, viewBox.w, viewBox.h);
             });
 
+            // Hide tooltip on outside touch/click
+            document.addEventListener('touchstart', (e) => {
+                if (!tooltip.contains(e.target) && !svg.contains(e.target)) {
+                    hideTooltip();
+                }
+            });
+
             fetchDataAndDraw();
         });
     </script>
 </body>
 </html>
-
