@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/x-icon" href="Red.ico">
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -200,7 +201,8 @@
                                 value: d['Wartość'],
                                 prevOwner: d['Poprzedni właściciel'],
                                 owner: d['Aktualny właściciel'],
-                                sector: d['Sektor']
+                                sector: d['Sektor'],
+                                district: d['Dzielnica']
                             }));
                             drawPlots(plots);
                             loader.style.display = 'none';
@@ -301,12 +303,15 @@
                         <span class="break-words">${plotData.owner || 'Brak'}</span>
                         <span class="text-gray-400">Sektor:</span>
                         <span>${plotData.sector}</span>
+                        ${plotData.district ? `<span class="text-gray-400">Dzielnica:</span><span class="break-words">${plotData.district}</span>` : ''}
                         <span class="text-gray-400">Typ:</span>
                         <span class="break-words">${plotData.type}</span>
                         <span class="text-gray-400">Pow.:</span>
                         <span>${plotData.area} m²</span>
                         <span class="text-gray-400">Wymiary:</span>
                         <span>${plotData.width}x${plotData.height}</span>
+                        <span class="text-gray-400">Wartość:</span>
+                        <span class="flex items-center gap-1">${plotData.value || 'Brak'} ${plotData.value ? '<img src="minecoin.png" class="inline w-4 h-4" alt="MC">' : ''}</span>
                         <span class="text-gray-400">Koordynaty:</span>
                         <span>(${plotData.x1}, ${plotData.z1})</span>
                     </div>`;
@@ -445,11 +450,11 @@
                 } else if (e.touches.length === 2) {
                     const newDistance = getTouchDistance(e.touches);
                     if (touchDistance > 0) {
-                        const scale = touchDistance / newDistance;
+                        const scale = touchDistance / newDistance; // Back to original for correct mobile behavior
                         const w = viewBox.w;
                         const h = viewBox.h;
-                        const dw = w * (scale - 1);
-                        const dh = h * (scale - 1);
+                        const dw = w * (1 - scale); // Inverted the math operation instead
+                        const dh = h * (1 - scale); // Inverted the math operation instead
                         setViewBox(viewBox.x + dw/2, viewBox.y + dh/2, viewBox.w - dw, viewBox.h - dh);
                     }
                     touchDistance = newDistance;
