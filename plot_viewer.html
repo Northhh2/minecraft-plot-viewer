@@ -91,8 +91,8 @@
 
             // --- MAP IMAGE CONFIGURATION ---
             const MAP_IMAGE_URL = 'map.png'; // <-- IMPORTANT: Place your map image file named "map.png" in the same folder as this HTML file.
-            const MAP_WIDTH = 640; // Total width of the map in Minecraft blocks
-            const MAP_HEIGHT = 344; // Total height of the map in Minecraft blocks
+            const MAP_WIDTH = 1280; // Total width of the map in Minecraft blocks
+            const MAP_HEIGHT = 688; // Total height of the map in Minecraft blocks
 
             const svg = document.getElementById('map-svg');
             const tooltip = document.getElementById('tooltip');
@@ -109,7 +109,7 @@
             }
 
             function getColorForType(type) {
-                const alpha = 0.4; // Base transparency
+                const alpha = 0.8; // Base transparency
                 switch (type) {
                     case 'Parkowa':               return `rgba(34, 197, 94, ${alpha})`;    // green-500
                     case 'Rolna':                 return `rgba(126, 42, 12, ${alpha})`;    // orange-900
