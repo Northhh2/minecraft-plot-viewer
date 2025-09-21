@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Działek Minecraft</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.3.2/papaparse.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden; /* Prevent scrolling of the whole page */
+        }
+        #map-container {
+            width: 100vw;
+            height: 100vh;
+        }
+        #map-svg {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        .plot-rect {
+            fill: rgba(255, 255, 255, 0.1);
+            stroke-width: 2;
+            transition: fill 0.2s ease-in-out;
+        }
+        .plot-rect:hover {
+            fill: rgba(255, 255, 255, 0.3);
+        }
+        .plot-text {
+            font-size: 8px;
+            fill: #ffffff;
+            pointer-events: none; /* Make text non-interactive */
+            text-anchor: middle;
+            dominant-baseline: middle;
+        }
+        #tooltip {
+            background-color: rgba(31, 41, 55, 0.9);
+            backdrop-filter: blur(5px);
+            border: 1px solid #4b5563;
+        }
+        .grab { cursor: grab; }
+        .grabbing { cursor: grabbing; }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+
+    <!-- Main container for the map -->
+    <div id="map-container" class="grab">
+        <svg id="map-svg"></svg>
+    </div>
+
+    <!-- Tooltip element -->
+    <div id="tooltip" class="hidden absolute p-4 rounded-lg shadow-xl text-sm z-10 max-w-xs pointer-events-none"></div>
+
+    <!-- Loading Indicator -->
+    <div id="loader" class="absolute inset-0 bg-gray-900 bg-opacity-80 flex items-center justify-center z-20">
+        <div class="text-center">
+            <svg class="animate-spin h-8 w-8 text-white mx-auto mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p class="text-lg font-medium">Pobieranie danych o działkach...</p>
+            <p class="text-sm text-gray-400">Proszę czekać</p>
+        </div>
+    </div>
+
+     <!-- Controls -->
+    <div class="absolute bottom-5 right-5 flex flex-col space-y-2">
+        <button id="zoom-in" class="w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700 transition-colors shadow-lg border border-gray-600">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        </button>
+        <button id="zoom-out" class="w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700 transition-colors shadow-lg border border-gray-600">
+           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        </button>
+        <button id="reset-view" class="w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700 transition-colors shadow-lg border border-gray-600">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v6h6"></path><path d="M21 12A9 9 0 0 0 6 5.3L3 8"></path><path d="M21 22v-6h-6"></path><path d="M3 12a9 9 0 0 0 15 6.7l3-2.7"></path></svg>
+        </button>
+    </div>
+
+    <script>
+        const SHEET_ID = '1swtElpz27sqLMNbATocFe9VHc1yZTSRxvHyikFL_R7U';
+        const GID = '0';
+        const URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`;
+
+        const svg = document.getElementById('map-svg');
+        const tooltip = document.getElementById('tooltip');
+        const loader = document.getElementById('loader');
+        const mapContainer = document.getElementById('map-container');
+
+        // Pan and Zoom variables
+        let viewBox = { x: 0, y: 0, w: 0, h: 0 };
+        let isPanning = false;
+        let startPoint = { x: 0, y: 0 };
+        let endPoint = { x: 0, y: 0 };
+        let scale = 1;
+        const initialViewBox = {};
+
+        function setViewBox(x, y, w, h) {
+            svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
+        }
+
+        async function fetchDataAndDraw() {
+            try {
+                const response = await fetch(URL);
+                const csvText = await response.text();
+                
+                Papa.parse(csvText, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: (results) => {
+                        const plots = results.data.filter(p => 
+                            p['Nr porządkowy'] && 
+                            p['X (lewy górny)'] && 
+                            p['Z (lewy górny)'] &&
+                            p['Bok X'] &&
+                            p['Bok Z']
+                        ).map(d => ({
+                            id: d['Nr porządkowy'],
+                            name: d['Nazwa porządkowa działki'],
+                            type: d['Typ'],
+                            x1: parseInt(d['X (lewy górny)'], 10),
+                            z1: parseInt(d['Z (lewy górny)'], 10),
+                            x2: parseInt(d['X (prawy dolny)'], 10),
+                            z2: parseInt(d['Z (prawy dolny)'], 10),
+                            width: parseInt(d['Bok X'], 10),
+                            height: parseInt(d['Bok Z'], 10),
+                            area: d['Powierzchnia'],
+                            value: d['Wartość'],
+                            prevOwner: d['Poprzedni właściciel'],
+                            owner: d['Aktualny właściciel'],
+                            sector: d['Sektor']
+                        }));
+                        
+                        drawPlots(plots);
+                        loader.style.display = 'none';
+                    }
+                });
+
+            } catch (error) {
+                console.error("Błąd podczas pobierania danych:", error);
+                loader.innerHTML = '<div class="text-center"><p class="text-lg font-medium text-red-500">Błąd ładowania danych</p><p class="text-sm text-gray-400">Sprawdź konsolę, aby uzyskać więcej informacji.</p></div>';
+            }
+        }
+
+        function drawPlots(plots) {
+            if (!plots.length) return;
+
+            // Determine map boundaries
+            const padding = 50;
+            const minX = Math.min(...plots.map(p => p.x1));
+            const maxX = Math.max(...plots.map(p => p.x2));
+            const minZ = Math.min(...plots.map(p => p.z1));
+            const maxZ = Math.max(...plots.map(p => p.z2));
+
+            viewBox.x = minX - padding;
+            viewBox.y = minZ - padding;
+            viewBox.w = (maxX - minX) + (padding * 2);
+            viewBox.h = (maxZ - minZ) + (padding * 2);
+
+            // Save initial state for reset
+            Object.assign(initialViewBox, viewBox);
+
+            setViewBox(viewBox.x, viewBox.y, viewBox.w, viewBox.h);
+
+            const fragment = document.createDocumentFragment();
+
+            plots.forEach(plot => {
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                
+                const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                rect.setAttribute('x', plot.x1);
+                rect.setAttribute('y', plot.z1);
+                rect.setAttribute('width', plot.width);
+                rect.setAttribute('height', plot.height);
+                rect.setAttribute('class', 'plot-rect');
+                
+                const isOwned = plot.owner && plot.owner.trim() !== '' && plot.owner.toLowerCase().trim() !== 'skarb miasta';
+                rect.style.stroke = isOwned ? '#ef4444' : '#22c55e'; // red-500 or green-500
+
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', plot.x1 + plot.width / 2);
+                text.setAttribute('y', plot.z1 + plot.height / 2);
+                text.setAttribute('class', 'plot-text');
+                text.textContent = plot.id;
+                
+                g.appendChild(rect);
+                g.appendChild(text);
+
+                // Store data for tooltip
+                g.dataset.plotData = JSON.stringify(plot);
+
+                g.addEventListener('mouseenter', showTooltip);
+                g.addEventListener('mouseleave', hideTooltip);
+                g.addEventListener('mousemove', moveTooltip);
+
+                fragment.appendChild(g);
+            });
+            
+            svg.appendChild(fragment);
+        }
+
+        function showTooltip(event) {
+            const plotData = JSON.parse(event.currentTarget.dataset.plotData);
+            const isOwned = plotData.owner && plotData.owner.trim() !== '' && plotData.owner.toLowerCase().trim() !== 'skarb miasta';
+            
+            tooltip.innerHTML = `
+                <h3 class="font-bold text-lg mb-2 border-b border-gray-600 pb-1">${plotData.name || `Działka nr ${plotData.id}`}</h3>
+                <div class="grid grid-cols-2 gap-x-4 gap-y-1">
+                    <span class="text-gray-400">Status:</span>
+                    <span class="font-semibold ${isOwned ? 'text-red-400' : 'text-green-400'}">${isOwned ? 'Zajęta' : 'Wolna'}</span>
+                    
+                    <span class="text-gray-400">Właściciel:</span>
+                    <span>${plotData.owner || 'Brak'}</span>
+                    
+                    <span class="text-gray-400">Sektor:</span>
+                    <span>${plotData.sector}</span>
+
+                    <span class="text-gray-400">Typ:</span>
+                    <span>${plotData.type}</span>
+                    
+                    <span class="text-gray-400">Pow.:</span>
+                    <span>${plotData.area} m²</span>
+
+                    <span class="text-gray-400">Wymiary:</span>
+                    <span>${plotData.width}x${plotData.height}</span>
+                    
+                    <span class="text-gray-400">Koordynaty:</span>
+                    <span>(${plotData.x1}, ${plotData.z1})</span>
+                </div>
+            `;
+            tooltip.classList.remove('hidden');
+            moveTooltip(event);
+        }
+
+        function hideTooltip() {
+            tooltip.classList.add('hidden');
+        }
+        
+        function moveTooltip(event) {
+             const PADDING = 20;
+             let x = event.clientX + PADDING;
+             let y = event.clientY + PADDING;
+             
+             // Prevent tooltip from going off-screen
+             if (x + tooltip.offsetWidth > window.innerWidth) {
+                 x = event.clientX - tooltip.offsetWidth - PADDING;
+             }
+             if (y + tooltip.offsetHeight > window.innerHeight) {
+                 y = event.clientY - tooltip.offsetHeight - PADDING;
+             }
+             
+             tooltip.style.left = `${x}px`;
+             tooltip.style.top = `${y}px`;
+        }
+        
+        // Pan/Zoom Event Listeners
+        mapContainer.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const w = viewBox.w;
+            const h = viewBox.h;
+            const mx = e.offsetX;
+            const my = e.offsetY;
+            const dw = w * Math.sign(e.deltaY) * 0.1;
+            const dh = h * Math.sign(e.deltaY) * 0.1;
+            const dx = dw * mx / mapContainer.clientWidth;
+            const dy = dh * my / mapContainer.clientHeight;
+            viewBox.x += dx;
+            viewBox.y += dy;
+            viewBox.w -= dw;
+            viewBox.h -= dh;
+            setViewBox(viewBox.x, viewBox.y, viewBox.w, viewBox.h);
+        });
+
+        mapContainer.addEventListener('mousedown', (e) => {
+            isPanning = true;
+            mapContainer.classList.remove('grab');
+            mapContainer.classList.add('grabbing');
+            startPoint = { x: e.x, y: e.y };
+        });
+
+        mapContainer.addEventListener('mousemove', (e) => {
+            if (!isPanning) return;
+            endPoint = { x: e.x, y: e.y };
+            const dx = (startPoint.x - endPoint.x) * (viewBox.w / mapContainer.clientWidth);
+            const dy = (startPoint.y - endPoint.y) * (viewBox.h / mapContainer.clientHeight);
+            viewBox.x += dx;
+            viewBox.y += dy;
+            setViewBox(viewBox.x, viewBox.y, viewBox.w, viewBox.h);
+            startPoint = { x: e.x, y: e.y };
+        });
+
+        mapContainer.addEventListener('mouseup', () => {
+            isPanning = false;
+            mapContainer.classList.remove('grabbing');
+            mapContainer.classList.add('grab');
+        });
+
+         mapContainer.addEventListener('mouseleave', () => {
+            if (isPanning) {
+                isPanning = false;
+                mapContainer.classList.remove('grabbing');
+                mapContainer.classList.add('grab');
+            }
+        });
+        
+        // Control buttons
+        document.getElementById('zoom-in').addEventListener('click', () => {
+             const w = viewBox.w;
+             const h = viewBox.h;
+             const dw = w * -0.2;
+             const dh = h * -0.2;
+             viewBox.x -= dw/2;
+             viewBox.y -= dh/2;
+             viewBox.w += dw;
+             viewBox.h += dh;
+             setViewBox(viewBox.x, viewBox.y, viewBox.w, viewBox.h);
+        });
+
+        document.getElementById('zoom-out').addEventListener('click', () => {
+            const w = viewBox.w;
+             const h = viewBox.h;
+             const dw = w * 0.2;
+             const dh = h * 0.2;
+             viewBox.x -= dw/2;
+             viewBox.y -= dh/2;
+             viewBox.w += dw;
+             viewBox.h += dh;
+             setViewBox(viewBox.x, viewBox.y, viewBox.w, viewBox.h);
+        });
+
+        document.getElementById('reset-view').addEventListener('click', () => {
+            Object.assign(viewBox, initialViewBox);
+            setViewBox(viewBox.x, viewBox.y, viewBox.w, viewBox.h);
+        });
+
+
+        // Initial load
+        fetchDataAndDraw();
+    </script>
+</body>
+</html>
