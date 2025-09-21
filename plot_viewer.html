@@ -137,7 +137,7 @@
 
             function setViewBox(x, y, w, h) {
                 // Constrain viewBox to map boundaries
-                const minZoom = Math.max(MAP_WIDTH, MAP_HEIGHT) * 0.1;
+                const minZoom = isMobile ? 50 : 100; // Much closer zoom on mobile
                 const maxZoom = Math.max(MAP_WIDTH, MAP_HEIGHT) * 2;
                 
                 // Limit zoom
@@ -307,8 +307,6 @@
                         <span>${plotData.area} m²</span>
                         <span class="text-gray-400">Wymiary:</span>
                         <span>${plotData.width}x${plotData.height}</span>
-                        <span class="text-gray-400">Wartość:</span>
-                        <span>${plotData.value}$</span>
                         <span class="text-gray-400">Koordynaty:</span>
                         <span>(${plotData.x1}, ${plotData.z1})</span>
                     </div>`;
