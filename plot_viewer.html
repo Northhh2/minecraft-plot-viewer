@@ -11,6 +11,9 @@
         body {
             font-family: 'Inter', sans-serif;
             overflow: hidden; /* Prevent scrolling of the whole page */
+            user-select: none; /* Disable text selection */
+            -webkit-user-select: none;
+            -ms-user-select: none;
         }
         #map-container {
             width: 100vw;
@@ -23,15 +26,14 @@
             background-color: #111827; /* Dark background for the map itself */
         }
         .plot-rect {
-            fill: rgba(255, 255, 255, 0.1);
-            stroke-width: 2;
+            stroke-width: 0.5;
             transition: fill 0.2s ease-in-out;
         }
         .plot-rect:hover {
-            fill: rgba(255, 255, 255, 0.3);
+            fill-opacity: 0.6; /* Instead of changing fill, change opacity on hover */
         }
         .plot-text {
-            font-size: 8px;
+            font-size: 4px;
             fill: #ffffff;
             pointer-events: none; /* Make text non-interactive */
             text-anchor: middle;
@@ -82,36 +84,50 @@
     </div>
 
     <script>
-        // Wait for the DOM to be fully loaded before running the script
         document.addEventListener('DOMContentLoaded', () => {
             const SHEET_ID = '1swtElpz27sqLMNbATocFe9VHc1yZTSRxvHyikFL_R7U';
             const GID = '0';
-            // Direct URL to Google Sheets, works fine when hosted (e.g., on GitHub Pages)
             const URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`;
+
+            // --- MAP IMAGE CONFIGURATION ---
+            const MAP_IMAGE_URL = 'map.png'; // <-- IMPORTANT: Place your map image file named "map.png" in the same folder as this HTML file.
+            const MAP_WIDTH = 640; // Total width of the map in Minecraft blocks
+            const MAP_HEIGHT = 344; // Total height of the map in Minecraft blocks
 
             const svg = document.getElementById('map-svg');
             const tooltip = document.getElementById('tooltip');
             const loader = document.getElementById('loader');
             const mapContainer = document.getElementById('map-container');
 
-            // Pan and Zoom variables
             let viewBox = { x: 0, y: 0, w: 0, h: 0 };
             let isPanning = false;
             let startPoint = { x: 0, y: 0 };
-            let endPoint = { x: 0, y: 0 };
-            let scale = 1;
             const initialViewBox = {};
 
             function setViewBox(x, y, w, h) {
                 svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
             }
 
+            function getColorForType(type) {
+                const alpha = 0.4; // Base transparency
+                switch (type) {
+                    case 'Parkowa':               return `rgba(34, 197, 94, ${alpha})`;    // green-500
+                    case 'Rolna':                 return `rgba(126, 42, 12, ${alpha})`;    // orange-900
+                    case 'Hotelowa':              return `rgba(6, 182, 212, ${alpha})`;    // cyan-500
+                    case 'Mieszkalna':            return `rgba(202, 138, 4, ${alpha})`;    // yellow-600
+                    case 'Sakralna':              return `rgba(168, 85, 247, ${alpha})`;   // purple-500
+                    case 'Przemysłowo-biurowa':   return `rgba(236, 72, 153, ${alpha})`;   // pink-500
+                    case 'Mieszkalno-usługowa':   return `rgba(59, 130, 246, ${alpha})`;   // blue-500
+                    case 'Publiczna':             return `rgba(249, 115, 22, ${alpha})`;    // orange-500
+                    case 'Medyczna':              return `rgba(251, 44, 54, ${alpha})`;    // red-500
+                    default:                      return `rgba(255, 255, 255, 0.1)`;
+                }
+            }
+
             async function fetchDataAndDraw() {
                 try {
                     const response = await fetch(URL);
-                    if (!response.ok) {
-                        throw new Error(`Network response was not ok: ${response.statusText}`);
-                    }
+                    if (!response.ok) throw new Error(`Network response was not ok: ${response.statusText}`);
                     const csvText = await response.text();
                     
                     Papa.parse(csvText, {
@@ -119,11 +135,7 @@
                         skipEmptyLines: true,
                         complete: (results) => {
                             const plots = results.data.filter(p => 
-                                p['Nr porządkowy'] && 
-                                p['X (lewy górny)'] && 
-                                p['Z (lewy górny)'] &&
-                                p['Bok X'] &&
-                                p['Bok Z']
+                                p['Nr porządkowy'] && p['X (lewy górny)'] && p['Z (lewy górny)'] && p['Bok X'] && p['Bok Z']
                             ).map(d => ({
                                 id: d['Nr porządkowy'],
                                 name: d['Nazwa porządkowa działki'],
@@ -140,12 +152,10 @@
                                 owner: d['Aktualny właściciel'],
                                 sector: d['Sektor']
                             }));
-                            
                             drawPlots(plots);
                             loader.style.display = 'none';
                         }
                     });
-
                 } catch (error) {
                     console.error("Błąd podczas pobierania danych:", error);
                     loader.innerHTML = `<div class="text-center"><p class="text-lg font-medium text-red-500">Błąd ładowania danych</p><p class="text-sm text-gray-400">Sprawdź konsolę, aby uzyskać więcej informacji.</p></div>`;
@@ -154,10 +164,18 @@
 
             function drawPlots(plots) {
                 if (!plots.length) return;
-                
-                svg.innerHTML = ''; // Clear previous plots if any
+                svg.innerHTML = ''; 
 
-                // Determine map boundaries
+                // Add map background image
+                const mapImage = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+                mapImage.setAttribute('href', MAP_IMAGE_URL);
+                mapImage.setAttribute('x', -MAP_WIDTH / 2);
+                mapImage.setAttribute('y', -MAP_HEIGHT / 2);
+                mapImage.setAttribute('width', MAP_WIDTH);
+                mapImage.setAttribute('height', MAP_HEIGHT);
+                svg.appendChild(mapImage);
+
+
                 const padding = 50;
                 const minX = Math.min(...plots.map(p => p.x1));
                 const maxX = Math.max(...plots.map(p => p.x2));
@@ -169,13 +187,10 @@
                 viewBox.w = (maxX - minX) + (padding * 2);
                 viewBox.h = (maxZ - minZ) + (padding * 2);
 
-                // Save initial state for reset
                 Object.assign(initialViewBox, viewBox);
-
                 setViewBox(viewBox.x, viewBox.y, viewBox.w, viewBox.h);
 
                 const fragment = document.createDocumentFragment();
-
                 plots.forEach(plot => {
                     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
                     
@@ -186,8 +201,10 @@
                     rect.setAttribute('height', plot.height);
                     rect.setAttribute('class', 'plot-rect');
                     
+                    rect.style.fill = getColorForType(plot.type);
+                    
                     const isOwned = plot.owner && plot.owner.trim() !== '' && plot.owner.toLowerCase().trim() !== 'skarb miasta';
-                    rect.style.stroke = isOwned ? '#ef4444' : '#22c55e'; // red-500 or green-500
+                    rect.style.stroke = isOwned ? '#ef4444' : '#22c55e';
 
                     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                     text.setAttribute('x', plot.x1 + plot.width / 2);
@@ -197,8 +214,6 @@
                     
                     g.appendChild(rect);
                     g.appendChild(text);
-
-                    // Store data for tooltip
                     g.dataset.plotData = JSON.stringify(plot);
 
                     g.addEventListener('mouseenter', showTooltip);
@@ -207,39 +222,30 @@
 
                     fragment.appendChild(g);
                 });
-                
                 svg.appendChild(fragment);
             }
 
             function showTooltip(event) {
                 const plotData = JSON.parse(event.currentTarget.dataset.plotData);
                 const isOwned = plotData.owner && plotData.owner.trim() !== '' && plotData.owner.toLowerCase().trim() !== 'skarb miasta';
-                
                 tooltip.innerHTML = `
                     <h3 class="font-bold text-lg mb-2 border-b border-gray-600 pb-1">${plotData.name || `Działka nr ${plotData.id}`}</h3>
                     <div class="grid grid-cols-2 gap-x-4 gap-y-1">
                         <span class="text-gray-400">Status:</span>
                         <span class="font-semibold ${isOwned ? 'text-red-400' : 'text-green-400'}">${isOwned ? 'Zajęta' : 'Wolna'}</span>
-                        
                         <span class="text-gray-400">Właściciel:</span>
                         <span>${plotData.owner || 'Brak'}</span>
-                        
                         <span class="text-gray-400">Sektor:</span>
                         <span>${plotData.sector}</span>
-
                         <span class="text-gray-400">Typ:</span>
                         <span>${plotData.type}</span>
-                        
                         <span class="text-gray-400">Pow.:</span>
                         <span>${plotData.area} m²</span>
-
                         <span class="text-gray-400">Wymiary:</span>
                         <span>${plotData.width}x${plotData.height}</span>
-                        
                         <span class="text-gray-400">Koordynaty:</span>
                         <span>(${plotData.x1}, ${plotData.z1})</span>
-                    </div>
-                `;
+                    </div>`;
                 tooltip.classList.remove('hidden');
                 moveTooltip(event);
             }
@@ -252,89 +258,68 @@
                 const PADDING = 20;
                 let x = event.clientX + PADDING;
                 let y = event.clientY + PADDING;
-                
-                if (x + tooltip.offsetWidth > window.innerWidth) {
-                    x = event.clientX - tooltip.offsetWidth - PADDING;
-                }
-                if (y + tooltip.offsetHeight > window.innerHeight) {
-                    y = event.clientY - tooltip.offsetHeight - PADDING;
-                }
-                
+                if (x + tooltip.offsetWidth > window.innerWidth) x = event.clientX - tooltip.offsetWidth - PADDING;
+                if (y + tooltip.offsetHeight > window.innerHeight) y = event.clientY - tooltip.offsetHeight - PADDING;
                 tooltip.style.left = `${x}px`;
                 tooltip.style.top = `${y}px`;
             }
             
-            // Pan/Zoom Event Listeners
             mapContainer.addEventListener('wheel', (e) => {
                 e.preventDefault();
-                const w = viewBox.w;
-                const h = viewBox.h;
-                const mx = e.offsetX;
-                const my = e.offsetY;
+                const w = viewBox.w; const h = viewBox.h;
+                const mx = e.offsetX; const my = e.offsetY;
                 const dw = w * Math.sign(e.deltaY) * 0.1;
                 const dh = h * Math.sign(e.deltaY) * 0.1;
                 const dx = dw * mx / mapContainer.clientWidth;
                 const dy = dh * my / mapContainer.clientHeight;
-                viewBox.x += dx;
-                viewBox.y += dy;
-                viewBox.w -= dw;
-                viewBox.h -= dh;
+                viewBox.x += dx; viewBox.y += dy;
+                viewBox.w -= dw; viewBox.h -= dh;
                 setViewBox(viewBox.x, viewBox.y, viewBox.w, viewBox.h);
             });
 
             mapContainer.addEventListener('mousedown', (e) => {
                 isPanning = true;
-                mapContainer.classList.remove('grab');
-                mapContainer.classList.add('grabbing');
+                mapContainer.classList.remove('grab'); mapContainer.classList.add('grabbing');
                 startPoint = { x: e.x, y: e.y };
             });
 
+
+
             mapContainer.addEventListener('mousemove', (e) => {
                 if (!isPanning) return;
-                endPoint = { x: e.x, y: e.y };
+                const endPoint = { x: e.x, y: e.y };
                 const dx = (startPoint.x - endPoint.x) * (viewBox.w / mapContainer.clientWidth);
                 const dy = (startPoint.y - endPoint.y) * (viewBox.h / mapContainer.clientHeight);
-                viewBox.x += dx;
-                viewBox.y += dy;
+                viewBox.x += dx; viewBox.y += dy;
                 setViewBox(viewBox.x, viewBox.y, viewBox.w, viewBox.h);
                 startPoint = { x: e.x, y: e.y };
             });
 
             mapContainer.addEventListener('mouseup', () => {
                 isPanning = false;
-                mapContainer.classList.remove('grabbing');
-                mapContainer.classList.add('grab');
+                mapContainer.classList.remove('grabbing'); mapContainer.classList.add('grab');
             });
 
             mapContainer.addEventListener('mouseleave', () => {
                 if (isPanning) {
                     isPanning = false;
-                    mapContainer.classList.remove('grabbing');
-                    mapContainer.classList.add('grab');
+                    mapContainer.classList.remove('grabbing'); mapContainer.classList.add('grab');
                 }
             });
             
             document.getElementById('zoom-in').addEventListener('click', () => {
-                const w = viewBox.w;
-                const h = viewBox.h;
-                const dw = w * -0.2;
-                const dh = h * -0.2;
-                viewBox.x -= dw/2;
-                viewBox.y -= dh/2;
-                viewBox.w += dw;
-                viewBox.h += dh;
+                const w = viewBox.w; const h = viewBox.h;
+                const dw = w * -0.2; const dh = h * -0.2;
+                viewBox.x -= dw/2; viewBox.y -= dh/2;
+                viewBox.w += dw; viewBox.h += dh;
                 setViewBox(viewBox.x, viewBox.y, viewBox.w, viewBox.h);
             });
 
             document.getElementById('zoom-out').addEventListener('click', () => {
-                const w = viewBox.w;
-                const h = viewBox.h;
-                const dw = w * 0.2;
-                const dh = h * 0.2;
-                viewBox.x -= dw/2;
-                viewBox.y -= dh/2;
-                viewBox.w += dw;
-                viewBox.h += dh;
+                const w = viewBox.w; const h = viewBox.h;
+                const dw = w * 0.2; const dh = h * 0.2;
+                viewBox.x -= dw/2; viewBox.y -= dh/2;
+                viewBox.w += dw; viewBox.h += dh;
                 setViewBox(viewBox.x, viewBox.y, viewBox.w, viewBox.h);
             });
 
@@ -343,7 +328,6 @@
                 setViewBox(viewBox.x, viewBox.y, viewBox.w, viewBox.h);
             });
 
-            // Initial load
             fetchDataAndDraw();
         });
     </script>
