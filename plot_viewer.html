@@ -306,10 +306,10 @@
                         skipEmptyLines: true,
                         complete: (results) => {
                             const connections = results.data.filter(m => 
-                                m['Identyfikator pierwszej działki'] && m['Identyfikator drugiej działki']
+                                m['Działka główna'] && m['Działka dołączana']
                             ).map(d => ({
-                                plot1: d['Identyfikator pierwszej działki'],
-                                plot2: d['Identyfikator drugiej działki']
+                                plot1: d['Działka główna'],
+                                plot2: d['Działka dołączana']
                             }));
                             
                             mergedPlots = processMergedPlots(connections);
@@ -924,7 +924,7 @@
                 
                 // Search by full ID (SS/III format)
                 if (query.includes('/')) {
-                    plot = allPlots.find(p => p.id.toLowerCase() === parseInt(query) || p.name.toLowerCase() == query);
+                    plot = allPlots.find(p => p.id.toLowerCase() === query.padStart(3, "0") || p.name.toLowerCase() == query);
                 } else {
                     // Search by number only (III format) - find first match
                     plot = allPlots.find(p => {
