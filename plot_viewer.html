@@ -541,7 +541,7 @@
 
                 Object.entries(districts).forEach(([districtName, districtPlots]) => {
                     if (districtPlots.length === 0) return;
-                    const clusters = createDistrictClusters(districtPlots, 30);
+                    const clusters = createDistrictClusters(districtPlots, 50);
                     clusters.forEach((cluster) => {
                         const boundary = createComplexBoundary(cluster);
                         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
