@@ -36,12 +36,14 @@
         .plot-rect:hover {
             fill-opacity: 0.6;
         }
+        .plot-rect.dimmed {
+            fill-opacity: 0.4 !important;
+            transition: fill-opacity 0.3s ease-in-out;
+        }
         .plot-rect.highlighted {
             fill-opacity: 1 !important;
             filter: brightness(1.2);
-        }
-        .plot-rect.dimmed {
-            fill-opacity: 0.2 !important;
+            transition: fill-opacity 0.3s ease-in-out, filter 0.3s ease-in-out;
         }
         .street-rect {
             fill: #6b7280;
@@ -119,9 +121,9 @@
             <input 
                 type="text" 
                 id="search-input" 
-                placeholder="Wyszukaj działkę (np. D4001)"
+                placeholder="Wyszukaj działkę (D4/021 lub 021)"
                 class="bg-transparent text-white px-4 py-2 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                maxlength="6"
+                maxlength="10"
             >
             <button 
                 id="search-button" 
@@ -321,7 +323,7 @@
                         skipEmptyLines: true,
                         complete: (results) => {
                             streets = results.data.filter(s => 
-                                s['Numer porządkowy'] && s['X (lewy górny)'] && s['Z (lewy górny)']
+                                s['Numer porządkowy'] && s['X (lewy górny)'] && s['Z (lewy górny)'] && s['X (prawy dolny)'] && s['Z (prawy dolny)']
                             ).map(d => ({
                                 id: d['Numer porządkowy'],
                                 name: d['Nazwa ulicy'],
@@ -329,10 +331,11 @@
                                 z1: parseInt(d['Z (lewy górny)'], 10),
                                 x2: parseInt(d['X (prawy dolny)'], 10),
                                 z2: parseInt(d['Z (prawy dolny)'], 10),
-                                width: d['X (prawy dolny)'] - d['X (lewy górny)'],
-                                height: d['Z (prawy dolny)'] - d['Z (lewy górny)']
+                                width: parseInt(d['X (prawy dolny)'], 10) - parseInt(d['X (lewy górny)'], 10),
+                                height: parseInt(d['Z (prawy dolny)'], 10) - parseInt(d['Z (lewy górny)'], 10)
                             }));
                             
+                            console.log('Parsed streets:', streets);
                             drawMap();
                             loader.style.display = 'none';
                         }
@@ -404,7 +407,10 @@
                 mapImage.setAttribute('height', MAP_HEIGHT);
                 svg.appendChild(mapImage);
 
-                // Draw streets first
+                console.log('Drawing streets:', streets.length);
+                console.log('Drawing merged plots:', mergedPlots.length);
+
+                // Draw streets first (under everything)
                 drawStreets();
 
                 // Draw district boundaries
@@ -413,7 +419,7 @@
                 // Draw merged plots
                 drawMergedPlots();
 
-                // Draw regular plots
+                // Draw regular plots (on top)
                 drawPlots();
 
                 const padding = 50;
@@ -432,7 +438,10 @@
             }
 
             function drawStreets() {
+                console.log('Drawing streets - count:', streets.length);
                 streets.forEach(street => {
+                    console.log('Drawing street:', street.name, street.x1, street.z1, street.width, street.height);
+                    
                     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
                     
                     const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -465,7 +474,10 @@
             }
 
             function drawMergedPlots() {
-                mergedPlots.forEach(merged => {
+                console.log('Drawing merged plots - count:', mergedPlots.length);
+                mergedPlots.forEach((merged, index) => {
+                    console.log('Drawing merged plot', index, ':', merged.plots.join(','), merged.x1, merged.z1, merged.width, merged.height);
+                    
                     const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
                     rect.setAttribute('x', merged.x1);
                     rect.setAttribute('y', merged.z1);
@@ -607,15 +619,103 @@
             }
 
             function createComplexBoundary(plots) {
-                // Create a simplified boundary following plot edges
-                const minX = Math.min(...plots.map(p => p.x1));
-                const maxX = Math.max(...plots.map(p => p.x2));
-                const minZ = Math.min(...plots.map(p => p.z1));
-                const maxZ = Math.max(...plots.map(p => p.z2));
-                
-                // For now, create a simple rectangular boundary with small padding
+                // Sort plots by position to create a more natural boundary
+                plots.sort((a, b) => {
+                    if (Math.abs(a.z1 - b.z1) < 5) return a.x1 - b.x1; // Same row, sort by x
+                    return a.z1 - b.z1; // Different rows, sort by z
+                });
+
+                if (plots.length === 0) return '';
+                if (plots.length === 1) {
+                    // Single plot - simple rectangle
+                    const p = plots[0];
+                    const padding = 3;
+                    return `M ${p.x1 - padding} ${p.z1 - padding} L ${p.x2 + padding} ${p.z1 - padding} L ${p.x2 + padding} ${p.z2 + padding} L ${p.x1 - padding} ${p.z2 + padding} Z`;
+                }
+
+                // For multiple plots, create a convex hull-like boundary
+                const allPoints = [];
+                plots.forEach(plot => {
+                    allPoints.push(
+                        { x: plot.x1, y: plot.z1 }, // top-left
+                        { x: plot.x2, y: plot.z1 }, // top-right
+                        { x: plot.x2, y: plot.z2 }, // bottom-right
+                        { x: plot.x1, y: plot.z2 }  // bottom-left
+                    );
+                });
+
+                // Find the convex hull points
+                const hull = convexHull(allPoints);
                 const padding = 3;
-                return `M ${minX - padding} ${minZ - padding} L ${maxX + padding} ${minZ - padding} L ${maxX + padding} ${maxZ + padding} L ${minX - padding} ${maxZ + padding} Z`;
+                
+                if (hull.length < 3) {
+                    // Fallback to simple rectangle
+                    const minX = Math.min(...plots.map(p => p.x1)) - padding;
+                    const maxX = Math.max(...plots.map(p => p.x2)) + padding;
+                    const minZ = Math.min(...plots.map(p => p.z1)) - padding;
+                    const maxZ = Math.max(...plots.map(p => p.z2)) + padding;
+                    return `M ${minX} ${minZ} L ${maxX} ${minZ} L ${maxX} ${maxZ} L ${minX} ${maxZ} Z`;
+                }
+
+                // Create path from hull points with padding
+                let pathData = `M ${hull[0].x + (hull[0].x < 0 ? -padding : padding)} ${hull[0].y + (hull[0].y < 0 ? -padding : padding)}`;
+                for (let i = 1; i < hull.length; i++) {
+                    const point = hull[i];
+                    pathData += ` L ${point.x + (point.x < 0 ? -padding : padding)} ${point.y + (point.y < 0 ? -padding : padding)}`;
+                }
+                pathData += ' Z';
+                
+                return pathData;
+            }
+
+            function convexHull(points) {
+                // Simple convex hull algorithm (Graham scan)
+                if (points.length < 3) return points;
+                
+                // Find the bottom-most point (and left-most in case of tie)
+                let start = 0;
+                for (let i = 1; i < points.length; i++) {
+                    if (points[i].y < points[start].y || 
+                        (points[i].y === points[start].y && points[i].x < points[start].x)) {
+                        start = i;
+                    }
+                }
+                
+                // Swap start point to beginning
+                [points[0], points[start]] = [points[start], points[0]];
+                const startPoint = points[0];
+                
+                // Sort points by polar angle with respect to start point
+                points.slice(1).sort((a, b) => {
+                    const angleA = Math.atan2(a.y - startPoint.y, a.x - startPoint.x);
+                    const angleB = Math.atan2(b.y - startPoint.y, b.x - startPoint.x);
+                    if (Math.abs(angleA - angleB) < 0.001) {
+                        // Same angle, sort by distance
+                        const distA = Math.pow(a.x - startPoint.x, 2) + Math.pow(a.y - startPoint.y, 2);
+                        const distB = Math.pow(b.x - startPoint.x, 2) + Math.pow(b.y - startPoint.y, 2);
+                        return distA - distB;
+                    }
+                    return angleA - angleB;
+                });
+                
+                // Graham scan
+                const hull = [points[0], points[1]];
+                for (let i = 2; i < points.length; i++) {
+                    while (hull.length > 1) {
+                        const o = orientation(hull[hull.length - 2], hull[hull.length - 1], points[i]);
+                        if (o !== 2) break; // Not a right turn
+                        hull.pop();
+                    }
+                    hull.push(points[i]);
+                }
+                
+                return hull;
+            }
+
+            function orientation(p, q, r) {
+                const val = (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
+                if (Math.abs(val) < 0.001) return 0; // Collinear
+                return val > 0 ? 1 : 2; // Clockwise or Counterclockwise
             }
 
             function createDistrictClusters(plots, maxDistance) {
@@ -818,7 +918,21 @@
             }
 
             function searchPlot(query) {
-                const plot = allPlots.find(p => p.id.toLowerCase() === query.toLowerCase());
+                query = query.trim().toLowerCase();
+                
+                let plot = null;
+                
+                // Search by full ID (SS/III format)
+                if (query.includes('/')) {
+                    plot = allPlots.find(p => p.id.toLowerCase() === query);
+                } else {
+                    // Search by number only (III format) - find first match
+                    plot = allPlots.find(p => {
+                        const parts = p.id.split('/');
+                        return parts.length === 2 && parts[1].toLowerCase() === query;
+                    });
+                }
+                
                 if (plot) {
                     // Center view on the plot
                     const centerX = plot.x1 + plot.width / 2;
