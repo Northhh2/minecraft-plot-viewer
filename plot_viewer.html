@@ -924,7 +924,7 @@
                 
                 // Search by full ID (SS/III format)
                 if (query.includes('/')) {
-                    plot = allPlots.find(p => p.id.toLowerCase() === query.padStart(3, "0") || p.name.toLowerCase() == query);
+                    plot = allPlots.find(p => p.id.toLowerCase().padStart(3, "0") === query.padStart(3, "0") || p.name.toLowerCase() == query);
                 } else {
                     // Search by number only (III format) - find first match
                     plot = allPlots.find(p => {
