@@ -302,6 +302,7 @@
                     });
 
                     // Parse merged plots data
+                    console.log(mergedText);
                     Papa.parse(mergedText, {
                         header: true,
                         skipEmptyLines: true,
@@ -318,6 +319,7 @@
                     });
 
                     // Parse streets data
+                    console.log(streetsText);
                     Papa.parse(streetsText, {
                         header: true,
                         skipEmptyLines: true,
@@ -924,7 +926,7 @@
                 
                 // Search by full ID (SS/III format)
                 if (query.includes('/')) {
-                    plot = allPlots.find(p => p.id.toLowerCase() === query);
+                    plot = allPlots.find(p => p.id.toLowerCase() === parseInt(query) || p.name.toLowerCase() == query);
                 } else {
                     // Search by number only (III format) - find first match
                     plot = allPlots.find(p => {
