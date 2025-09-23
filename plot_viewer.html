@@ -71,6 +71,9 @@
             text-anchor: middle;
             dominant-baseline: middle;
         }
+        .street-text.street-vertical {
+            text-orientation: sideways;
+        }
         #tooltip {
             background-color: rgba(31, 41, 55, 0.95);
             backdrop-filter: blur(5px);
@@ -455,6 +458,9 @@
                     text.setAttribute('x', street.x1 + street.width / 2);
                     text.setAttribute('y', street.z1 + street.height / 2);
                     text.setAttribute('class', 'street-text');
+                    if(street.height > street.width) {
+                        text.classList.add('street-vertical')
+                    }
                     text.textContent = street.name;
 
                     g.appendChild(rect);
