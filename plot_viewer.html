@@ -738,230 +738,204 @@
             }
 
             /**
- * Tworzy kontur dzielnicy (Dzielnicy/Klastra Działek) poprzez marsz wzdłuż zewnętrznych krawędzi.
- * Algorytm korzysta z zasady prawej ręki (clockwise) z priorytetem kierunków siatkowych.
- * * Przyjmuje obiekty działek z polami x1, z1 (lewy górny) i x2, z2 (prawy dolny).
+ * Tworzy kontur dzielnicy (Dzielnicy/Klastra Działek) poprzez łączenie krawędzi zewnętrznych.
+ * Algorytm łączy sąsiadujące krawędzie zgodnie z ruchem wskazówek zegara, eliminując błąd
+ * zamykania pętli po pojedynczej działce.
  *
- * @param {Array<Object>} plots Lista obiektów działek.
+ * @param {Array<Object>} plots Lista obiektów działek z polami x1, z1, x2, z2.
  * @returns {string} Ścieżka SVG konturu.
  */
-            function createDistrictOutline(plots) {
-                if (plots.length === 0) return '';
-                console.log(`🎨 Tworzenie konturu dla ${plots.length} działek: ${plots.map(p => p.name).join(', ')}`);
+function createDistrictOutline(plots) {
+    if (plots.length === 0) return '';
+    console.log(`🎨 Tworzenie konturu dla ${plots.length} działek: ${plots.map(p => p.name).join(', ')}`);
 
-                // Krok 1: Zbierz wszystkie unikalne krawędzie dla wszystkich działek w klastrze
-                const allEdges = new Map(); // Klucz: "x1,z1|x2,z2" (posortowane), Wartość: Licznik wystąpień
+    // Krok 1: Zbierz wszystkie unikalne krawędzie
+    const allEdges = new Map();
+    plots.forEach(plot => {
+        const x_min = Math.min(plot.x1, plot.x2);
+        const x_max = Math.max(plot.x1, plot.x2);
+        const z_min = Math.min(plot.z1, plot.z2);
+        const z_max = Math.max(plot.z1, plot.z2);
 
-                plots.forEach(plot => {
-                    // --- POPRAWKA: Użycie właściwych pól x1, z1, x2, z2 ---
-                    const x_min = Math.min(plot.x1, plot.x2);
-                    const x_max = Math.max(plot.x1, plot.x2);
-                    const z_min = Math.min(plot.z1, plot.z2);
-                    const z_max = Math.max(plot.z1, plot.z2);
+        const corners = [
+            { x: x_min, z: z_min }, 
+            { x: x_max, z: z_min }, 
+            { x: x_max, z: z_max }, 
+            { x: x_min, z: z_max } 
+        ];
 
-                    // Cztery narożniki działki (zakładamy, że to prostokąt na siatce)
-                    const corners = [
-                        { x: x_min, z: z_min }, // Top-Left
-                        { x: x_max, z: z_min }, // Top-Right
-                        { x: x_max, z: z_max }, // Bottom-Right
-                        { x: x_min, z: z_max }  // Bottom-Left
-                    ];
+        for (let i = 0; i < 4; i++) {
+            const p1 = corners[i];
+            const p2 = corners[(i + 1) % 4];
 
-                    for (let i = 0; i < 4; i++) {
-                        const p1 = corners[i];
-                        const p2 = corners[(i + 1) % 4];
+            // Klucz krawędzi: Posortowane (żeby była unikalna)
+            const key = [
+                `${p1.x},${p1.z}`,
+                `${p2.x},${p2.z}`
+            ].sort().join('|');
+            
+            allEdges.set(key, (allEdges.get(key) || 0) + 1);
+        }
+    });
 
-                        // Klucz krawędzi: Posortuj punkty, by krawędź była unikalna niezależnie od kierunku
-                        const key = [
-                            `${p1.x},${p1.z}`,
-                            `${p2.x},${p2.z}`
-                        ].sort().join('|');
+    // Krok 2: Wybierz krawędzie zewnętrzne (te, które pojawiły się tylko raz)
+    const rawOuterEdges = [];
+    allEdges.forEach((count, key) => {
+        if (count === 1) {
+            const [p1_str, p2_str] = key.split('|');
+            const [x1, z1] = p1_str.split(',').map(Number);
+            const [x2, z2] = p2_str.split(',').map(Number);
+            rawOuterEdges.push({ p1: `${x1},${z1}`, p2: `${x2},${z2}`, x1, z1, x2, z2 });
+        }
+    });
 
-                        allEdges.set(key, (allEdges.get(key) || 0) + 1);
-                    }
-                });
+    console.log(`  📏 Zebrano ${allEdges.size} unikalnych krawędzi`);
+    console.log(`  🔲 Znaleziono ${rawOuterEdges.length} zewnętrznych krawędzi`);
 
-                // Krok 2: Wybierz krawędzie zewnętrzne (te, które pojawiły się tylko raz)
-                const outerEdges = [];
-                allEdges.forEach((count, key) => {
-                    if (count === 1) {
-                        const [p1_str, p2_str] = key.split('|');
-                        const [x1, z1] = p1_str.split(',').map(Number);
-                        const [x2, z2] = p2_str.split(',').map(Number);
-                        outerEdges.push({ x1, z1, x2, z2 });
-                    }
-                });
+    // Krok 3: Zbuduj mapę krawędzi: Dla każdego punktu, z jakimi innymi punktami jest połączony?
+    // Wartość to lista obiektów { neighbor: string, angle: number }
+    const edgeMap = new Map();
 
-                console.log(`  📏 Zebrano ${allEdges.size} unikalnych krawędzi`);
-                console.log(`  🔲 Znaleziono ${outerEdges.length} zewnętrznych krawędzi`);
+    rawOuterEdges.forEach(edge => {
+        // Obliczenie kąta (do późniejszego sortowania Clockwise)
+        const angle1 = Math.atan2(edge.z2 - edge.z1, edge.x2 - edge.x1);
+        const angle2 = Math.atan2(edge.z1 - edge.z2, edge.x1 - edge.x2);
 
-                // Krok 3: Zbuduj graf sąsiedztwa dla punktów krawędzi zewnętrznych
-                const edgeMap = new Map();
+        if (!edgeMap.has(edge.p1)) edgeMap.set(edge.p1, []);
+        if (!edgeMap.has(edge.p2)) edgeMap.set(edge.p2, []);
 
-                outerEdges.forEach(edge => {
-                    const p1 = `${edge.x1},${edge.z1}`;
-                    const p2 = `${edge.x2},${edge.z2}`;
+        // Dodajemy krawędź w obu kierunkach z kątem wyjściowym
+        edgeMap.get(edge.p1).push({ neighbor: edge.p2, angle: angle1 });
+        edgeMap.get(edge.p2).push({ neighbor: edge.p1, angle: angle2 });
+    });
 
-                    if (!edgeMap.has(p1)) edgeMap.set(p1, []);
-                    if (!edgeMap.has(p2)) edgeMap.set(p2, []);
+    console.log(`  🔗 Graf ma ${edgeMap.size} punktów`);
 
-                    edgeMap.get(p1).push(p2);
-                    edgeMap.get(p2).push(p1);
-                });
+    // 4. Znajdź punkt startowy (najwyżej położony, top-left)
+    let startPoint = null;
+    let minZ = Infinity;
+    let minX = Infinity;
 
-                console.log(`  🔗 Graf ma ${edgeMap.size} punktów`);
+    for (const point of edgeMap.keys()) {
+        const [x, z] = point.split(',').map(Number);
+        if (z < minZ || (z === minZ && x < minX)) {
+            minZ = z;
+            minX = x;
+            startPoint = point;
+        }
+    }
 
-                // 4. Znajdź punkt startowy (najwyżej położony, top-left)
-                let startPoint = null;
-                let minZ = Infinity;
-                let minX = Infinity;
+    if (!startPoint) {
+        console.warn('  ⚠️ Nie znaleziono punktu startowego!');
+        return '';
+    }
 
-                for (const point of edgeMap.keys()) {
-                    const [x, z] = point.split(',').map(Number);
-                    // Preferujemy punkt o najmniejszej Z (najwyżej na mapie), 
-                    // a w przypadku remisu o najmniejszej X (najbardziej na lewo).
-                    if (z < minZ || (z === minZ && x < minX)) {
-                        minZ = z;
-                        minX = x;
-                        startPoint = point;
-                    }
-                }
+    console.log(`  🎯 Punkt startowy: ${startPoint}`);
 
-                if (!startPoint) {
-                    console.warn('  ⚠️ Nie znaleziono punktu startowego!');
-                    return '';
-                }
+    // Krok 5: Marsz wzdłuż krawędzi z sortowaniem kierunkowym
+    const path = [];
+    let current = startPoint;
+    let previous = `${minX},${minZ - 1}`; // Sztuczny punkt "Północny" do inicjacji
+    const maxIterations = rawOuterEdges.length + edgeMap.size;
+    let iterations = 0;
+    let closed = false;
 
-                console.log(`  🎯 Punkt startowy: ${startPoint}`);
+    // Funkcja pomocnicza: Oblicza znormalizowany kąt skrętu (minimalizacja preferuje obrót w prawo)
+    const normalizeAngle = (angle) => (angle + 2 * Math.PI) % (2 * Math.PI);
 
-                // --- FUNKCJA POMOCNICZA DLA MARSZU KIERUNKOWEGO ---
-                // Zwraca priorytet ruchu: 1=Skręt w Prawo, 2=Prosto, 3=Skręt w Lewo.
-                const getTurnPriority = (px, pz, cx, cz, nx, nz) => {
-                    // Wektor wejścia (poprzedni -> obecny)
-                    const dx_in = cx - px;
-                    const dz_in = cz - pz;
-                    // Wektor wyjścia (obecny -> następny)
-                    const dx_out = nx - cx;
-                    const dz_out = nz - cz;
+    while (current && iterations < maxIterations) {
+        iterations++;
 
-                    // Oznaczenie kierunków: 1=Góra(Północ), 2=Prawo(Wschód), 3=Dół(Południe), 4=Lewo(Zachód)
-                    let dir_in = 0;
+        const [cx, cz] = current.split(',').map(Number);
+        path.push({ x: cx, z: cz });
 
-                    // Ustal kierunek wejścia
-                    if (dz_in < 0 && dx_in === 0) dir_in = 1;
-                    else if (dx_in > 0 && dz_in === 0) dir_in = 2;
-                    else if (dz_in > 0 && dx_in === 0) dir_in = 3;
-                    else if (dx_in < 0 && dz_in === 0) dir_in = 4;
+        // Warunek zakończenia: powrót do punktu startowego
+        if (current === startPoint && path.length > 1) {
+            path.pop(); 
+            closed = true;
+            console.log(`  ✅ Zamknięto pętlę po ${path.length} punktach`);
+            break;
+        }
 
-                    // Ustal kierunek wyjścia
-                    let dir_out = 0;
-                    if (dz_out < 0 && dx_out === 0) dir_out = 1;
-                    else if (dx_out > 0 && dz_out === 0) dir_out = 2;
-                    else if (dz_out > 0 && dx_out === 0) dir_out = 3;
-                    else if (dx_out < 0 && dz_out === 0) dir_out = 4;
+        const [px, pz] = previous.split(',').map(Number);
+        const neighbors = edgeMap.get(current) || [];
 
-                    // Reguła prawej ręki (Clockwise)
-                    // 1. Skręt w prawo (najwyższy priorytet)
-                    let rightTurnDir = (dir_in % 4) + 1;
-
-                    // 2. Prosto (drugi priorytet)
-                    let straightDir = dir_in;
-
-                    // 3. Skręt w lewo (trzeci priorytet)
-                    let leftTurnDir = (rightTurnDir % 4) + 1;
-
-                    // Priorytety
-                    if (dir_out === rightTurnDir) return 1;
-                    if (dir_out === straightDir) return 2;
-                    if (dir_out === leftTurnDir) return 3;
-
-                    // 4. Powrót (kierunek przeciwny)
-                    return 4;
-                };
-                // --- KONIEC FUNKCJI POMOCNICZEJ ---
-
-
-                // 5. Podążaj wzdłuż konturu (Algorytm Preferencyjnego Kierunku)
-                const path = [];
-                let current = startPoint;
-                let previous = `${minX},${minZ - 1}`; // Sztuczny punkt "Północny" do inicjacji ruchu w dół/prawo
-                const maxIterations = outerEdges.length + 1;
-                let iterations = 0;
-                let closed = false;
-
-                while (current && iterations < maxIterations) {
-                    iterations++;
-
-                    const [cx, cz] = current.split(',').map(Number);
-                    path.push({ x: cx, z: cz });
-
-                    // Warunek zakończenia: powrót do punktu startowego po co najmniej 3 punktach
-                    if (current === startPoint && path.length > 1) {
-                        path.pop(); // Usuń duplikat startowego punktu
-                        closed = true;
-                        console.log(`  ✅ Zamknięto pętlę po ${path.length} punktach`);
-                        break;
-                    }
-
-                    const [px, pz] = previous.split(',').map(Number);
-                    const neighbors = edgeMap.get(current) || [];
-
-                    let bestNeighbor = null;
-                    let minPriority = Infinity;
-
-                    for (const neighbor of neighbors) {
-                        // Unikaj natychmiastowego cofania się
-                        if (neighbor === previous) {
-                            continue;
-                        }
-
-                        const [nx, nz] = neighbor.split(',').map(Number);
-
-                        // Oblicz priorytet kierunkowy (Right-Hand Rule)
-                        const priority = getTurnPriority(px, pz, cx, cz, nx, nz);
-
-                        // Wybierz sąsiada z najwyższym priorytetem (najmniejsza wartość)
-                        if (priority < minPriority) {
-                            minPriority = priority;
-                            bestNeighbor = neighbor;
-                        }
-                    }
-
-                    if (!bestNeighbor) {
-                        console.warn('  ⚠️ Przerwane śledzenie, brak kolejnego punktu!');
-                        break;
-                    }
-
-                    previous = current;
-                    current = bestNeighbor;
-                }
-
-                console.log(`  📍 Utworzono ścieżkę z ${path.length} punktów (${iterations} odwiedzonych)`);
-
-                if (!closed) {
-                    // Dodaj punkt startowy, jeśli pętla nie została zamknięta w warunku break,
-                    // ale obecny punkt jest startowym (rzadki przypadek, ale bezpieczniej).
-                    if (current === startPoint && path.length > 0) {
-                        path.push(path[0]);
-                    }
-                    console.warn('  ⚠️ Kontur nie został zamknięty. Graf nieciągły lub błąd w śledzeniu.');
-                }
-
-                if (path.length < 3) {
-                    console.warn('  ⚠️ Ścieżka jest za krótka. Zwracam pusty kontur.');
-                    return '';
-                }
-
-                // 6. Konwersja ścieżki na format SVG
-                let svgPath = `M ${path[0].x} ${path[0].z}`;
-                for (let i = 1; i < path.length; i++) {
-                    svgPath += ` L ${path[i].x} ${path[i].z}`;
-                }
-                svgPath += ' Z'; // Zamknięcie ścieżki
-
-                console.log('  ✨ Kontur gotowy!');
-                return svgPath;
+        if (neighbors.length === 0) {
+            console.warn('  ⚠️ Przerwane śledzenie, brak kolejnego punktu!');
+            break;
+        }
+        
+        // 1. Znajdź kąt wejścia
+        const angle_in = normalizeAngle(Math.atan2(cz - pz, cx - px));
+        
+        let bestNeighbor = null;
+        let minTurnMetric = Infinity; 
+        
+        // 2. Sortowanie sąsiadów zgodnie z ruchem wskazówek zegara (Right-Hand Rule)
+        for (const { neighbor } of neighbors) {
+            // Unikaj natychmiastowego cofania się
+            if (neighbor === previous) {
+                continue;
             }
+
+            const [nx, nz] = neighbor.split(',').map(Number);
+            const angle_out = normalizeAngle(Math.atan2(nz - cz, nx - cx));
+            
+            // Oblicz różnicę kątów (skręt)
+            let turn = normalizeAngle(angle_out - angle_in);
+
+            // Zmiana metryki: Musimy preferować najmniejszy skręt w lewo, co jest równoważne
+            // wyborowi największego skrętu w prawo. 
+            // Wartość 0 = prosto, PI/2 = lewo, 3*PI/2 = prawo.
+            // Aby wybrać PRAWO, szukamy największego kąta.
+            // Aby ułatwić MINIMALIZACJĘ, przekształcamy:
+            // Skręt w Prawo (3*PI/2) dajemy priorytet 1 (najmniejsza metryka)
+            // Skręt w Lewo (PI/2) dajemy priorytet 3 (największa metryka)
+            
+            let turnMetric;
+            if (turn <= Math.PI) {
+                 // Skręt w lewo (0 do 180 stopni)
+                 turnMetric = turn; 
+            } else {
+                 // Skręt w prawo (180 do 360 stopni)
+                 // Przekształć z powrotem na ujemny skręt i odwróć, 
+                 // żeby prawe skręty miały najniższą wartość.
+                 turnMetric = -(turn - 2 * Math.PI); // Np. 3*PI/2 -> PI/2
+            }
+            // FINALNA METRYKA: Minimalizuj (preferuj mniejsze skręty w lewo i większe w prawo)
+            
+            if (turnMetric < minTurnMetric) {
+                minTurnMetric = turnMetric;
+                bestNeighbor = neighbor;
+            }
+        }
+        
+        if (!bestNeighbor) {
+             console.warn('  ⚠️ Przerwane śledzenie, brak kolejnego punktu!');
+             break;
+        }
+
+        previous = current;
+        current = bestNeighbor;
+    }
+    
+    console.log(`  📍 Utworzono ścieżkę z ${path.length} punktów (${iterations} odwiedzonych)`);
+    
+    if (path.length < 3) {
+        console.warn('  ⚠️ Ścieżka jest za krótka. Zwracam pusty kontur.');
+        return '';
+    }
+
+    // 6. Konwersja ścieżki na format SVG
+    let svgPath = `M ${path[0].x} ${path[0].z}`;
+    for (let i = 1; i < path.length; i++) {
+        svgPath += ` L ${path[i].x} ${path[i].z}`;
+    }
+    svgPath += ' Z'; // Zamknięcie ścieżki
+
+    console.log('  ✨ Kontur gotowy!');
+    return svgPath;
+}
 
             function highlightDistrict(districtName) {
                 svg.querySelectorAll('.plot-rect').forEach(rect => {
