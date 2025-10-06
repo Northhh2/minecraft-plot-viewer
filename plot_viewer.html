@@ -744,7 +744,7 @@
                 return clusters;
             }
 
-/**
+            /**
              * Tworzy kontur SVG wokół klastra działek używając algorytmu Convex Hull (Graham Scan).
              * @param {Array} plots - Tablica obiektów działek należących do jednego klastra.
              * @returns {string} - Ciąg znaków 'd' dla atrybutu ścieżki SVG lub pusty ciąg.
@@ -867,94 +867,6 @@
                 }
 
                 return hull;
-            }
-                if (!plots || plots.length === 0) return '';
-
-                const edges = new Map();
-                const PADDING = 2; // Odstęp wizualny granicy od działek
-
-                // Funkcja pomocnicza do dodawania krawędzi do mapy.
-                // Klucz jest kanoniczny (zawsze w tej samej kolejności), aby krawędź (p1, p2) była taka sama jak (p2, p1).
-                const addEdge = (x1, y1, x2, y2) => {
-                    const p1 = `${x1},${y1}`;
-                    const p2 = `${x2},${y2}`;
-                    const key = p1 < p2 ? `${p1}|${p2}` : `${p2}|${p1}`;
-                    edges.set(key, (edges.get(key) || 0) + 1);
-                };
-
-                // 1. Zbierz wszystkie krawędzie ze wszystkich działek w klastrze.
-                plots.forEach(plot => {
-                    addEdge(plot.x1, plot.z1, plot.x2, plot.z1); // Górna
-                    addEdge(plot.x1, plot.z2, plot.x2, plot.z2); // Dolna
-                    addEdge(plot.x1, plot.z1, plot.x1, plot.z2); // Lewa
-                    addEdge(plot.x2, plot.z1, plot.x2, plot.z2); // Prawa
-                });
-
-                // 2. Filtruj krawędzie, aby znaleźć tylko te zewnętrzne (występujące raz).
-                // Krawędzie wewnętrzne występują dwa razy (raz dla każdej sąsiadującej działki).
-                const boundaryEdges = [];
-                for (const [key, count] of edges.entries()) {
-                    if (count === 1) {
-                        boundaryEdges.push(key);
-                    }
-                }
-
-                if (boundaryEdges.length === 0) return '';
-
-                // 3. Zbuduj listę sąsiedztwa, aby połączyć punkty w ścieżkę.
-                const adj = new Map();
-                boundaryEdges.forEach(key => {
-                    const [p1, p2] = key.split('|');
-                    if (!adj.has(p1)) adj.set(p1, []);
-                    if (!adj.has(p2)) adj.set(p2, []);
-                    adj.get(p1).push(p2);
-                    adj.get(p2).push(p1);
-                });
-
-                // 4. Prześledź ścieżkę, łącząc punkty graniczne.
-                const pathPoints = [];
-                const visited = new Set();
-                let [startNode,] = boundaryEdges[0].split('|'); // Wybierz dowolny punkt startowy
-                let currentNode = startNode;
-
-                while (currentNode && !visited.has(currentNode)) {
-                    pathPoints.push(currentNode);
-                    visited.add(currentNode);
-
-                    const neighbors = adj.get(currentNode);
-                    let nextNode = null;
-                    for (const neighbor of neighbors) {
-                        if (!visited.has(neighbor)) {
-                            nextNode = neighbor;
-                            break;
-                        }
-                    }
-                    currentNode = nextNode;
-                }
-
-                if (pathPoints.length < 3) return ''; // Nie można utworzyć wielokąta
-
-                // 5. Dodaj wizualny padding, odsuwając punkty od środka.
-                let centroidX = 0, centroidY = 0;
-                pathPoints.forEach(pStr => {
-                    const [x, y] = pStr.split(',').map(Number);
-                    centroidX += x;
-                    centroidY += y;
-                });
-                centroidX /= pathPoints.length;
-                centroidY /= pathPoints.length;
-
-                const paddedPath = pathPoints.map(pStr => {
-                    const [x, y] = pStr.split(',').map(Number);
-                    const vecX = x - centroidX;
-                    const vecY = y - centroidY;
-                    const len = Math.hypot(vecX, vecY);
-                    if (len === 0) return `${x},${y}`;
-                    return `${x + (vecX / len) * PADDING},${y + (vecY / len) * PADDING}`;
-                });
-
-                // 6. Zwróć sformatowaną ścieżkę dla atrybutu 'd' SVG.
-                return `M ${paddedPath.join(' L ')} Z`;
             }
 
             function highlightDistrict(districtName) {
