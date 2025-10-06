@@ -752,7 +752,7 @@
              function createDistrictOutline(plots) {
                 if (!plots || plots.length === 0) return '';
 
-                const PADDING = 5;
+                const PADDING = 3;
                 
                 console.log(`🎨 Tworzenie konturu dla ${plots.length} działek: ${plots.map(p => p.name).join(', ')}`);
 
@@ -796,27 +796,29 @@
                 }
 
                 // 3. Zbuduj graf sąsiedztwa dla punktów
-                const adjacency = new Map();
-                
+                const path = [];
+                const edgeMap = new Map(); // Mapa przechowująca krawędzie wychodzące z punktu
+
                 outerEdges.forEach(edge => {
                     const p1 = `${edge.x1},${edge.z1}`;
                     const p2 = `${edge.x2},${edge.z2}`;
                     
-                    if (!adjacency.has(p1)) adjacency.set(p1, []);
-                    if (!adjacency.has(p2)) adjacency.set(p2, []);
+                    if (!edgeMap.has(p1)) edgeMap.set(p1, []);
+                    if (!edgeMap.has(p2)) edgeMap.set(p2, []);
                     
-                    adjacency.get(p1).push(p2);
-                    adjacency.get(p2).push(p1);
+                    // Zapisujemy krawędzie w obu kierunkach
+                    edgeMap.get(p1).push(p2);
+                    edgeMap.get(p2).push(p1);
                 });
 
-                console.log(`  🔗 Graf ma ${adjacency.size} punktów`);
+                console.log(`  🔗 Graf ma ${edgeMap.size} punktów`);
 
                 // 4. Znajdź punkt startowy (lewy górny)
                 let startPoint = null;
                 let minZ = Infinity;
                 let minX = Infinity;
                 
-                for (const point of adjacency.keys()) {
+                for (const point of edgeMap.keys()) {
                     const [x, z] = point.split(',').map(Number);
                     if (z < minZ || (z === minZ && x < minX)) {
                         minZ = z;
@@ -832,40 +834,65 @@
 
                 console.log(`  🎯 Punkt startowy: ${startPoint}`);
 
-                // 5. Podążaj wzdłuż konturu
-                const path = [];
-                const visited = new Set();
+                // 5. Podążaj wzdłuż konturu sekwencyjnie
                 let current = startPoint;
+                let previous = null;
+                const usedEdges = new Set();
                 let iterations = 0;
-                const maxIterations = adjacency.size * 2;
-                
-                while (current && !visited.has(current) && iterations < maxIterations) {
+                const maxIterations = outerEdges.length + 1;
+
+                while (iterations < maxIterations) {
                     iterations++;
                     const [x, z] = current.split(',').map(Number);
                     path.push({ x, z });
-                    visited.add(current);
                     
-                    const neighbors = adjacency.get(current) || [];
+                    if (current === startPoint && iterations > 1) {
+                        console.log(`  ✅ Zamknięto pętlę po ${path.length - 1} punktach`);
+                        break;
+                    }
                     
-                    // Wybierz następny punkt (niewykorzystany sąsiad)
+                    const neighbors = edgeMap.get(current) || [];
                     let next = null;
+
+                    // Właściwe śledzenie krawędzi: szukamy sąsiada, który tworzy nieużywaną jeszcze krawędź
                     for (const neighbor of neighbors) {
-                        if (!visited.has(neighbor)) {
-                            next = neighbor;
-                            break;
+                        const edgeKey = [current, neighbor].sort().join('|');
+                        
+                        // Upewnij się, że nie wracamy natychmiast, chyba że to jedyna opcja (na końcu)
+                        if (neighbor !== previous) {
+                             // Złożone klastry mogą mieć wielokrotne połączenia
+                             // Proste śledzenie nieużytych krawędzi jest najbezpieczniejsze
+                            if (!usedEdges.has(edgeKey) || iterations > outerEdges.length) {
+                                next = neighbor;
+                                usedEdges.add(edgeKey);
+                                break;
+                            }
                         }
                     }
                     
-                    // Jeśli nie ma niewykorzystanych sąsiadów, sprawdź czy możemy wrócić do startu
-                    if (!next && neighbors.includes(startPoint) && visited.size > 2) {
-                        console.log(`  ✅ Zamknięto pętlę po ${path.length} punktach`);
-                        break; // Zamknęliśmy pętlę
+                    if (!next) {
+                        // Jeśli nie znaleziono żadnej krawędzi, to znaczy, że wszystkie krawędzie 
+                        // są już teoretycznie użyte lub kontur jest nieciągły.
+                        // W prostych poligonach ta linia nie powinna być osiągnięta.
+                        if (neighbors.includes(startPoint)) {
+                             console.log(`  ✅ Wymuszone zamknięcie pętli do startu po ${path.length - 1} punktach`);
+                             break;
+                        }
+                        console.warn('  ⚠️ Przerwane śledzenie, brak kolejnego punktu!');
+                        break;
                     }
-                    
+
+                    previous = current;
                     current = next;
                 }
+                
+                if (current !== startPoint) {
+                     console.warn('  ⚠️ Kontur nie został zamknięty, prawdopodobnie nieciągły!');
+                     // Usuń ostatni punkt, jeśli nie jest to punkt startowy, aby nie powtarzał się
+                     path.pop();
+                }
 
-                console.log(`  📍 Utworzono ścieżkę z ${path.length} punktów (${visited.size} odwiedzonych)`);
+                console.log(`  📍 Utworzono ścieżkę z ${path.length} punktów`);
 
                 if (path.length < 3) {
                     console.warn('  ⚠️ Za mało punktów w ścieżce!');
