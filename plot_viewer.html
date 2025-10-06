@@ -6,12 +6,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>System Działek Minecraft</title>
     <link rel="icon" type="image/x-icon" href="Red.ico">
-    <script src="[https://cdn.tailwindcss.com](https://cdn.tailwindcss.com)"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <script
-        src="[https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js](https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js)"></script>
-    <script src="[https://cdn.jsdelivr.net/npm/chart.js](https://cdn.jsdelivr.net/npm/chart.js)"></script>
+        src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link
-        href="[https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap](https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap)"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap"
         rel="stylesheet">
     <style>
         body {
@@ -233,7 +233,7 @@
     <div id="loader" class="absolute inset-0 bg-gray-900 bg-opacity-80 flex items-center justify-center z-50">
         <div class="text-center">
             <svg class="animate-spin h-8 w-8 text-white mx-auto mb-3"
-                xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" fill="none" viewBox="0 0 24 24">
+                xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor"
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
@@ -249,7 +249,7 @@
         <div class="flex flex-col space-y-2">
             <button id="zoom-in"
                 class="control-button w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700 transition-colors shadow-lg border border-gray-600"
-                title="Powiększ"><svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width="20"
+                title="Powiększ"><svg xmlns="http://www.w3.org/2000/svg" width="20"
                     height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
                     <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -257,14 +257,14 @@
                 </svg></button>
             <button id="zoom-out"
                 class="control-button w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700 transition-colors shadow-lg border border-gray-600"
-                title="Pomniejsz"><svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width="20"
+                title="Pomniejsz"><svg xmlns="http://www.w3.org/2000/svg" width="20"
                     height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
                     <line x1="5" y1="12" x2="19" y2="12"></line>
                 </svg></button>
             <button id="reset-view"
                 class="control-button w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700 transition-colors shadow-lg border border-gray-600"
-                title="Resetuj widok"><svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width="20"
+                title="Resetuj widok"><svg xmlns="http://www.w3.org/2000/svg" width="20"
                     height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
                     <path d="M3 2v6h6"></path>
@@ -276,14 +276,14 @@
         <div id="layer-toggles" class="mt-2 flex flex-col space-y-2">
             <button id="toggle-plots"
                 class="toggle-button active control-button w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700"
-                title="Pokaż/Ukryj Działki"><svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)"
+                title="Pokaż/Ukryj Działki"><svg xmlns="http://www.w3.org/2000/svg"
                     width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
                     <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
                 </svg></button>
             <button id="toggle-streets"
                 class="toggle-button active control-button w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700"
-                title="Pokaż/Ukryj Ulice"><svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)"
+                title="Pokaż/Ukryj Ulice"><svg xmlns="http://www.w3.org/2000/svg"
                     width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
                     <line x1="4" y1="20" x2="4" y2="4"></line>
@@ -292,7 +292,7 @@
                 </svg></button>
             <button id="toggle-districts"
                 class="toggle-button active control-button w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700"
-                title="Pokaż/Ukryj Dzielnice"><svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)"
+                title="Pokaż/Ukryj Dzielnice"><svg xmlns="http://www.w3.org/2000/svg"
                     width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
@@ -301,7 +301,7 @@
             <button id="toggle-merged"
                 class="toggle-button active control-button w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700"
                 title="Pokaż/Ukryj Połączone Działki"><svg
-                    xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width="20" height="20"
+                    xmlns="http://www.w3.org/2000/svg" width="20" height="20"
                     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                     stroke-linejoin="round">
                     <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.72"></path>
@@ -354,10 +354,10 @@
             let streets = [];
 
             const layers = {
-                districts: document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'g'),
-                merged: document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'g'),
-                streets: document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'g'),
-                plots: document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'g')
+                districts: document.createElementNS('http://www.w3.org/2000/svg', 'g'),
+                merged: document.createElementNS('http://www.w3.org/2000/svg', 'g'),
+                streets: document.createElementNS('http://www.w3.org/2000/svg', 'g'),
+                plots: document.createElementNS('http://www.w3.org/2000/svg', 'g')
             };
 
             function setViewBox(x, y, w, h) {
@@ -509,7 +509,7 @@
                 if (!allPlots.length) return;
                 svg.innerHTML = '';
 
-                const mapImage = document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'image');
+                const mapImage = document.createElementNS('http://www.w3.org/2000/svg', 'image');
                 mapImage.setAttribute('href', MAP_IMAGE_URL);
                 mapImage.setAttribute('x', -MAP_WIDTH / 2);
                 mapImage.setAttribute('y', -MAP_HEIGHT / 2);
@@ -553,13 +553,13 @@
 
             function drawStreets() {
                 streets.forEach(street => {
-                    const g = document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'g');
-                    const rect = document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'rect');
+                    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
                     rect.setAttribute('x', street.x1); rect.setAttribute('y', street.z1);
                     rect.setAttribute('width', street.width); rect.setAttribute('height', street.height);
                     rect.setAttribute('class', 'street-rect');
 
-                    const text = document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'text');
+                    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                     text.setAttribute('x', street.x1 + street.width / 2);
                     text.setAttribute('y', street.z1 + street.height / 2);
                     text.setAttribute('class', 'street-text');
@@ -582,7 +582,7 @@
 
             function drawMergedPlots() {
                 mergedPlots.forEach((merged) => {
-                    const rect = document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'rect');
+                    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
                     rect.setAttribute('x', merged.x1); rect.setAttribute('y', merged.z1);
                     rect.setAttribute('width', merged.width); rect.setAttribute('height', merged.height);
                     rect.setAttribute('class', 'merged-plot');
@@ -617,12 +617,12 @@
 
             function drawPlots() {
                 allPlots.forEach(plot => {
-                    const g = document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'g');
+                    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
                     g.dataset.plotId = plot.id;
                     g.dataset.plotName = plot.name;
                     g.dataset.plotDistrict = plot.district || '';
 
-                    const rect = document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'rect');
+                    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
                     rect.setAttribute('x', plot.x1); rect.setAttribute('y', plot.z1);
                     rect.setAttribute('width', plot.width); rect.setAttribute('height', plot.height);
                     rect.setAttribute('class', 'plot-rect');
@@ -630,7 +630,7 @@
                     const isOwned = plot.owner && plot.owner.trim() !== '' && plot.owner.toLowerCase().trim() !== 'skarb miasta';
                     rect.style.stroke = isOwned ? '#ef4444' : '#22c55e';
 
-                    const text = document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'text');
+                    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                     text.setAttribute('x', plot.x1 + plot.width / 2);
                     text.setAttribute('y', plot.z1 + plot.height / 2);
                     text.setAttribute('class', 'plot-text');
@@ -667,12 +667,12 @@
 
                 Object.entries(districts).forEach(([districtName, districtPlots]) => {
                     if (districtPlots.length === 0) return;
-                    const clusters = createDistrictClusters(districtPlots, 1);
+                    const clusters = createDistrictClusters(districtPlots   , 1);
                     clusters.forEach((cluster) => {
                         const boundary = createDistrictOutline(cluster);
                         if (!boundary) return;
 
-                        const path = document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'path');
+                        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                         path.setAttribute('d', boundary);
                         path.style.cssText = "fill:none; stroke:#8b5cf6; stroke-width:2; stroke-dasharray:8,4; opacity:0.7; cursor:pointer; pointer-events:all;";
                         path.dataset.districtName = districtName;
@@ -702,7 +702,7 @@
                         const maxX = Math.max(...cluster.map(p => p.x2));
                         const minZ = Math.min(...cluster.map(p => p.z1));
 
-                        const districtLabel = document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'text');
+                        const districtLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                         districtLabel.setAttribute('x', minX + (maxX - minX) / 2);
                         districtLabel.setAttribute('y', minZ - 8);
                         districtLabel.style.cssText = "fill:#a78bfa; font-size:7px; font-weight:bold; text-anchor:middle; pointer-events:none;";
