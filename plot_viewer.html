@@ -667,7 +667,7 @@
 
                 Object.entries(districts).forEach(([districtName, districtPlots]) => {
                     if (districtPlots.length === 0) return;
-                    const clusters = createDistrictClusters(districtPlots   , 1);
+                    const clusters = createDistrictClusters(districtPlots, 50);
                     clusters.forEach((cluster) => {
                         const boundary = createDistrictOutline(cluster);
                         if (!boundary) return;
@@ -744,12 +744,130 @@
                 return clusters;
             }
 
-            /**
-             * Tworzy kontur SVG wokół klastra (grupy) sąsiadujących działek.
+/**
+             * Tworzy kontur SVG wokół klastra działek używając algorytmu Convex Hull (Graham Scan).
              * @param {Array} plots - Tablica obiektów działek należących do jednego klastra.
              * @returns {string} - Ciąg znaków 'd' dla atrybutu ścieżki SVG lub pusty ciąg.
              */
-            function createDistrictOutline(plots) {
+             function createDistrictOutline(plots) {
+                if (!plots || plots.length === 0) return '';
+
+                const PADDING = 5; // Odstęp wizualny granicy od działek
+
+                // 1. Zbierz wszystkie punkty narożne ze wszystkich działek
+                const allPoints = [];
+                plots.forEach(plot => {
+                    allPoints.push({ x: plot.x1, y: plot.z1 }); // Lewy górny
+                    allPoints.push({ x: plot.x2, y: plot.z1 }); // Prawy górny
+                    allPoints.push({ x: plot.x1, y: plot.z2 }); // Lewy dolny
+                    allPoints.push({ x: plot.x2, y: plot.z2 }); // Prawy dolny
+                });
+
+                if (allPoints.length < 3) return '';
+
+                // 2. Oblicz Convex Hull używając algorytmu Graham Scan
+                const convexHull = grahamScan(allPoints);
+
+                if (convexHull.length < 3) return '';
+
+                // 3. Oblicz centroid dla paddingu
+                let centroidX = 0, centroidY = 0;
+                convexHull.forEach(p => {
+                    centroidX += p.x;
+                    centroidY += p.y;
+                });
+                centroidX /= convexHull.length;
+                centroidY /= convexHull.length;
+
+                // 4. Dodaj padding odsuwając punkty od środka
+                const paddedPoints = convexHull.map(p => {
+                    const vecX = p.x - centroidX;
+                    const vecY = p.y - centroidY;
+                    const len = Math.hypot(vecX, vecY);
+                    if (len === 0) return p;
+                    return {
+                        x: p.x + (vecX / len) * PADDING,
+                        y: p.y + (vecY / len) * PADDING
+                    };
+                });
+
+                // 5. Zwróć sformatowaną ścieżkę SVG
+                const pathString = paddedPoints.map((p, i) => 
+                    `${i === 0 ? 'M' : 'L'} ${p.x},${p.y}`
+                ).join(' ') + ' Z';
+
+                return pathString;
+            }
+
+            /**
+             * Algorytm Graham Scan dla Convex Hull
+             * @param {Array} points - Tablica punktów {x, y}
+             * @returns {Array} - Tablica punktów tworzących wypukłą otoczkę
+             */
+            function grahamScan(points) {
+                if (points.length < 3) return points;
+
+                // Usuń duplikaty
+                const uniquePoints = [];
+                const seen = new Set();
+                points.forEach(p => {
+                    const key = `${p.x},${p.y}`;
+                    if (!seen.has(key)) {
+                        seen.add(key);
+                        uniquePoints.push(p);
+                    }
+                });
+
+                if (uniquePoints.length < 3) return uniquePoints;
+
+                // Znajdź punkt z najmniejszym Y (i najmniejszym X przy remisie)
+                let start = uniquePoints[0];
+                uniquePoints.forEach(p => {
+                    if (p.y < start.y || (p.y === start.y && p.x < start.x)) {
+                        start = p;
+                    }
+                });
+
+                // Funkcja obliczająca kąt polarny
+                const polarAngle = (p) => Math.atan2(p.y - start.y, p.x - start.x);
+
+                // Sortuj punkty według kąta polarnego
+                const sorted = uniquePoints
+                    .filter(p => p !== start)
+                    .sort((a, b) => {
+                        const angleA = polarAngle(a);
+                        const angleB = polarAngle(b);
+                        if (angleA !== angleB) return angleA - angleB;
+                        // Jeśli kąty są równe, sortuj według odległości
+                        const distA = Math.hypot(a.x - start.x, a.y - start.y);
+                        const distB = Math.hypot(b.x - start.x, b.y - start.y);
+                        return distA - distB;
+                    });
+
+                // Funkcja sprawdzająca orientację trzech punktów
+                const cross = (o, a, b) => {
+                    return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+                };
+
+                // Buduj otoczkę
+                const hull = [start, sorted[0]];
+                
+                for (let i = 1; i < sorted.length; i++) {
+                    let top = hull[hull.length - 1];
+                    let nextTop = hull[hull.length - 2];
+                    
+                    // Usuń punkty które tworzą skręt w prawo
+                    while (hull.length > 1 && cross(nextTop, top, sorted[i]) <= 0) {
+                        hull.pop();
+                        top = hull[hull.length - 1];
+                        nextTop = hull[hull.length - 2];
+                    }
+                    
+                    hull.push(sorted[i]);
+                }
+
+                return hull;
+            }
                 if (!plots || plots.length === 0) return '';
 
                 const edges = new Map();
