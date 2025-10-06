@@ -753,6 +753,8 @@
                 if (!plots || plots.length === 0) return '';
 
                 const PADDING = 5;
+                
+                console.log(`🎨 Tworzenie konturu dla ${plots.length} działek: ${plots.map(p => p.name).join(', ')}`);
 
                 // 1. Zbierz wszystkie krawędzie ze wszystkich działek
                 const edges = new Map(); // key: "x1,z1|x2,z2", value: count
@@ -773,6 +775,8 @@
                     addEdge(plot.x1, plot.z2, plot.x1, plot.z1); // Lewa
                 });
 
+                console.log(`  📏 Zebrano ${edges.size} unikalnych krawędzi`);
+
                 // 2. Znajdź zewnętrzne krawędzie (występujące tylko raz)
                 const outerEdges = [];
                 for (const [key, count] of edges.entries()) {
@@ -784,7 +788,12 @@
                     }
                 }
 
-                if (outerEdges.length === 0) return '';
+                console.log(`  🔲 Znaleziono ${outerEdges.length} zewnętrznych krawędzi`);
+
+                if (outerEdges.length === 0) {
+                    console.warn('  ⚠️ Brak zewnętrznych krawędzi!');
+                    return '';
+                }
 
                 // 3. Zbuduj graf sąsiedztwa dla punktów
                 const adjacency = new Map();
@@ -800,6 +809,8 @@
                     adjacency.get(p2).push(p1);
                 });
 
+                console.log(`  🔗 Graf ma ${adjacency.size} punktów`);
+
                 // 4. Znajdź punkt startowy (lewy górny)
                 let startPoint = null;
                 let minZ = Infinity;
@@ -814,14 +825,22 @@
                     }
                 }
 
-                if (!startPoint) return '';
+                if (!startPoint) {
+                    console.warn('  ⚠️ Nie znaleziono punktu startowego!');
+                    return '';
+                }
+
+                console.log(`  🎯 Punkt startowy: ${startPoint}`);
 
                 // 5. Podążaj wzdłuż konturu
                 const path = [];
                 const visited = new Set();
                 let current = startPoint;
+                let iterations = 0;
+                const maxIterations = adjacency.size * 2;
                 
-                while (current && !visited.has(current)) {
+                while (current && !visited.has(current) && iterations < maxIterations) {
+                    iterations++;
                     const [x, z] = current.split(',').map(Number);
                     path.push({ x, z });
                     visited.add(current);
@@ -839,13 +858,19 @@
                     
                     // Jeśli nie ma niewykorzystanych sąsiadów, sprawdź czy możemy wrócić do startu
                     if (!next && neighbors.includes(startPoint) && visited.size > 2) {
+                        console.log(`  ✅ Zamknięto pętlę po ${path.length} punktach`);
                         break; // Zamknęliśmy pętlę
                     }
                     
                     current = next;
                 }
 
-                if (path.length < 3) return '';
+                console.log(`  📍 Utworzono ścieżkę z ${path.length} punktów (${visited.size} odwiedzonych)`);
+
+                if (path.length < 3) {
+                    console.warn('  ⚠️ Za mało punktów w ścieżce!');
+                    return '';
+                }
 
                 // 6. Zastosuj padding
                 let centroidX = 0, centroidZ = 0;
@@ -872,6 +897,7 @@
                     `${i === 0 ? 'M' : 'L'} ${p.x},${p.z}`
                 ).join(' ') + ' Z';
 
+                console.log(`  ✨ Kontur gotowy!`);
                 return pathString;
             }
 
