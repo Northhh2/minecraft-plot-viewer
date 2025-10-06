@@ -738,12 +738,13 @@
             }
 
             /**
-  * Tworzy kontur dzielnicy (Dzielnicy/Klastra Działek) poprzez marsz wzdłuż zewnętrznych krawędzi.
-  * Algorytm korzysta z zasady prawej ręki (clockwise) z priorytetem kierunków siatkowych.
-  *
-  * @param {Array<Object>} plots Lista obiektów działek z polami: corner1, corner2, center, name, district.
-  * @returns {string} Ścieżka SVG konturu.
-  */
+ * Tworzy kontur dzielnicy (Dzielnicy/Klastra Działek) poprzez marsz wzdłuż zewnętrznych krawędzi.
+ * Algorytm korzysta z zasady prawej ręki (clockwise) z priorytetem kierunków siatkowych.
+ * * Przyjmuje obiekty działek z polami x1, z1 (lewy górny) i x2, z2 (prawy dolny).
+ *
+ * @param {Array<Object>} plots Lista obiektów działek.
+ * @returns {string} Ścieżka SVG konturu.
+ */
             function createDistrictOutline(plots) {
                 if (plots.length === 0) return '';
                 console.log(`🎨 Tworzenie konturu dla ${plots.length} działek: ${plots.map(p => p.name).join(', ')}`);
@@ -752,14 +753,13 @@
                 const allEdges = new Map(); // Klucz: "x1,z1|x2,z2" (posortowane), Wartość: Licznik wystąpień
 
                 plots.forEach(plot => {
-                    // Zakładamy, że każda działka jest prostokątem o 4 narożnikach i 4 krawędziach
-                    const c1 = plot.corner1;
-                    const c2 = plot.corner2;
-                    const x_min = Math.min(c1.x, c2.x);
-                    const x_max = Math.max(c1.x, c2.x);
-                    const z_min = Math.min(c1.z, c2.z);
-                    const z_max = Math.max(c1.z, c2.z);
+                    // --- POPRAWKA: Użycie właściwych pól x1, z1, x2, z2 ---
+                    const x_min = Math.min(plot.x1, plot.x2);
+                    const x_max = Math.max(plot.x1, plot.x2);
+                    const z_min = Math.min(plot.z1, plot.z2);
+                    const z_max = Math.max(plot.z1, plot.z2);
 
+                    // Cztery narożniki działki (zakładamy, że to prostokąt na siatce)
                     const corners = [
                         { x: x_min, z: z_min }, // Top-Left
                         { x: x_max, z: z_min }, // Top-Right
@@ -796,7 +796,7 @@
                 console.log(`  🔲 Znaleziono ${outerEdges.length} zewnętrznych krawędzi`);
 
                 // Krok 3: Zbuduj graf sąsiedztwa dla punktów krawędzi zewnętrznych
-                const edgeMap = new Map(); // Klucz: 'x,z', Wartość: Array['x_n,z_n', ...]
+                const edgeMap = new Map();
 
                 outerEdges.forEach(edge => {
                     const p1 = `${edge.x1},${edge.z1}`;
@@ -818,6 +818,8 @@
 
                 for (const point of edgeMap.keys()) {
                     const [x, z] = point.split(',').map(Number);
+                    // Preferujemy punkt o najmniejszej Z (najwyżej na mapie), 
+                    // a w przypadku remisu o najmniejszej X (najbardziej na lewo).
                     if (z < minZ || (z === minZ && x < minX)) {
                         minZ = z;
                         minX = x;
@@ -832,9 +834,8 @@
 
                 console.log(`  🎯 Punkt startowy: ${startPoint}`);
 
-                // --- FUNKCJA POMOCNICZA DLA WŁAŚCIWEGO MARSZU KIERUNKOWEGO ---
-                // Definiuje priorytety ruchu dla marszu zgodnie z ruchem wskazówek zegara (Right-Hand Rule)
-                // Zwraca priorytet: 1=Najwyższy (skręt w prawo), 4=Najniższy (skręt w lewo)
+                // --- FUNKCJA POMOCNICZA DLA MARSZU KIERUNKOWEGO ---
+                // Zwraca priorytet ruchu: 1=Skręt w Prawo, 2=Prosto, 3=Skręt w Lewo.
                 const getTurnPriority = (px, pz, cx, cz, nx, nz) => {
                     // Wektor wejścia (poprzedni -> obecny)
                     const dx_in = cx - px;
@@ -844,18 +845,15 @@
                     const dz_out = nz - cz;
 
                     // Oznaczenie kierunków: 1=Góra(Północ), 2=Prawo(Wschód), 3=Dół(Południe), 4=Lewo(Zachód)
-                    let dir_in = 0; // Kierunek wejścia
+                    let dir_in = 0;
 
-                    // Ustal kierunek wejścia na podstawie wektora wejściowego (dx_in, dz_in)
-                    if (dz_in < 0 && dx_in === 0) dir_in = 1; // Góra
-                    else if (dx_in > 0 && dz_in === 0) dir_in = 2; // Prawo
-                    else if (dz_in > 0 && dx_in === 0) dir_in = 3; // Dół
-                    else if (dx_in < 0 && dz_in === 0) dir_in = 4; // Lewo
+                    // Ustal kierunek wejścia
+                    if (dz_in < 0 && dx_in === 0) dir_in = 1;
+                    else if (dx_in > 0 && dz_in === 0) dir_in = 2;
+                    else if (dz_in > 0 && dx_in === 0) dir_in = 3;
+                    else if (dx_in < 0 && dz_in === 0) dir_in = 4;
 
-                    // Zaczynamy od startPoint, gdzie (px, pz) = (minX, minZ-1). 
-                    // Wektor wejścia jest DÓŁ. dir_in = 3 (POŁUDNIE).
-
-                    // Ustal kierunek wyjścia na podstawie wektora wyjściowego (dx_out, dz_out)
+                    // Ustal kierunek wyjścia
                     let dir_out = 0;
                     if (dz_out < 0 && dx_out === 0) dir_out = 1;
                     else if (dx_out > 0 && dz_out === 0) dir_out = 2;
@@ -873,11 +871,11 @@
                     let leftTurnDir = (rightTurnDir % 4) + 1;
 
                     // Priorytety
-                    if (dir_out === rightTurnDir) return 1; // Preferuj skręt w prawo
-                    if (dir_out === straightDir) return 2;  // Następnie idź prosto
-                    if (dir_out === leftTurnDir) return 3;  // Następnie skręt w lewo (tylko w rogach)
+                    if (dir_out === rightTurnDir) return 1;
+                    if (dir_out === straightDir) return 2;
+                    if (dir_out === leftTurnDir) return 3;
 
-                    // 4. Kierunek przeciwny (powrót) - unikać, ale jako zabezpieczenie ma najniższy priorytet
+                    // 4. Powrót (kierunek przeciwny)
                     return 4;
                 };
                 // --- KONIEC FUNKCJI POMOCNICZEJ ---
@@ -887,6 +885,8 @@
                 const path = [];
                 let current = startPoint;
                 let previous = `${minX},${minZ - 1}`; // Sztuczny punkt "Północny" do inicjacji ruchu w dół/prawo
+                const maxIterations = outerEdges.length + 1;
+                let iterations = 0;
                 let closed = false;
 
                 while (current && iterations < maxIterations) {
@@ -895,7 +895,7 @@
                     const [cx, cz] = current.split(',').map(Number);
                     path.push({ x: cx, z: cz });
 
-                    // Warunek zakończenia: powrót do punktu startowego
+                    // Warunek zakończenia: powrót do punktu startowego po co najmniej 3 punktach
                     if (current === startPoint && path.length > 1) {
                         path.pop(); // Usuń duplikat startowego punktu
                         closed = true;
@@ -910,14 +910,14 @@
                     let minPriority = Infinity;
 
                     for (const neighbor of neighbors) {
-                        // Nie cofamy się natychmiast
+                        // Unikaj natychmiastowego cofania się
                         if (neighbor === previous) {
                             continue;
                         }
 
                         const [nx, nz] = neighbor.split(',').map(Number);
 
-                        // Oblicz priorytet kierunkowy
+                        // Oblicz priorytet kierunkowy (Right-Hand Rule)
                         const priority = getTurnPriority(px, pz, cx, cz, nx, nz);
 
                         // Wybierz sąsiada z najwyższym priorytetem (najmniejsza wartość)
@@ -939,6 +939,11 @@
                 console.log(`  📍 Utworzono ścieżkę z ${path.length} punktów (${iterations} odwiedzonych)`);
 
                 if (!closed) {
+                    // Dodaj punkt startowy, jeśli pętla nie została zamknięta w warunku break,
+                    // ale obecny punkt jest startowym (rzadki przypadek, ale bezpieczniej).
+                    if (current === startPoint && path.length > 0) {
+                        path.push(path[0]);
+                    }
                     console.warn('  ⚠️ Kontur nie został zamknięty. Graf nieciągły lub błąd w śledzeniu.');
                 }
 
