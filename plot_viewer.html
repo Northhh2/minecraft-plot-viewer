@@ -737,17 +737,18 @@
                 return clusters;
             }
 
-            // Fragment pliku plot_viewer.html (zawierający nową funkcję createDistrictOutline)
-
             /**
-             * Tworzy kontur dzielnicy (Dzielnicy/Klastra Działek) używając Algorytmu Marszu Kierowanego.
+             * Tworzy kontur dzielnicy (Dzielnicy/Klastra Działek) używając Algorytmu Marszu Kierowanego
+             * z Agresywną Penalizacją Wklęsłych Zakrętów (kierunek do środka).
              *
              * Algorytm:
              * 1. Znajduje skrajne granice i środek klastra (centerTarget).
              * 2. Znajduje wszystkie zewnętrzne krawędzie (te, które są użyte tylko raz).
              * 3. Zaczyna od najbardziej skrajnego punktu (top-left).
-             * 4. W każdym narożniku wybiera następny punkt, minimalizując kąt skrętu w lewo (Clockwise)
-             * ORAZ maksymalizując dążenie w kierunku środka klastra, aby "wyprostować" otoczkę.
+             * 4. W każdym narożniku wybiera następny punkt, który:
+             * a) Preferuje ruch zgodnie z ruchem wskazówek zegara (Prawą Ręką).
+             * b) Agresywnie penalizuje skręt w lewo (wklęsły zakręt).
+             * c) Używa dążenia do centrum klastra jako tie-breaker.
              *
              * @param {Array<Object>} plots Lista obiektów działek z polami x1, z1, x2, z2.
              * @returns {string} Ścieżka SVG konturu.
@@ -815,6 +816,7 @@
                         const [x2, z2] = p2_str.split(',').map(Number);
 
                         // Wyszukiwanie punktu startowego (Top-Left)
+                        // Używamy znormalizowanego Top-Left dla deterministycznego startu
                         if (z1 < minZ || (z1 === minZ && x1 < minX)) {
                             minZ = z1;
                             minX = x1;
@@ -846,57 +848,68 @@
                 const normalizeAngle = (angle) => (angle + 2 * Math.PI) % (2 * Math.PI);
 
                 /**
-                 * Oblicza metrykę skrętu i dążenia do centrum.
-                 * Metryka łączy dwa cele:
-                 * 1. Kierunek zegarowy (minimalizacja skrętu w lewo).
-                 * 2. Dążenie w kierunku środka (minimalizacja odchylenia od centrum).
+                 * Oblicza metrykę, która agresywnie penalizuje skręty w lewo (wklęsłe).
                  *
                  * @returns {number} Wartość priorytetu (im mniejsza, tym lepsza ścieżka).
                  */
                 const calculateTurnAndCenterMetric = (px, pz, cx, cz, nx, nz, center) => {
                     // --- 1. Kierunek Zegarowy (Clockwise Turn) ---
-                    // Kąt wejścia: (poprzedni -> obecny)
-                    const angle_in = normalizeAngle(Math.atan2(cz - pz, cx - px));
-                    // Kąt wyjścia: (obecny -> następny)
-                    const angle_out = normalizeAngle(Math.atan2(nz - cz, nx - cx));
 
-                    // Oblicz różnicę kątów (skręt)
-                    let turn = normalizeAngle(angle_out - angle_in);
+                    // Wektor wejścia (P -> C)
+                    const dx_in = cx - px;
+                    const dz_in = cz - pz;
+                    // Wektor wyjścia (C -> N)
+                    const dx_out = nx - cx;
+                    const dz_out = nz - cz;
 
-                    // Wartość skrętu w lewo [0, PI] i skrętu w prawo [-PI, 0)
-                    let turnValue;
-                    if (turn <= Math.PI) {
-                        // Skręt w lewo (0 do 180 stopni, PI/2 = lewo)
-                        turnValue = turn;
-                    } else {
-                        // Skręt w prawo (180 do 360 stopni, 3*PI/2 = prawo)
-                        turnValue = -(2 * Math.PI - turn); // Np. 3*PI/2 -> -PI/2
+                    // Wyliczanie Skrętu (używamy atan2 dla precyzyjnych kątów)
+                    const angle_in = Math.atan2(dz_in, dx_in);
+                    const angle_out = Math.atan2(dz_out, dx_out);
+
+                    // Skręt: różnica kątów wyjścia i wejścia, znormalizowana do [-PI, PI]
+                    let turn = angle_out - angle_in;
+                    // Normalizacja, aby skręt był w zakresie (-PI, PI]
+                    if (turn > Math.PI) turn -= 2 * Math.PI;
+                    if (turn <= -Math.PI) turn += 2 * Math.PI;
+
+                    // Turn Value:
+                    // Turn = 0: Prosto
+                    // Turn > 0: Skręt w Lewo (Wklęsły - ZŁY)
+                    // Turn < 0: Skręt w Prawo (Wypukły - DOBRY)
+
+                    // Priorytety Skrętu:
+                    const TURN_PENALTY_LEFT = 10000; // Ogromna kara za skręt w lewo (wklęsły róg)
+                    const TURN_BONUS_RIGHT = 100;    // Mały bonus za skręt w prawo
+
+                    let turnMetric = 0;
+
+                    if (turn > 0.001) { // Skręt w lewo (wklęsły)
+                        // Agresywna kara proporcjonalna do kąta skrętu w lewo
+                        turnMetric = turn * TURN_PENALTY_LEFT;
+                    } else if (turn < -0.001) { // Skręt w prawo (wypukły)
+                        // Mały bonus (im mniejszy skręt w prawo, tym niższa metryka, ale zawsze lepszy niż prosto)
+                        turnMetric = -turn * TURN_BONUS_RIGHT;
                     }
-
-                    // Metryka skrętu: preferuj najmniejszą wartość, aby iść prosto lub skręcić w prawo.
-                    // Np. Prosto(0) > Prawo(-PI/2) > Lewo(PI/2)
-                    // Mnożymy przez -1, żeby prawy skręt był mniejszą liczbą dodatnią niż lewy.
-                    const turnPriority = 1 - (turnValue / Math.PI); // Normalizacja: Prawo ≈ 1.5, Prosto ≈ 1, Lewo ≈ 0.5
+                    // Skręt prosty (turn ≈ 0) ma metrykę 0 (neutralny)
 
                     // --- 2. Dążenie do Centrum (Center Proximity) ---
+                    // Używane jako tie-breaker, gdy skręty są podobne (proste lub prawostronne)
 
                     // Odległość od centrum do obecnego punktu (C)
                     const distC = Math.sqrt(Math.pow(center.x - cx, 2) + Math.pow(center.z - cz, 2));
                     // Odległość od centrum do następnego punktu (N)
                     const distN = Math.sqrt(Math.pow(center.x - nx, 2) + Math.pow(center.z - nz, 2));
 
-                    // Metryka dążenia do centrum: im mniejsza (bardziej dąży do centrum), tym lepsza
-                    // (Wybieramy punkt, który jest bliżej centrum lub dalej od brzegu klastra)
-                    const centerMetric = distN - distC; // Negative is better (closer to center)
+                    // Metryka dążenia do centrum: Negative is better (bliżej centrum)
+                    const centerMetric = distN - distC;
 
                     // --- 3. Waga i Kombinacja ---
-                    // Waga jest kluczowa. Silniejszy akcent na kierunek (skręt w prawo) niż na centrum.
-                    const WEIGHT_TURN = 1000;
+                    // Waga skrętu jest dominująca, aby utrzymać obrys. Waga centrum jest tie-breakerem.
                     const WEIGHT_CENTER = 1;
 
                     // Finalna Metryka: Minimalizacja tej wartości.
-                    // Preferencja: Skręt w prawo > Prosto > Skręt w lewo ORAZ Pójście w głąb klastra.
-                    return (turnPriority * WEIGHT_TURN) + (centerMetric * WEIGHT_CENTER);
+                    // Penalty (Left Turn) >> Straight/Right Turn + Center Proximity
+                    return turnMetric + (centerMetric * WEIGHT_CENTER);
                 };
 
                 // --- KONIEC FUNKCJI POMOCNICZYCH ---
@@ -904,24 +917,75 @@
                 // Krok 3: Marsz Kierowany
                 const path = [];
                 let current = startPoint;
-                let previous = `${minX},${minZ - 1}`; // Sztuczny punkt "Północny" do inicjacji ruchu w dół/prawo
-                const maxIterations = edgeMap.size * 2; // Bezpieczny limit
-                let iterations = 0;
-                let closed = false;
+                // Znajdź pierwszy krok: Wśród sąsiadów startPoint, wybierz ten, który jest najbliżej 
+                // kierunku zgodnego z ruchem wskazówek zegara (początkowo w dół lub w prawo)
+                let previous = null;
+
+                // Inicjacja previous - potrzebujemy, by pierwszy krok był sensowny
+                const [sx, sz] = startPoint.split(',').map(Number);
+
+                // Zakładamy, że startujemy w górnym lewym rogu klastra (minX, minZ). 
+                // Pierwszy ruch powinien być w prawo lub w dół.
+                let initialPrevious = `${sx},${sz - 1}`; // Sztuczny punkt Północny
+
+                // Wybierz najlepszy sąsiad dla pierwszego kroku
+                let bestFirstStep = null;
+                let minFirstMetric = Infinity;
+
+                for (const neighbor of edgeMap.get(startPoint) || []) {
+                    const [nx, nz] = neighbor.split(',').map(Number);
+
+                    // Używamy uproszczonej metryki: preferuj ruch w prawo lub w dół (Clockwise)
+                    // Kąt od Północy (w dół = 180, w prawo = 90)
+                    const angle = normalizeAngle(Math.atan2(nz - sz, nx - sx));
+
+                    // Metryka: 
+                    // Dla ruchu w dół (angle=PI/2) i w prawo (angle=0)
+                    // Szukamy najmniejszego kąta od idealnego kierunku w dół (PI/2)
+                    let metric = Math.abs(angle - Math.PI / 2); // 0 dla idealnie w dół, PI/2 dla w lewo/prawo
+
+                    if (nx === sx && nz > sz) { // Idealnie w dół (pierwszy ruch po Top-Left)
+                        metric = -1000; // Daj ogromny priorytet ruchowi w dół
+                    } else if (nx > sx && nz === sz) { // Idealnie w prawo
+                        metric = -500; // Drugi priorytet
+                    } else {
+                        // Jeśli musi iść w górę lub w lewo, daj karę
+                        metric = 1000;
+                    }
+
+                    if (metric < minFirstMetric) {
+                        minFirstMetric = metric;
+                        bestFirstStep = neighbor;
+                    }
+                }
+
+                // Jeśli nie znaleziono, użyj po prostu pierwszego sąsiada
+                previous = initialPrevious; // Ustaw poprzednika na sztuczny punkt
+                current = startPoint;
+
+                // Krok 3: Marsz Kierowany (Główna Pętla)
+                const pathSet = new Set(); // Używamy Set do wykrywania duplikatów i zapobiegania pętlom
 
                 while (current && iterations < maxIterations) {
                     iterations++;
 
                     const [cx, cz] = current.split(',').map(Number);
-                    path.push({ x: cx, z: cz });
+                    const currentKey = `${cx},${cz}`;
 
                     // Warunek zakończenia
-                    if (current === startPoint && path.length > 1) {
-                        path.pop();
+                    if (currentKey === startPoint && path.length > 0) {
                         closed = true;
-                        console.log(`  ✅ Zamknięto pętlę po ${path.length} punktach`);
                         break;
                     }
+
+                    if (pathSet.has(currentKey)) {
+                        console.warn('  ⚠️ Wykryto powtarzający się punkt. Przerwane śledzenie pętli.');
+                        break;
+                    }
+
+                    path.push({ x: cx, z: cz });
+                    pathSet.add(currentKey);
+
 
                     const [px, pz] = previous.split(',').map(Number);
                     const neighbors = edgeMap.get(current) || [];
@@ -930,16 +994,29 @@
                     let minMetric = Infinity;
 
                     for (const neighbor of neighbors) {
+                        // Natychmiastowe cofanie jest zabronione
                         if (neighbor === previous) continue;
 
                         const [nx, nz] = neighbor.split(',').map(Number);
 
-                        // Oblicz metrykę łączącą kierunek i dążenie do centrum
+                        // Oblicz metrykę łączącą penalizację wklęsłych zakrętów i dążenie do centrum
                         const metric = calculateTurnAndCenterMetric(px, pz, cx, cz, nx, nz, centerTarget);
 
                         if (metric < minMetric) {
                             minMetric = metric;
                             bestNeighbor = neighbor;
+                        } else if (metric === minMetric && (neighbor === bestFirstStep || path.length < 3)) {
+                            // Tie-breaker: jeśli metryki są równe, preferuj dążenie do centrum
+                            // lub punkty wczesne.
+                            // Używamy centerMetric jako drugorzędnego kryterium.
+                            const [bnx, bnz] = bestNeighbor ? bestNeighbor.split(',').map(Number) : [0, 0];
+
+                            const currentCenterMetric = Math.sqrt(Math.pow(centerTarget.x - nx, 2) + Math.pow(centerTarget.z - nz, 2));
+                            const bestCenterMetric = Math.sqrt(Math.pow(centerTarget.x - bnx, 2) + Math.pow(centerTarget.z - bnz, 2));
+
+                            if (currentCenterMetric < bestCenterMetric) {
+                                bestNeighbor = neighbor;
+                            }
                         }
                     }
 
@@ -954,6 +1031,10 @@
 
                 console.log(`  📍 Utworzono ścieżkę z ${path.length} punktów (${iterations} odwiedzonych)`);
 
+                if (!closed) {
+                    console.warn('  ⚠️ Kontur nie został zamknięty. Zwracam pusty kontur.');
+                    return '';
+                }
                 if (path.length < 3) {
                     console.warn('  ⚠️ Ścieżka jest za krótka. Zwracam pusty kontur.');
                     return '';
@@ -969,6 +1050,7 @@
                 console.log('  ✨ Kontur gotowy!');
                 return svgPath;
             }
+
 
 
             function highlightDistrict(districtName) {
