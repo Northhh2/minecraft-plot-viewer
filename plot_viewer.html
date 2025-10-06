@@ -120,6 +120,14 @@
             height: 200px;
             width: 100%;
         }
+        .clickable-name {
+            cursor: pointer;
+            text-decoration: underline;
+            text-underline-offset: 2px;
+        }
+        .clickable-name:hover {
+            color: #a78bfa; /* purple-400 */
+        }
         
         @media (max-width: 768px) {
             #tooltip { font-size: 12px; max-width: 90vw; max-height: 50vh; overflow-y: auto; }
@@ -185,10 +193,12 @@
             const PLOTS_GID = '0';
             const MERGED_GID = '43897086';
             const STREETS_GID = '2101138806';
+            const LOCALS_GID = '875214507'; // New GID for locals
 
             const PLOTS_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${PLOTS_GID}`;
             const MERGED_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${MERGED_GID}`;
             const STREETS_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${STREETS_GID}`;
+            const LOCALS_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${LOCALS_GID}`;
 
             const MAP_IMAGE_URL = 'map.png';
             const MAP_WIDTH = 4296;
@@ -216,14 +226,15 @@
             let activeCharts = [];
             
             let allPlots = [];
+            let allLocals = [];
             let mergedPlots = [];
             let streets = [];
             
             const layers = {
-                streets: document.createElementNS('http://www.w3.org/2000/svg', 'g'),
-                plots: document.createElementNS('http://www.w3.org/2000/svg', 'g'),
+                districts: document.createElementNS('http://www.w3.org/2000/svg', 'g'),
                 merged: document.createElementNS('http://www.w3.org/2000/svg', 'g'),
-                districts: document.createElementNS('http://www.w3.org/2000/svg', 'g')
+                streets: document.createElementNS('http://www.w3.org/2000/svg', 'g'),
+                plots: document.createElementNS('http://www.w3.org/2000/svg', 'g')
             };
 
             function setViewBox(x, y, w, h) {
@@ -245,62 +256,67 @@
                 svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
             }
 
-            function getColorForType(type) {
-                const alpha = 0.8;
+            function getColorForType(type, alpha = 0.8) {
                 switch (type) {
-                    case 'Parkowa':               return `rgba(34, 197, 94, ${alpha})`;
-                    case 'Rolna':                 return `rgba(130, 90, 40, ${alpha})`;
-                    case 'Hotelowa':              return `rgba(6, 182, 212, ${alpha})`;
-                    case 'Mieszkalna':            return `rgba(202, 138, 4, ${alpha})`;
-                    case 'Sakralna':              return `rgba(168, 85, 247, ${alpha})`;
-                    case 'Przemysłowo-biurowa':   return `rgba(236, 72, 153, ${alpha})`;
-                    case 'Mieszkalno-usługowa':   return `rgba(59, 130, 246, ${alpha})`;
-                    case 'Publiczna':             return `rgba(249, 115, 22, ${alpha})`;
-                    case 'Medyczna':              return `rgba(251, 44, 54, ${alpha})`;
+                    case 'Parkowa':               return `rgba(0, 170, 0, ${alpha})`;
+                    case 'Rolna':                 return `rgba(180, 104, 77, ${alpha})`;
+                    case 'Hotelowa':              return `rgba(44, 186, 168, ${alpha})`;
+                    case 'Mieszkalna':            return `rgba(222, 177, 45, ${alpha})`;
+                    case 'Sakralna':              return `rgba(154, 92, 198, ${alpha})`;
+                    case 'Przemysłowo-biurowa':   return `rgba(255, 85, 255, ${alpha})`;
+                    case 'Mieszkalno-usługowa':   return `rgba(33, 73, 123, ${alpha})`;
+                    case 'Publiczna':             return `rgba(255, 170, 0, ${alpha})`;
+                    case 'Medyczna':              return `rgba(170, 0, 0, ${alpha})`;
+                    case 'Usługowa':              return `rgba(17, 160, 54, ${alpha})`;
                     default:                      return `rgba(255, 255, 255, 0.1)`;
                 }
             }
 
             async function fetchAllData() {
                 try {
-                    const [plotsResponse, mergedResponse, streetsResponse] = await Promise.all([
-                        fetch(PLOTS_URL), fetch(MERGED_URL), fetch(STREETS_URL)
+                    const responses = await Promise.all([
+                        fetch(PLOTS_URL), fetch(MERGED_URL), fetch(STREETS_URL), fetch(LOCALS_URL)
                     ]);
 
-                    if (!plotsResponse.ok || !mergedResponse.ok || !streetsResponse.ok) throw new Error('Network response was not ok');
+                    if (responses.some(res => !res.ok)) throw new Error('Network response was not ok');
 
-                    const [plotsText, mergedText, streetsText] = await Promise.all([
-                        plotsResponse.text(), mergedResponse.text(), streetsResponse.text()
-                    ]);
+                    const texts = await Promise.all(responses.map(res => res.text()));
                     
-                    const plotsPromise = new Promise(resolve => Papa.parse(plotsText, { header: true, skipEmptyLines: true, complete: resolve }));
-                    const mergedPromise = new Promise(resolve => Papa.parse(mergedText, { header: true, skipEmptyLines: true, complete: resolve }));
-                    const streetsPromise = new Promise(resolve => Papa.parse(streetsText, { header: true, skipEmptyLines: true, complete: resolve }));
+                    const [plotsResult, mergedResult, streetsResult, localsResult] = await Promise.all([
+                        new Promise(resolve => Papa.parse(texts[0], { header: true, skipEmptyLines: true, complete: resolve })),
+                        new Promise(resolve => Papa.parse(texts[1], { header: true, skipEmptyLines: true, complete: resolve })),
+                        new Promise(resolve => Papa.parse(texts[2], { header: true, skipEmptyLines: true, complete: resolve })),
+                        new Promise(resolve => Papa.parse(texts[3], { header: true, skipEmptyLines: true, complete: resolve }))
+                    ]);
 
-                    const [plotsResult, mergedResult, streetsResult] = await Promise.all([plotsPromise, mergedPromise, streetsPromise]);
-
-                    allPlots = plotsResult.data.filter(p => p['Nr porządkowy'] && p['X (lewy górny)'] && p['Z (lewy górny)'] && p['Bok X'] && p['Bok Z'])
+                    allPlots = plotsResult.data.filter(p => p['Nr porządkowy'] && p['X (lewy górny)'])
                         .map(d => ({
                             id: d['Nr porządkowy'], name: d['Nazwa porządkowa działki'], type: d['Typ'],
                             x1: parseInt(d['X (lewy górny)'], 10), z1: parseInt(d['Z (lewy górny)'], 10),
                             x2: parseInt(d['X (prawy dolny)'], 10), z2: parseInt(d['Z (prawy dolny)'], 10),
                             width: parseInt(d['Bok X'], 10), height: parseInt(d['Bok Z'], 10), area: d['Powierzchnia'],
-                            value: d['Wartość'], prevOwner: d['Poprzedni właściciel'], owner: d['Aktualny właściciel'],
-                            sector: d['Sektor'], district: d['Dzielnica'], street: d['Ulica'],
-                            buildingNumber: d['Numer budynku'], apartmentCount: d['Ilość lokali']
+                            value: d['Wartość'], owner: d['Aktualny właściciel'], district: d['Dzielnica'],
+                            street: d['Ulica'], buildingNumber: d['Numer budynku']
+                        }));
+                    
+                    allLocals = localsResult.data.filter(l => l['Numer porządkowy'] && l['Numer działki'])
+                        .map(l => ({
+                            id: l['Numer porządkowy'], plotName: l['Numer działki'], street: l['Ulica'],
+                            building: l['Numer budynku'], localNum: l['Numer lokalu'], floor: l['Piętro'],
+                            area: parseInt(l['Powierzchnia']) || 0, beds: parseInt(l['Ilość łóżek']) || 0,
+                            workplaces: parseInt(l['Ilość miejsc pracy']) || 0, tenant: l['Najemca']
                         }));
                     
                     const connections = mergedResult.data.filter(m => m['Działka główna'] && m['Działka dołączana'])
                         .map(d => ({ plot1: d['Działka główna'], plot2: d['Działka dołączana'] }));
                     mergedPlots = processMergedPlots(connections);
 
-                    streets = streetsResult.data.filter(s => s['Numer porządkowy'] && s['X (lewy górny)'] && s['Z (lewy górny)'] && s['X (prawy dolny)'] && s['Z (prawy dolny)'])
+                    streets = streetsResult.data.filter(s => s['X (lewy górny)'])
                         .map(d => ({
-                            id: d['Numer porządkowy'], name: d['Nazwa ulicy'],
+                            name: d['Nazwa ulicy'],
                             x1: parseInt(d['X (lewy górny)'], 10), z1: parseInt(d['Z (lewy górny)'], 10),
-                            x2: parseInt(d['X (prawy dolny)'], 10), z2: parseInt(d['Z (prawy dolny)'], 10),
-                            width: parseInt(d['X (prawy dolny)'], 10) - parseInt(d['X (lewy górny)'], 10) + 1,
-                            height: parseInt(d['Z (prawy dolny)'], 10) - parseInt(d['Z (lewy górny)'], 10) + 1
+                            width: parseInt(d['X (prawy dolny)'], 10) - parseInt(d['X (lewy górny)'], 10),
+                            height: parseInt(d['Z (prawy dolny)'], 10) - parseInt(d['Z (lewy górny)'], 10)
                         }));
 
                     drawMap();
@@ -313,7 +329,7 @@
             }
             
             function processMergedPlots(connections) {
-                const adj = new Map();
+                 const adj = new Map();
                 const allPlotIdsInConnections = new Set();
 
                 connections.forEach(({ plot1, plot2 }) => {
@@ -380,16 +396,17 @@
 
                 Object.values(layers).forEach(layer => layer.innerHTML = '');
                 
+                // Set layer IDs for toggling
+                layers.districts.id = 'districts-layer';
+                layers.merged.id = 'merged-layer';
                 layers.streets.id = 'streets-layer';
                 layers.plots.id = 'plots-layer';
-                layers.merged.id = 'merged-layer';
-                layers.districts.id = 'districts-layer';
 
-                // Correct drawing order (bottom to top)
+                // Append layers in correct Z-order (bottom to top)
+                svg.appendChild(layers.districts);
+                svg.appendChild(layers.merged);
                 svg.appendChild(layers.streets);
                 svg.appendChild(layers.plots);
-                svg.appendChild(layers.merged);
-                svg.appendChild(layers.districts);
 
                 drawStreets();
                 drawPlots();
@@ -455,26 +472,18 @@
                     rect.addEventListener('mouseleave', hideTooltip);
                     rect.addEventListener('mousemove', moveTooltip);
                     
-                    rect.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        showMergedModal(merged);
-                    });
+                    rect.addEventListener('click', (e) => { e.stopPropagation(); showMergedModal(merged); });
                     
                     let mergedTouchStartInfo = {};
                     rect.addEventListener('touchstart', (e) => {
-                        if (e.touches.length === 1) {
-                            mergedTouchStartInfo = { time: Date.now(), x: e.touches[0].clientX, y: e.touches[0].clientY };
-                        }
+                        if (e.touches.length === 1) mergedTouchStartInfo = { time: Date.now(), x: e.touches[0].clientX, y: e.touches[0].clientY };
                     }, { passive: true });
 
                     rect.addEventListener('touchend', (e) => {
                         if (mergedTouchStartInfo.time) {
                             const timeDiff = Date.now() - mergedTouchStartInfo.time;
                             const dist = Math.hypot(e.changedTouches[0].clientX - mergedTouchStartInfo.x, e.changedTouches[0].clientY - mergedTouchStartInfo.y);
-                            if (timeDiff < 250 && dist < 10) {
-                                e.preventDefault();
-                                showMergedModal(merged);
-                            }
+                            if (timeDiff < 250 && dist < 10) { e.preventDefault(); showMergedModal(merged); }
                             mergedTouchStartInfo = {};
                         }
                     });
@@ -506,10 +515,7 @@
                     
                     g.appendChild(rect); g.appendChild(text);
 
-                    g.addEventListener('mouseenter', (e) => {
-                        showSimpleTooltip(e, plot);
-                        if (plot.district) highlightDistrict(plot.district);
-                    });
+                    g.addEventListener('mouseenter', (e) => { showSimpleTooltip(e, plot); if (plot.district) highlightDistrict(plot.district); });
                     g.addEventListener('mouseleave', () => { hideTooltip(); clearHighlight(); });
                     g.addEventListener('mousemove', moveTooltip);
                     g.addEventListener('click', (e) => { e.stopPropagation(); showModal(plot); });
@@ -518,10 +524,7 @@
                         if (touchStartInfo.time) {
                             const timeDiff = Date.now() - touchStartInfo.time;
                             const dist = Math.hypot(e.changedTouches[0].clientX - touchStartInfo.x, e.changedTouches[0].clientY - touchStartInfo.y);
-                            if (timeDiff < 250 && dist < 10) {
-                                e.preventDefault();
-                                showModal(plot);
-                            }
+                            if (timeDiff < 250 && dist < 10) { e.preventDefault(); showModal(plot); }
                         }
                     });
 
@@ -541,9 +544,11 @@
 
                 Object.entries(districts).forEach(([districtName, districtPlots]) => {
                     if (districtPlots.length === 0) return;
-                    const clusters = createDistrictClusters(districtPlots, 50);
+                    const clusters = createDistrictClusters(districtPlots, 1); // Use smaller distance for more precise clustering
                     clusters.forEach((cluster) => {
                         const boundary = createComplexBoundary(cluster);
+                        if (!boundary) return;
+
                         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                         path.setAttribute('d', boundary);
                         path.style.cssText = "fill:none; stroke:#8b5cf6; stroke-width:2; stroke-dasharray:8,4; opacity:0.7; cursor:pointer; pointer-events:all;";
@@ -552,26 +557,18 @@
                         path.addEventListener('mouseenter', () => highlightDistrict(districtName));
                         path.addEventListener('mouseleave', () => clearHighlight());
                         
-                        path.addEventListener('click', (e) => {
-                            e.stopPropagation();
-                            showDistrictModal(districtName, cluster);
-                        });
+                        path.addEventListener('click', (e) => { e.stopPropagation(); showDistrictModal(districtName, cluster); });
                         
                         let districtTouchStartInfo = {};
                         path.addEventListener('touchstart', (e) => {
-                            if (e.touches.length === 1) {
-                                districtTouchStartInfo = { time: Date.now(), x: e.touches[0].clientX, y: e.touches[0].clientY };
-                            }
+                            if (e.touches.length === 1) districtTouchStartInfo = { time: Date.now(), x: e.touches[0].clientX, y: e.touches[0].clientY };
                         }, { passive: true });
 
                         path.addEventListener('touchend', (e) => {
                             if (districtTouchStartInfo.time) {
                                 const timeDiff = Date.now() - districtTouchStartInfo.time;
                                 const dist = Math.hypot(e.changedTouches[0].clientX - districtTouchStartInfo.x, e.changedTouches[0].clientY - districtTouchStartInfo.y);
-                                if (timeDiff < 250 && dist < 10) {
-                                    e.preventDefault();
-                                    showDistrictModal(districtName, cluster);
-                                }
+                                if (timeDiff < 250 && dist < 10) { e.preventDefault(); showDistrictModal(districtName, cluster); }
                                 districtTouchStartInfo = {};
                             }
                         });
@@ -593,7 +590,6 @@
             }
 
             function createDistrictClusters(plots, maxDistance) {
-                // This function implementation seems fine and can be kept as is.
                 const clusters = [];
                 let visited = new Set();
                 plots.forEach(plot => {
@@ -606,7 +602,6 @@
                             newCluster.push(currentPlot);
                             plots.forEach(otherPlot => {
                                 if (!visited.has(otherPlot.id)) {
-                                     // Simple bounding box check for adjacency
                                     const isAdjacent = (
                                         currentPlot.x1 <= otherPlot.x2 + maxDistance &&
                                         currentPlot.x2 >= otherPlot.x1 - maxDistance &&
@@ -625,67 +620,97 @@
                 });
                 return clusters;
             }
-
+            
             function createComplexBoundary(plots) {
-                // Simplified boundary creation using convex hull, but with better padding
                 if (plots.length === 0) return '';
                 const PADDING = 2;
+                const edges = new Map();
 
-                const allPoints = [];
+                const addEdge = (p1, p2) => {
+                    const key = [p1, p2].sort().join(',');
+                    edges.set(key, (edges.get(key) || 0) + 1);
+                };
+
                 plots.forEach(plot => {
-                    allPoints.push({ x: plot.x1, y: plot.z1 }, { x: plot.x2, y: plot.z1 }, { x: plot.x2, y: plot.z2 }, { x: plot.x1, y: plot.z2 });
+                    const p1 = `${plot.x1},${plot.z1}`;
+                    const p2 = `${plot.x2},${plot.z1}`;
+                    const p3 = `${plot.x2},${plot.z2}`;
+                    const p4 = `${plot.x1},${plot.z2}`;
+                    addEdge(p1, p2);
+                    addEdge(p2, p3);
+                    addEdge(p3, p4);
+                    addEdge(p4, p1);
                 });
 
-                const hull = convexHull(allPoints);
+                const boundaryEdges = [];
+                for (const [key, count] of edges.entries()) {
+                    if (count === 1) {
+                        boundaryEdges.push(key.split(',').map(Number));
+                    }
+                }
+                
+                if (boundaryEdges.length === 0) return '';
 
-                if (hull.length < 3) { // Fallback for single plots or lines
-                    const minX = Math.min(...plots.map(p => p.x1)) - PADDING;
-                    const maxX = Math.max(...plots.map(p => p.x2)) + PADDING;
-                    const minZ = Math.min(...plots.map(p => p.z1)) - PADDING;
-                    const maxZ = Math.max(...plots.map(p => p.z2)) + PADDING;
-                    return `M ${minX} ${minZ} L ${maxX} ${minZ} L ${maxX} ${maxZ} L ${minX} ${maxZ} Z`;
+                const adj = new Map();
+                boundaryEdges.forEach(([x1, y1, x2, y2]) => {
+                    const p1Key = `${x1},${y1}`;
+                    const p2Key = `${x2},${y2}`;
+                    if (!adj.has(p1Key)) adj.set(p1Key, []);
+                    if (!adj.has(p2Key)) adj.set(p2Key, []);
+                    adj.get(p1Key).push(p2Key);
+                    adj.get(p2Key).push(p1Key);
+                });
+
+                let currentKey = `${boundaryEdges[0][0]},${boundaryEdges[0][1]}`;
+                const startKey = currentKey;
+                const pathPoints = [currentKey];
+                const visited = new Set([currentKey]);
+
+                while (pathPoints.length < boundaryEdges.length * 2) {
+                    const neighbors = adj.get(currentKey);
+                    let nextKey = null;
+                    for (const neighbor of neighbors) {
+                        if (!visited.has(neighbor)) {
+                            nextKey = neighbor;
+                            break;
+                        }
+                    }
+                    if (!nextKey) {
+                        // Attempt to find a bridge to an unvisited component if path breaks
+                        const unvisited = [...adj.keys()].find(k => !visited.has(k));
+                        if(unvisited) nextKey = unvisited;
+                        else break; // No more points
+                    }
+                    
+                    visited.add(nextKey);
+                    pathPoints.push(nextKey);
+                    currentKey = nextKey;
+                    if(currentKey === startKey && pathPoints.length > 2) break; // closed loop
                 }
 
-                // Centroid calculation for proper padding
-                const centroid = hull.reduce((acc, p) => ({ x: acc.x + p.x, y: acc.y + p.y }), { x: 0, y: 0 });
-                centroid.x /= hull.length;
-                centroid.y /= hull.length;
+                const centroid = pathPoints.reduce((acc, p) => {
+                    const [x, y] = p.split(',').map(Number);
+                    return { x: acc.x + x, y: acc.y + y };
+                }, { x: 0, y: 0 });
+                centroid.x /= pathPoints.length;
+                centroid.y /= pathPoints.length;
 
-                const paddedHull = hull.map(p => {
-                    const vecX = p.x - centroid.x;
-                    const vecY = p.y - centroid.y;
+                const paddedPath = pathPoints.map(p => {
+                    const [x, y] = p.split(',').map(Number);
+                    const vecX = x - centroid.x;
+                    const vecY = y - centroid.y;
                     const len = Math.hypot(vecX, vecY);
-                    if (len === 0) return p;
-                    return {
-                        x: p.x + (vecX / len) * PADDING,
-                        y: p.y + (vecY / len) * PADDING
-                    };
+                    if (len === 0) return `${x},${y}`;
+                    return `${x + (vecX / len) * PADDING},${y + (vecY / len) * PADDING}`;
                 });
 
-                return paddedHull.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ') + ' Z';
-            }
 
-            function convexHull(points) {
-                points.sort((a, b) => a.x !== b.x ? a.x - b.x : a.y - b.y);
-                const crossProduct = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-                const lower = [];
-                for (const p of points) {
-                    while (lower.length >= 2 && crossProduct(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
-                    lower.push(p);
-                }
-                const upper = [];
-                for (let i = points.length - 1; i >= 0; i--) {
-                    const p = points[i];
-                    while (upper.length >= 2 && crossProduct(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
-                    upper.push(p);
-                }
-                return lower.slice(0, -1).concat(upper.slice(0, -1));
+                return `M ${paddedPath[0]} L ${paddedPath.slice(1).join(' L ')} Z`;
             }
 
             function highlightDistrict(districtName) {
                 svg.querySelectorAll('.plot-rect').forEach(rect => {
-                    const parent = rect.parentElement;
-                    if (parent.dataset.plotDistrict !== districtName) {
+                    if (rect.parentElement.dataset.plotDistrict !== districtName) {
                         rect.classList.add('dimmed');
                     }
                 });
@@ -708,24 +733,47 @@
                 modalTitle.textContent = 'Szczegóły działki';
                 const isOwned = plot.owner && plot.owner.trim() !== '' && plot.owner.toLowerCase().trim() !== 'skarb miasta';
                 const ownerInfo = isOwned ? plot.owner : 'Skarb Miasta';
+                
+                const localsOnPlot = allLocals.filter(l => l.plotName === plot.name);
+                let localsHTML = '';
+                if (localsOnPlot.length > 0) {
+                    const totalBeds = localsOnPlot.reduce((sum, l) => sum + l.beds, 0);
+                    const totalWorkplaces = localsOnPlot.reduce((sum, l) => sum + l.workplaces, 0);
+                    const totalLocalArea = localsOnPlot.reduce((sum, l) => sum + l.area, 0);
+
+                    const localLinks = localsOnPlot.map(l => 
+                        `<li><a href="#" class="text-purple-400 hover:underline" data-local-id="${l.id}">Lokal #${l.localNum} (${l.area} m²)</a></li>`
+                    ).join('');
+
+                    localsHTML = `
+                        <div class="border-t border-gray-700 pt-3 mt-3">
+                             <h4 class="text-md font-semibold mb-2">Lokale w budynku</h4>
+                             <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm mb-2">
+                                <span class="text-gray-400">Łączna pow. lokali:</span><span class="font-medium">${totalLocalArea} m²</span>
+                                <span class="text-gray-400">Miejsca pracy:</span><span class="font-medium">${totalWorkplaces}</span>
+                                <span class="text-gray-400">Ilość łóżek:</span><span class="font-medium">${totalBeds}</span>
+                             </div>
+                             ${localsOnPlot.length > 1 ? `<ul class="list-disc list-inside text-sm">${localLinks}</ul>` : ''}
+                        </div>
+                    `;
+                }
+
                 modalContent.innerHTML = `
                     <div><h3 class="text-2xl font-bold ${isOwned ? 'text-red-400' : 'text-green-400'}">${plot.name || `Działka ${plot.id}`}</h3><p class="text-gray-400">${plot.district || 'Brak dzielnicy'}</p></div>
                     <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                        <span class="text-gray-400">Właściciel:</span><span class="font-medium">${ownerInfo}</span>
+                        <span class="text-gray-400">Właściciel:</span><span class="font-medium clickable-name" data-owner-name="${ownerInfo}">${ownerInfo}</span>
                         <span class="text-gray-400">Typ:</span><span class="font-medium">${plot.type || 'Brak'}</span>
-                        <span class="text-gray-400">Sektor:</span><span class="font-medium">${plot.sector || 'Brak'}</span>
-                        <span class="text-gray-400">Adres:</span><span class="font-medium">${plot.street || 'Brak'}, ${plot.buildingNumber || 'Brak'}</span>
-                        <span class="text-gray-400">Powierzchnia:</span><span class="font-medium">${plot.area || 'Brak'} m²</span>
-                        <span class="text-gray-400">Wymiary:</span><span class="font-medium">${plot.width}x${plot.height}</span>
                         <span class="text-gray-400">Wartość:</span><span class="font-medium flex items-center">${plot.value || '0'} <img src="minecoin.png" class="inline w-4 h-4 ml-1" alt="MC"></span>
-                        <span class="text-gray-400">Ilość lokali:</span><span class="font-medium">${plot.apartmentCount || '0'}</span>
-                        <span class="text-gray-400">Koordynaty:</span><span class="font-medium">(${plot.x1}, ${plot.z1})</span>
-                    </div>`;
+                        <span class="text-gray-400">Powierzchnia:</span><span class="font-medium">${plot.area || 'Brak'} m²</span>
+                    </div>
+                    ${localsHTML}`;
+                
                 modal.classList.add('show');
+                addModalEventListeners();
             }
             
             function showMergedModal(mergedPlot) {
-                destroyActiveCharts();
+                 destroyActiveCharts();
                 modalTitle.textContent = 'Szczegóły połączenia';
                 const constituentPlotsDetails = mergedPlot.plots.map(plotName => {
                     const plotData = allPlots.find(p => p.name === plotName);
@@ -743,18 +791,93 @@
                             <span class="text-gray-400">Pow. oryginalna:</span><span class="font-medium">${mergedPlot.originalArea} m²</span>
                             <span class="text-gray-400">Pow. połączona:</span><span class="font-medium">${mergedPlot.mergedArea} m²</span>
                             <span class="text-gray-400">Różnica:</span><span class="font-medium">${mergedPlot.mergedArea - mergedPlot.originalArea} m²</span>
-                            <span class="text-gray-400">Wymiary:</span><span class="font-medium">${mergedPlot.width}x${mergedPlot.height}</span>
-                            <span class="text-gray-400">Koordynaty:</span><span class="font-medium">(${mergedPlot.x1}, ${mergedPlot.z1})</span>
                         </div>
                     </div>`;
                 modal.classList.add('show');
+            }
+
+            function showLocalModal(localId) {
+                destroyActiveCharts();
+                const local = allLocals.find(l => l.id === localId);
+                if (!local) return;
+                
+                const plot = allPlots.find(p => p.name === local.plotName);
+                const owner = plot ? plot.owner : 'Nieznany';
+
+                modalTitle.textContent = `Lokal #${local.localNum}`;
+                modalContent.innerHTML = `
+                    <div><h3 class="text-2xl font-bold text-cyan-400">Lokal #${local.localNum}</h3><p class="text-gray-400">${local.street}, ${local.building}</p></div>
+                     <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                        <span class="text-gray-400">Najemca:</span><span class="font-medium clickable-name" data-owner-name="${local.tenant || 'Brak'}">${local.tenant || 'Brak'}</span>
+                        <span class="text-gray-400">Właściciel:</span><span class="font-medium clickable-name" data-owner-name="${owner}">${owner}</span>
+                        <span class="text-gray-400">Powierzchnia:</span><span class="font-medium">${local.area} m²</span>
+                        <span class="text-gray-400">Piętro:</span><span class="font-medium">${local.floor}</span>
+                        <span class="text-gray-400">Miejsca pracy:</span><span class="font-medium">${local.workplaces}</span>
+                        <span class="text-gray-400">Ilość łóżek:</span><span class="font-medium">${local.beds}</span>
+                    </div>`;
+                modal.classList.add('show');
+                addModalEventListeners();
+            }
+            
+            function showOwnerModal(ownerName) {
+                destroyActiveCharts();
+                if (!ownerName || ownerName.toLowerCase() === 'skarb miasta' || ownerName.toLowerCase() === 'brak') return;
+
+                modalTitle.textContent = `Aktywa: ${ownerName}`;
+
+                const ownedPlots = allPlots.filter(p => p.owner === ownerName);
+                const rentedLocals = allLocals.filter(l => l.tenant === ownerName);
+                const ownedLocals = allLocals.filter(l => {
+                    const plot = allPlots.find(p => p.name === l.plotName);
+                    return plot && plot.owner === ownerName;
+                });
+
+                const totalPlotArea = ownedPlots.reduce((sum, p) => sum + (parseInt(p.area) || 0), 0);
+                const totalPlotValue = ownedPlots.reduce((sum, p) => sum + (parseInt(p.value) || 0), 0);
+                
+                const totalOwnedLocalArea = ownedLocals.reduce((sum, l) => sum + l.area, 0);
+                const totalOwnedBeds = ownedLocals.reduce((sum, l) => sum + l.beds, 0);
+                const totalOwnedWorkplaces = ownedLocals.reduce((sum, l) => sum + l.workplaces, 0);
+
+                const ownedPlotsHTML = ownedPlots.map(p => `<li><a href="#" data-plot-name="${p.name}" class="text-purple-400 hover:underline">${p.name}</a> (${p.area} m²)</li>`).join('');
+                const rentedLocalsHTML = rentedLocals.map(l => {
+                     const plot = allPlots.find(p => p.name === l.plotName);
+                     return `<li>Lokal #${l.localNum} od <span class="font-medium clickable-name" data-owner-name="${plot.owner}">${plot.owner}</span></li>`
+                }).join('');
+
+                modalContent.innerHTML = `
+                    <div><h3 class="text-2xl font-bold text-green-400">${ownerName}</h3></div>
+                    <div class="space-y-4 text-sm">
+                        <div>
+                            <h4 class="font-semibold text-md mb-1">Posiadane Działki (${ownedPlots.length})</h4>
+                            <div class="grid grid-cols-2 gap-x-4 gap-y-1">
+                                <span class="text-gray-400">Łączna pow.:</span><span>${totalPlotArea.toLocaleString()} m²</span>
+                                <span class="text-gray-400">Łączna wartość:</span><span class="flex items-center">${totalPlotValue.toLocaleString()} <img src="minecoin.png" class="inline w-4 h-4 ml-1" alt="MC"></span>
+                            </div>
+                            ${ownedPlots.length > 0 ? `<ul class="list-disc list-inside mt-2">${ownedPlotsHTML}</ul>` : ''}
+                        </div>
+                        <div class="border-t border-gray-700 pt-3">
+                            <h4 class="font-semibold text-md mb-1">Posiadane Lokale (${ownedLocals.length})</h4>
+                            <div class="grid grid-cols-2 gap-x-4 gap-y-1">
+                                <span class="text-gray-400">Łączna pow.:</span><span>${totalOwnedLocalArea.toLocaleString()} m²</span>
+                                <span class="text-gray-400">Miejsca pracy:</span><span>${totalOwnedWorkplaces}</span>
+                                <span class="text-gray-400">Łóżka:</span><span>${totalOwnedBeds}</span>
+                            </div>
+                        </div>
+                         <div class="border-t border-gray-700 pt-3">
+                            <h4 class="font-semibold text-md mb-1">Wynajmowane Lokale (${rentedLocals.length})</h4>
+                             ${rentedLocals.length > 0 ? `<ul class="list-disc list-inside mt-2">${rentedLocalsHTML}</ul>` : '<p class="text-gray-500">Brak</p>'}
+                        </div>
+                    </div>
+                `;
+                modal.classList.add('show');
+                addModalEventListeners();
             }
 
             function showDistrictModal(districtName, plotsInDistrict) {
                 destroyActiveCharts();
                 modalTitle.textContent = `Dzielnica: ${districtName}`;
 
-                // Calculate stats
                 const plotTypes = {};
                 const occupancy = { Zajęte: 0, Wolne: 0 };
                 const owners = {};
@@ -764,7 +887,6 @@
                 plotsInDistrict.forEach(p => {
                     const type = p.type || 'Inne';
                     plotTypes[type] = (plotTypes[type] || 0) + 1;
-
                     const isOwned = p.owner && p.owner.trim() !== '' && p.owner.toLowerCase().trim() !== 'skarb miasta';
                     if (isOwned) {
                         occupancy.Zajęte++;
@@ -773,23 +895,20 @@
                     } else {
                         occupancy.Wolne++;
                     }
-
                     totalArea += parseInt(p.area) || 0;
                     totalValue += parseInt(p.value) || 0;
                 });
 
-                const plotLinks = plotsInDistrict.map(p => 
-                    `<a href="#" class="text-purple-400 hover:underline" data-plot-name="${p.name}">${p.name}</a>`
-                ).join(', ');
+                const plotLinks = plotsInDistrict.map(p => `<a href="#" class="text-purple-400 hover:underline" data-plot-name="${p.name}">${p.name}</a>`).join(', ');
 
                 modalContent.innerHTML = `
                     <div><h3 class="text-2xl font-bold text-purple-400">${districtName}</h3></div>
                     <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm border-b border-gray-700 pb-3">
-                        <span class="text-gray-400">Liczba działek:</span><span class="font-medium">${plotsInDistrict.length}</span>
-                        <span class="text-gray-400">Łączna powierzchnia:</span><span class="font-medium">${totalArea.toLocaleString()} m²</span>
-                        <span class="text-gray-400">Łączna wartość:</span><span class="font-medium flex items-center">${totalValue.toLocaleString()} <img src="minecoin.png" class="inline w-4 h-4 ml-1" alt="MC"></span>
+                        <span>Liczba działek:</span><span class="font-medium">${plotsInDistrict.length}</span>
+                        <span>Łączna powierzchnia:</span><span class="font-medium">${totalArea.toLocaleString()} m²</span>
+                        <span>Łączna wartość:</span><span class="font-medium flex items-center">${totalValue.toLocaleString()} <img src="minecoin.png" class="inline w-4 h-4 ml-1" alt="MC"></span>
                     </div>
-                    <div class="text-sm"><span class="text-gray-400">Działki:</span> ${plotLinks}</div>
+                    <div class="text-sm"><span>Działki:</span> ${plotLinks}</div>
                     <div>
                         <h4 class="text-md font-semibold mt-4 mb-2">Struktura działek</h4>
                         <div class="chart-container"><canvas id="plot-type-chart"></canvas></div>
@@ -799,64 +918,44 @@
                         <div class="chart-container"><canvas id="owners-chart"></canvas></div>
                     </div>`;
 
-                // Render charts
-                createChart('plot-type-chart', 'pie', plotTypes, 'Typy działek');
-                createChart('occupancy-chart', 'doughnut', occupancy, 'Zajętość');
-                createChart('owners-chart', 'bar', owners, 'Właściciele działek');
-                
-                modalContent.querySelectorAll('a[data-plot-name]').forEach(a => {
-                    a.addEventListener('click', e => {
-                        e.preventDefault();
-                        findPlotAndCenter(e.target.dataset.plotName);
-                    });
-                });
+                // Render charts with specific colors
+                const typeLabels = Object.keys(plotTypes);
+                const typeColors = typeLabels.map(label => getColorForType(label, 1));
+                createChart('plot-type-chart', 'pie', { labels: typeLabels, data: Object.values(plotTypes), colors: typeColors }, 'Typy działek');
 
+                const occupancyLabels = Object.keys(occupancy);
+                createChart('occupancy-chart', 'doughnut', { labels: occupancyLabels, data: Object.values(occupancy), colors: ['rgba(239, 68, 68, 0.8)', 'rgba(34, 197, 94, 0.8)']}, 'Zajętość');
+                
+                const ownerLabels = Object.keys(owners);
+                createChart('owners-chart', 'bar', { labels: ownerLabels, data: Object.values(owners) }, 'Właściciele działek');
+                
                 modal.classList.add('show');
+                addModalEventListeners();
             }
             
-            function createChart(canvasId, type, data, label) {
+            function createChart(canvasId, type, chartData, label) {
                 const ctx = document.getElementById(canvasId);
                 if (!ctx) return;
-
-                const chartLabels = Object.keys(data);
-                const chartData = Object.values(data);
                 
-                if (chartData.length === 0) {
-                     ctx.parentElement.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500">Brak danych do wyświetlenia</div>`;
+                if (chartData.data.length === 0) {
+                     ctx.parentElement.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500">Brak danych</div>`;
                      return;
                 }
-
-                // Color generation for charts
-                const colors = chartLabels.map((_, i) => `hsl(${(i * 360) / chartLabels.length}, 70%, 60%)`);
-
+                
                 const chart = new Chart(ctx, {
                     type: type,
                     data: {
-                        labels: chartLabels,
+                        labels: chartData.labels,
                         datasets: [{
                             label: label,
-                            data: chartData,
-                            backgroundColor: colors,
+                            data: chartData.data,
+                            backgroundColor: chartData.colors || chartData.labels.map((_, i) => `hsl(${(i * 137.5) % 360}, 50%, 60%)`),
                             borderColor: '#1f2937',
                             borderWidth: 1
                         }]
                     },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                position: type === 'bar' ? 'top' : 'right',
-                                labels: { color: '#d1d5db' }
-                            }
-                        },
-                        scales: type === 'bar' ? {
-                            y: {
-                                beginAtZero: true,
-                                ticks: { color: '#9ca3af', stepSize: 1 }
-                            },
-                             x: { ticks: { color: '#9ca3af' } }
-                        } : {}
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: type === 'bar' ? 'top' : 'right', labels: { color: '#d1d5db' } } },
+                        scales: type === 'bar' ? { y: { beginAtZero: true, ticks: { color: '#9ca3af', stepSize: 1 } }, x: { ticks: { color: '#9ca3af' } } } : {}
                     }
                 });
                 activeCharts.push(chart);
@@ -912,16 +1011,16 @@
                 document.getElementById(`toggle-${layerName}`).classList.toggle('active', layerVisibility[layerName]);
             }
 
+            function addModalEventListeners() {
+                modalContent.querySelectorAll('a[data-plot-name]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); findPlotAndCenter(e.target.dataset.plotName); }));
+                modalContent.querySelectorAll('a[data-local-id]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); showLocalModal(e.target.dataset.localId); }));
+                modalContent.querySelectorAll('.clickable-name[data-owner-name]').forEach(span => span.addEventListener('click', e => { e.preventDefault(); showOwnerModal(e.target.dataset.ownerName); }));
+            }
+
             // --- Event Listeners ---
-            closeModalBtn.addEventListener('click', () => {
-                 modal.classList.remove('show');
-                 destroyActiveCharts();
-            });
+            closeModalBtn.addEventListener('click', () => { modal.classList.remove('show'); destroyActiveCharts(); });
             mapContainer.addEventListener('click', (e) => { 
-                if (e.target === mapContainer || e.target === svg || e.target.id === 'map-svg') {
-                    modal.classList.remove('show'); 
-                    destroyActiveCharts();
-                }
+                if (e.target === mapContainer || e.target === svg || e.target.id === 'map-svg') { modal.classList.remove('show'); destroyActiveCharts(); }
             });
             searchButton.addEventListener('click', () => findPlotAndCenter(searchInput.value));
             searchInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') findPlotAndCenter(searchInput.value); });
@@ -937,9 +1036,8 @@
             mapContainer.addEventListener('mousedown', (e) => { if (e.button === 0) { isPanning = true; mapContainer.classList.add('grabbing'); startPoint = { x: e.x, y: e.y }; }});
             mapContainer.addEventListener('mousemove', (e) => {
                 if (!isPanning) return;
-                const endPoint = { x: e.x, y: e.y };
-                const dx = (startPoint.x - endPoint.x) * (viewBox.w / mapContainer.clientWidth);
-                const dy = (startPoint.y - endPoint.y) * (viewBox.h / mapContainer.clientHeight);
+                const dx = (startPoint.x - e.x) * (viewBox.w / mapContainer.clientWidth);
+                const dy = (startPoint.y - e.y) * (viewBox.h / mapContainer.clientHeight);
                 setViewBox(viewBox.x + dx, viewBox.y + dy, viewBox.w, viewBox.h);
                 startPoint = { x: e.x, y: e.y };
             });
@@ -952,45 +1050,37 @@
                     touchStartInfo = { time: Date.now(), x: e.touches[0].clientX, y: e.touches[0].clientY };
                     startPoint = { x: e.touches[0].clientX, y: e.touches[0].clientY };
                 } else if (e.touches.length >= 2) {
-                    pinchZooming = true;
-                    touchPanning = false;
+                    pinchZooming = true; touchPanning = false;
                     lastTouchDistance = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
                 }
             }, { passive: true });
-
             mapContainer.addEventListener('touchmove', (e) => {
+                touchStartInfo.time = 0; // Invalidate tap if moving
                 if (touchPanning && e.touches.length === 1) {
-                    const endPoint = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-                    const dx = (startPoint.x - endPoint.x) * (viewBox.w / mapContainer.clientWidth);
-                    const dy = (startPoint.y - endPoint.y) * (viewBox.h / mapContainer.clientHeight);
+                    const dx = (startPoint.x - e.touches[0].clientX) * (viewBox.w / mapContainer.clientWidth);
+                    const dy = (startPoint.y - e.touches[0].clientY) * (viewBox.h / mapContainer.clientHeight);
                     setViewBox(viewBox.x + dx, viewBox.y + dy, viewBox.w, viewBox.h);
-                    startPoint = endPoint;
+                    startPoint = { x: e.touches[0].clientX, y: e.touches[0].clientY };
                 } else if (pinchZooming && e.touches.length >= 2) {
                     const newDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
                     const scale = lastTouchDistance / newDist;
                     const w = viewBox.w * scale; const h = viewBox.h * scale;
-                    const clientX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-                    const clientY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
                     const { left, top } = mapContainer.getBoundingClientRect();
-                    const mx = clientX - left; const my = clientY - top;
+                    const mx = ((e.touches[0].clientX + e.touches[1].clientX) / 2) - left;
+                    const my = ((e.touches[0].clientY + e.touches[1].clientY) / 2) - top;
                     const dx = (viewBox.w - w) * (mx / mapContainer.clientWidth);
                     const dy = (viewBox.h - h) * (my / mapContainer.clientHeight);
                     setViewBox(viewBox.x + dx, viewBox.y + dy, w, h);
                     lastTouchDistance = newDist;
                 }
             }, { passive: true });
-
             mapContainer.addEventListener('touchend', (e) => { 
-                touchPanning = false; 
-                pinchZooming = false; 
-                if (e.touches.length === 0) {
-                     // The last finger has been lifted, reset touch info to prevent false tap detections
-                     touchStartInfo = { time: 0, x: 0, y: 0 };
-                }
+                touchPanning = false; pinchZooming = false; 
+                if (e.touches.length === 0) touchStartInfo.time = 0;
             });
             
-            document.getElementById('zoom-in').addEventListener('click', () => { const dw = viewBox.w * -0.2; const dh = viewBox.h * -0.2; setViewBox(viewBox.x - dw/2, viewBox.y - dh/2, viewBox.w + dw, viewBox.h + dh); });
-            document.getElementById('zoom-out').addEventListener('click', () => { const dw = viewBox.w * 0.2; const dh = viewBox.h * 0.2; setViewBox(viewBox.x - dw/2, viewBox.y - dh/2, viewBox.w + dw, viewBox.h + dh); });
+            document.getElementById('zoom-in').addEventListener('click', () => { const dw = viewBox.w * -0.2; setViewBox(viewBox.x - dw/2, viewBox.y - (dw/initialViewBox.w * initialViewBox.h)/2, viewBox.w + dw, viewBox.h + (dw/initialViewBox.w * initialViewBox.h)); });
+            document.getElementById('zoom-out').addEventListener('click', () => { const dw = viewBox.w * 0.2; setViewBox(viewBox.x - dw/2, viewBox.y - (dw/initialViewBox.w * initialViewBox.h)/2, viewBox.w + dw, viewBox.h + (dw/initialViewBox.w * initialViewBox.h)); });
             document.getElementById('reset-view').addEventListener('click', () => { setViewBox(initialViewBox.x, initialViewBox.y, initialViewBox.w, initialViewBox.h); });
 
             document.getElementById('toggle-plots').addEventListener('click', () => toggleLayer('plots'));
