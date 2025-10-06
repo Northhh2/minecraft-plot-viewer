@@ -560,8 +560,8 @@
                     rect.setAttribute('class', 'street-rect');
 
                     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                    text.setAttribute('x', street.x1 + street.width / 2);
-                    text.setAttribute('y', street.z1 + street.height / 2);
+                    text.setAttribute('x', 1 + street.x1 + street.width / 2);
+                    text.setAttribute('y', 1 + street.z1 + street.height / 2);
                     text.setAttribute('class', 'street-text');
                     if (street.height > street.width) {
                         text.classList.add('street-vertical');
@@ -744,7 +744,7 @@
                 return clusters;
             }
 
-            /**
+/**
              * Tworzy kontur SVG wokół klastra działek podążając wzdłuż zewnętrznych granic.
              * @param {Array} plots - Tablica obiektów działek należących do jednego klastra.
              * @returns {string} - Ciąg znaków 'd' dla atrybutu ścieżki SVG lub pusty ciąg.
@@ -754,175 +754,100 @@
 
                 const PADDING = 5;
 
-                // 1. Utwórz siatkę reprezentującą zajęte komórki
-                const minX = Math.min(...plots.map(p => p.x1));
-                const maxX = Math.max(...plots.map(p => p.x2));
-                const minZ = Math.min(...plots.map(p => p.z1));
-                const maxZ = Math.max(...plots.map(p => p.z2));
+                // 1. Zbierz wszystkie krawędzie ze wszystkich działek
+                const edges = new Map(); // key: "x1,z1|x2,z2", value: count
 
-                // Zbierz wszystkie unikalne współrzędne X i Z
-                const xCoords = new Set();
-                const zCoords = new Set();
-                plots.forEach(p => {
-                    xCoords.add(p.x1);
-                    xCoords.add(p.x2);
-                    zCoords.add(p.z1);
-                    zCoords.add(p.z2);
+                const addEdge = (x1, z1, x2, z2) => {
+                    // Upewnij się, że krawędź jest zawsze w tej samej kolejności
+                    const key = x1 < x2 || (x1 === x2 && z1 < z2)
+                        ? `${x1},${z1}|${x2},${z2}`
+                        : `${x2},${z2}|${x1},${z1}`;
+                    edges.set(key, (edges.get(key) || 0) + 1);
+                };
+
+                plots.forEach(plot => {
+                    // 4 krawędzie każdej działki
+                    addEdge(plot.x1, plot.z1, plot.x2, plot.z1); // Górna
+                    addEdge(plot.x2, plot.z1, plot.x2, plot.z2); // Prawa
+                    addEdge(plot.x2, plot.z2, plot.x1, plot.z2); // Dolna
+                    addEdge(plot.x1, plot.z2, plot.x1, plot.z1); // Lewa
                 });
 
-                const sortedX = Array.from(xCoords).sort((a, b) => a - b);
-                const sortedZ = Array.from(zCoords).sort((a, b) => a - b);
-
-                // Utwórz mapowanie współrzędnych do indeksów
-                const xMap = new Map(sortedX.map((x, i) => [x, i]));
-                const zMap = new Map(sortedZ.map((z, i) => [z, i]));
-
-                // Utwórz siatkę
-                const grid = [];
-                for (let i = 0; i < sortedZ.length - 1; i++) {
-                    grid[i] = [];
-                    for (let j = 0; j < sortedX.length - 1; j++) {
-                        grid[i][j] = false;
+                // 2. Znajdź zewnętrzne krawędzie (występujące tylko raz)
+                const outerEdges = [];
+                for (const [key, count] of edges.entries()) {
+                    if (count === 1) {
+                        const [p1, p2] = key.split('|');
+                        const [x1, z1] = p1.split(',').map(Number);
+                        const [x2, z2] = p2.split(',').map(Number);
+                        outerEdges.push({ x1, z1, x2, z2 });
                     }
                 }
 
-                // Wypełnij siatkę
-                plots.forEach(p => {
-                    const x1Idx = xMap.get(p.x1);
-                    const x2Idx = xMap.get(p.x2);
-                    const z1Idx = zMap.get(p.z1);
-                    const z2Idx = zMap.get(p.z2);
+                if (outerEdges.length === 0) return '';
+
+                // 3. Zbuduj graf sąsiedztwa dla punktów
+                const adjacency = new Map();
+                
+                outerEdges.forEach(edge => {
+                    const p1 = `${edge.x1},${edge.z1}`;
+                    const p2 = `${edge.x2},${edge.z2}`;
                     
-                    for (let zi = z1Idx; zi < z2Idx; zi++) {
-                        for (let xi = x1Idx; xi < x2Idx; xi++) {
-                            grid[zi][xi] = true;
-                        }
-                    }
+                    if (!adjacency.has(p1)) adjacency.set(p1, []);
+                    if (!adjacency.has(p2)) adjacency.set(p2, []);
+                    
+                    adjacency.get(p1).push(p2);
+                    adjacency.get(p2).push(p1);
                 });
 
-                // 2. Znajdź wszystkie segmenty zewnętrznych krawędzi
-                const segments = [];
-
-                // Poziome segmenty (górne i dolne krawędzie komórek)
-                for (let zi = 0; zi < grid.length; zi++) {
-                    for (let xi = 0; xi < grid[zi].length; xi++) {
-                        if (grid[zi][xi]) {
-                            // Górna krawędź
-                            if (zi === 0 || !grid[zi - 1][xi]) {
-                                segments.push({
-                                    type: 'horizontal',
-                                    z: sortedZ[zi],
-                                    x1: sortedX[xi],
-                                    x2: sortedX[xi + 1]
-                                });
-                            }
-                            // Dolna krawędź
-                            if (zi === grid.length - 1 || !grid[zi + 1][xi]) {
-                                segments.push({
-                                    type: 'horizontal',
-                                    z: sortedZ[zi + 1],
-                                    x1: sortedX[xi],
-                                    x2: sortedX[xi + 1]
-                                });
-                            }
-                        }
+                // 4. Znajdź punkt startowy (lewy górny)
+                let startPoint = null;
+                let minZ = Infinity;
+                let minX = Infinity;
+                
+                for (const point of adjacency.keys()) {
+                    const [x, z] = point.split(',').map(Number);
+                    if (z < minZ || (z === minZ && x < minX)) {
+                        minZ = z;
+                        minX = x;
+                        startPoint = point;
                     }
                 }
 
-                // Pionowe segmenty (lewe i prawe krawędzie komórek)
-                for (let zi = 0; zi < grid.length; zi++) {
-                    for (let xi = 0; xi < grid[zi].length; xi++) {
-                        if (grid[zi][xi]) {
-                            // Lewa krawędź
-                            if (xi === 0 || !grid[zi][xi - 1]) {
-                                segments.push({
-                                    type: 'vertical',
-                                    x: sortedX[xi],
-                                    z1: sortedZ[zi],
-                                    z2: sortedZ[zi + 1]
-                                });
-                            }
-                            // Prawa krawędź
-                            if (xi === grid[zi].length - 1 || !grid[zi][xi + 1]) {
-                                segments.push({
-                                    type: 'vertical',
-                                    x: sortedX[xi + 1],
-                                    z1: sortedZ[zi],
-                                    z2: sortedZ[zi + 1]
-                                });
-                            }
-                        }
-                    }
-                }
+                if (!startPoint) return '';
 
-                // 3. Połącz segmenty w ciągły kontur
+                // 5. Podążaj wzdłuż konturu
                 const path = [];
-                const used = new Set();
-
-                // Znajdź punkt startowy (lewy górny róg)
-                let startPoint = { x: minX, z: minZ };
-                path.push(startPoint);
-
+                const visited = new Set();
                 let current = startPoint;
-                const maxIterations = segments.length * 2;
-                let iterations = 0;
-
-                while (iterations < maxIterations) {
-                    iterations++;
+                
+                while (current && !visited.has(current)) {
+                    const [x, z] = current.split(',').map(Number);
+                    path.push({ x, z });
+                    visited.add(current);
                     
-                    // Znajdź następny segment łączący się z current
-                    let nextSegment = null;
-                    let nextPoint = null;
-
-                    for (let i = 0; i < segments.length; i++) {
-                        const seg = segments[i];
-                        const segKey = `${i}`;
-                        
-                        if (used.has(segKey)) continue;
-
-                        if (seg.type === 'horizontal') {
-                            // Sprawdź czy segment zaczyna się w current
-                            if (seg.x1 === current.x && seg.z === current.z) {
-                                nextSegment = { ...seg, index: i };
-                                nextPoint = { x: seg.x2, z: seg.z };
-                                break;
-                            }
-                            // Lub kończy się w current
-                            if (seg.x2 === current.x && seg.z === current.z) {
-                                nextSegment = { ...seg, index: i };
-                                nextPoint = { x: seg.x1, z: seg.z };
-                                break;
-                            }
-                        } else {
-                            // Pionowy segment
-                            if (seg.x === current.x && seg.z1 === current.z) {
-                                nextSegment = { ...seg, index: i };
-                                nextPoint = { x: seg.x, z: seg.z2 };
-                                break;
-                            }
-                            if (seg.x === current.x && seg.z2 === current.z) {
-                                nextSegment = { ...seg, index: i };
-                                nextPoint = { x: seg.x, z: seg.z1 };
-                                break;
-                            }
+                    const neighbors = adjacency.get(current) || [];
+                    
+                    // Wybierz następny punkt (niewykorzystany sąsiad)
+                    let next = null;
+                    for (const neighbor of neighbors) {
+                        if (!visited.has(neighbor)) {
+                            next = neighbor;
+                            break;
                         }
                     }
-
-                    if (!nextSegment) break;
-
-                    used.add(`${nextSegment.index}`);
-                    path.push(nextPoint);
-                    current = nextPoint;
-
-                    // Sprawdź czy wróciliśmy do punktu startowego
-                    if (current.x === startPoint.x && current.z === startPoint.z) {
-                        break;
+                    
+                    // Jeśli nie ma niewykorzystanych sąsiadów, sprawdź czy możemy wrócić do startu
+                    if (!next && neighbors.includes(startPoint) && visited.size > 2) {
+                        break; // Zamknęliśmy pętlę
                     }
+                    
+                    current = next;
                 }
 
                 if (path.length < 3) return '';
 
-                // 4. Zastosuj padding
+                // 6. Zastosuj padding
                 let centroidX = 0, centroidZ = 0;
                 path.forEach(p => {
                     centroidX += p.x;
@@ -942,7 +867,7 @@
                     };
                 });
 
-                // 5. Zwróć ścieżkę SVG
+                // 7. Zwróć ścieżkę SVG
                 const pathString = paddedPath.map((p, i) => 
                     `${i === 0 ? 'M' : 'L'} ${p.x},${p.z}`
                 ).join(' ') + ' Z';
