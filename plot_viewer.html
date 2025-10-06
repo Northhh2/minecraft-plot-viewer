@@ -1,14 +1,18 @@
 <!DOCTYPE html>
 <html lang="pl">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>System Działek Minecraft</title>
     <link rel="icon" type="image/x-icon" href="Red.ico">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="[https://cdn.tailwindcss.com](https://cdn.tailwindcss.com)"></script>
+    <script
+        src="[https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js](https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js)"></script>
+    <script src="[https://cdn.jsdelivr.net/npm/chart.js](https://cdn.jsdelivr.net/npm/chart.js)"></script>
+    <link
+        href="[https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap](https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap)"
+        rel="stylesheet">
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -19,53 +23,67 @@
             -webkit-touch-callout: none;
             -webkit-tap-highlight-color: transparent;
         }
+
         #map-container {
             width: 100vw;
             height: 100vh;
             touch-action: none;
         }
+
         #map-svg {
             display: block;
             width: 100%;
             height: 100%;
             background-color: #111827;
         }
+
         .plot-rect {
             stroke-width: 0.5;
             transition: fill 0.2s ease-in-out, fill-opacity 0.3s ease-in-out, filter 0.3s ease-in-out, stroke 0.3s, stroke-width 0.3s;
         }
+
         .plot-rect:hover {
             fill-opacity: 0.7;
         }
+
         .plot-rect.dimmed {
             fill-opacity: 0.2 !important;
             filter: grayscale(80%);
         }
+
         .plot-rect.highlighted {
             fill-opacity: 1 !important;
             filter: brightness(1.2);
-            stroke: #facc15; /* yellow-400 */
+            stroke: #facc15;
+            /* yellow-400 */
             stroke-width: 1.5;
         }
+
         .street-rect {
-            fill: #4b5563; /* gray-600 */
+            fill: #4b5563;
+            /* gray-600 */
             fill-opacity: 0.9;
-            stroke: transparent; /* No stroke by default */
+            stroke: transparent;
+            /* No stroke by default */
             stroke-width: 0.25;
             transition: fill-opacity 0.2s, stroke 0.2s;
         }
+
         .street-rect:hover {
             fill-opacity: 0.7;
-            stroke: #9ca3af; /* Add stroke on hover */
+            stroke: #9ca3af;
+            /* Add stroke on hover */
         }
+
         .merged-plot {
             stroke: #f59e0b;
             stroke-width: 1.5;
-            stroke-dasharray: 4,2;
+            stroke-dasharray: 4, 2;
             fill: none;
             pointer-events: all;
             cursor: pointer;
         }
+
         .plot-text {
             font-size: 4px;
             fill: #ffffff;
@@ -78,6 +96,7 @@
             stroke-linecap: butt;
             stroke-linejoin: miter;
         }
+
         .street-text {
             font-size: 3px;
             fill: #ffffff;
@@ -85,66 +104,108 @@
             text-anchor: middle;
             dominant-baseline: middle;
         }
+
         .street-text.street-vertical {
-            writing-mode: vertical-rl; /* Vertical text for vertical streets */
+            writing-mode: vertical-rl;
+            /* Vertical text for vertical streets */
         }
+
         #tooltip {
             background-color: rgba(31, 41, 55, 0.95);
             backdrop-filter: blur(5px);
             border: 1px solid #4b5563;
             transition: opacity 0.2s ease-in-out;
         }
+
         #modal {
             transform: translateX(100%);
             transition: transform 0.3s ease-in-out;
         }
+
         #modal.show {
             transform: translateX(0);
         }
-        .grab { cursor: grab; }
-        .grabbing { cursor: grabbing; }
+
+        .grab {
+            cursor: grab;
+        }
+
+        .grabbing {
+            cursor: grabbing;
+        }
 
         .toggle-button {
             opacity: 0.5;
             border: 1px solid #4b5563;
         }
+
         .toggle-button.active {
             opacity: 1;
-            background-color: #4338ca; /* indigo-700 */
-            border-color: #6d28d9; /* purple-700 */
+            background-color: #4338ca;
+            /* indigo-700 */
+            border-color: #6d28d9;
+            /* purple-700 */
         }
+
         .hidden-layer {
             display: none;
         }
+
         .chart-container {
             height: 200px;
             width: 100%;
         }
+
         .clickable-name {
             cursor: pointer;
             text-decoration: underline;
             text-underline-offset: 2px;
         }
+
         .clickable-name:hover {
-            color: #a78bfa; /* purple-400 */
+            color: #a78bfa;
+            /* purple-400 */
         }
-        
+
         @media (max-width: 768px) {
-            #tooltip { font-size: 12px; max-width: 90vw; max-height: 50vh; overflow-y: auto; }
-            .plot-text { font-size: 3px; }
-            .controls { bottom: 10px !important; right: 10px !important; }
-            .control-button { width: 44px; height: 44px; }
-            #modal { width: 100vw; }
+            #tooltip {
+                font-size: 12px;
+                max-width: 90vw;
+                max-height: 50vh;
+                overflow-y: auto;
+            }
+
+            .plot-text {
+                font-size: 3px;
+            }
+
+            .controls {
+                bottom: 10px !important;
+                right: 10px !important;
+            }
+
+            .control-button {
+                width: 44px;
+                height: 44px;
+            }
+
+            #modal {
+                width: 100vw;
+            }
         }
     </style>
 </head>
+
 <body class="bg-gray-900 text-white">
 
     <!-- Search Bar -->
     <div class="absolute top-5 left-5 z-30">
         <div class="flex bg-gray-800 rounded-lg border border-gray-600 shadow-lg">
-            <input type="text" id="search-input" placeholder="Wyszukaj (np. D4/021 lub 21)" class="bg-transparent text-white px-4 py-2 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-purple-500 w-48 md:w-auto" maxlength="15">
-            <button id="search-button" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-r-lg transition-colors">🔍</button>
+            <input type="text" id="search-input" placeholder="Wyszukaj (np. D4/021 lub 21)"
+                class="bg-transparent text-white px-4 py-2 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-purple-500 w-48 md:w-auto"
+                maxlength="15">
+            <button id="search-button"
+                class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-r-lg transition-colors">🔍</button>
         </div>
     </div>
 
@@ -157,9 +218,13 @@
     <div id="tooltip" class="hidden absolute p-2 rounded-lg shadow-xl text-sm z-40 pointer-events-none"></div>
 
     <!-- Right Side Modal -->
-    <div id="modal" class="fixed top-0 right-0 w-full md:w-96 h-full bg-gray-800 border-l border-gray-600 shadow-2xl z-50 overflow-y-auto">
+    <div id="modal"
+        class="fixed top-0 right-0 w-full md:w-96 h-full bg-gray-800 border-l border-gray-600 shadow-2xl z-50 overflow-y-auto">
         <div class="p-6">
-            <div class="flex justify-between items-center mb-4"><h2 id="modal-title" class="text-xl font-bold">Szczegóły</h2><button id="close-modal" class="text-gray-400 hover:text-white text-2xl">&times;</button></div>
+            <div class="flex justify-between items-center mb-4">
+                <h2 id="modal-title" class="text-xl font-bold">Szczegóły</h2><button id="close-modal"
+                    class="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
             <div id="modal-content" class="space-y-4"></div>
         </div>
     </div>
@@ -167,23 +232,81 @@
     <!-- Loading Indicator -->
     <div id="loader" class="absolute inset-0 bg-gray-900 bg-opacity-80 flex items-center justify-center z-50">
         <div class="text-center">
-            <svg class="animate-spin h-8 w-8 text-white mx-auto mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-            <p class="text-lg font-medium">Pobieranie danych...</p><p class="text-sm text-gray-400">Proszę czekać</p>
+            <svg class="animate-spin h-8 w-8 text-white mx-auto mb-3"
+                xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                </path>
+            </svg>
+            <p class="text-lg font-medium">Pobieranie danych...</p>
+            <p class="text-sm text-gray-400">Proszę czekać</p>
         </div>
     </div>
 
     <!-- Controls -->
     <div class="controls absolute flex flex-col items-end z-30" style="bottom: 20px; right: 20px;">
         <div class="flex flex-col space-y-2">
-            <button id="zoom-in" class="control-button w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700 transition-colors shadow-lg border border-gray-600" title="Powiększ"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
-            <button id="zoom-out" class="control-button w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700 transition-colors shadow-lg border border-gray-600" title="Pomniejsz"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
-            <button id="reset-view" class="control-button w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700 transition-colors shadow-lg border border-gray-600" title="Resetuj widok"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v6h6"></path><path d="M21 12A9 9 0 0 0 6 5.3L3 8"></path><path d="M21 22v-6h-6"></path><path d="M3 12a9 9 0 0 0 15 6.7l3-2.7"></path></svg></button>
+            <button id="zoom-in"
+                class="control-button w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700 transition-colors shadow-lg border border-gray-600"
+                title="Powiększ"><svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width="20"
+                    height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg></button>
+            <button id="zoom-out"
+                class="control-button w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700 transition-colors shadow-lg border border-gray-600"
+                title="Pomniejsz"><svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width="20"
+                    height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg></button>
+            <button id="reset-view"
+                class="control-button w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700 transition-colors shadow-lg border border-gray-600"
+                title="Resetuj widok"><svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width="20"
+                    height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 2v6h6"></path>
+                    <path d="M21 12A9 9 0 0 0 6 5.3L3 8"></path>
+                    <path d="M21 22v-6h-6"></path>
+                    <path d="M3 12a9 9 0 0 0 15 6.7l3-2.7"></path>
+                </svg></button>
         </div>
         <div id="layer-toggles" class="mt-2 flex flex-col space-y-2">
-             <button id="toggle-plots" class="toggle-button active control-button w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700" title="Pokaż/Ukryj Działki"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg></button>
-             <button id="toggle-streets" class="toggle-button active control-button w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700" title="Pokaż/Ukryj Ulice"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="4"></line><line x1="20" y1="20" x2="20" y2="4"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg></button>
-             <button id="toggle-districts" class="toggle-button active control-button w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700" title="Pokaż/Ukryj Dzielnice"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg></button>
-             <button id="toggle-merged" class="toggle-button active control-button w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700" title="Pokaż/Ukryj Połączone Działki"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.72"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.72-1.72"></path></svg></button>
+            <button id="toggle-plots"
+                class="toggle-button active control-button w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700"
+                title="Pokaż/Ukryj Działki"><svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)"
+                    width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                </svg></button>
+            <button id="toggle-streets"
+                class="toggle-button active control-button w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700"
+                title="Pokaż/Ukryj Ulice"><svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)"
+                    width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="4" y1="20" x2="4" y2="4"></line>
+                    <line x1="20" y1="20" x2="20" y2="4"></line>
+                    <line x1="12" y1="4" x2="12" y2="20"></line>
+                </svg></button>
+            <button id="toggle-districts"
+                class="toggle-button active control-button w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700"
+                title="Pokaż/Ukryj Dzielnice"><svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)"
+                    width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                    <circle cx="12" cy="10" r="3"></circle>
+                </svg></button>
+            <button id="toggle-merged"
+                class="toggle-button active control-button w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700"
+                title="Pokaż/Ukryj Połączone Działki"><svg
+                    xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width="20" height="20"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.72"></path>
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.72-1.72"></path>
+                </svg></button>
         </div>
     </div>
 
@@ -224,51 +347,51 @@
             let layerVisibility = { plots: true, streets: true, districts: true, merged: true };
             let touchStartInfo = { time: 0, x: 0, y: 0 };
             let activeCharts = [];
-            
+
             let allPlots = [];
             let allLocals = [];
             let mergedPlots = [];
             let streets = [];
-            
+
             const layers = {
-                districts: document.createElementNS('http://www.w3.org/2000/svg', 'g'),
-                merged: document.createElementNS('http://www.w3.org/2000/svg', 'g'),
-                streets: document.createElementNS('http://www.w3.org/2000/svg', 'g'),
-                plots: document.createElementNS('http://www.w3.org/2000/svg', 'g')
+                districts: document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'g'),
+                merged: document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'g'),
+                streets: document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'g'),
+                plots: document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'g')
             };
 
             function setViewBox(x, y, w, h) {
                 const isMobile = window.innerWidth <= 768;
                 const minZoom = isMobile ? 50 : 100;
                 const maxZoom = Math.max(MAP_WIDTH, MAP_HEIGHT) * 2;
-                
+
                 w = Math.max(minZoom, Math.min(w, maxZoom));
                 if (initialViewBox.w) {
                     h = (w / initialViewBox.w) * initialViewBox.h;
                 }
-                
+
                 if (x < mapBounds.minX) x = mapBounds.minX;
                 if (y < mapBounds.minY) y = mapBounds.minY;
                 if (x + w > mapBounds.maxX) x = mapBounds.maxX - w;
                 if (y + h > mapBounds.maxY) y = mapBounds.maxY - h;
-                
+
                 viewBox = { x, y, w, h };
                 svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
             }
 
             function getColorForType(type, alpha = 0.8) {
                 switch (type) {
-                    case 'Parkowa':               return `rgba(0, 170, 0, ${alpha})`;
-                    case 'Rolna':                 return `rgba(180, 104, 77, ${alpha})`;
-                    case 'Hotelowa':              return `rgba(44, 186, 168, ${alpha})`;
-                    case 'Mieszkalna':            return `rgba(222, 177, 45, ${alpha})`;
-                    case 'Sakralna':              return `rgba(154, 92, 198, ${alpha})`;
-                    case 'Przemysłowo-biurowa':   return `rgba(255, 85, 255, ${alpha})`;
-                    case 'Mieszkalno-usługowa':   return `rgba(33, 73, 123, ${alpha})`;
-                    case 'Publiczna':             return `rgba(255, 170, 0, ${alpha})`;
-                    case 'Medyczna':              return `rgba(170, 0, 0, ${alpha})`;
-                    case 'Usługowa':              return `rgba(17, 160, 54, ${alpha})`;
-                    default:                      return `rgba(255, 255, 255, 0.1)`;
+                    case 'Parkowa': return `rgba(0, 170, 0, ${alpha})`;
+                    case 'Rolna': return `rgba(180, 104, 77, ${alpha})`;
+                    case 'Hotelowa': return `rgba(44, 186, 168, ${alpha})`;
+                    case 'Mieszkalna': return `rgba(222, 177, 45, ${alpha})`;
+                    case 'Sakralna': return `rgba(154, 92, 198, ${alpha})`;
+                    case 'Przemysłowo-biurowa': return `rgba(255, 85, 255, ${alpha})`;
+                    case 'Mieszkalno-usługowa': return `rgba(33, 73, 123, ${alpha})`;
+                    case 'Publiczna': return `rgba(255, 170, 0, ${alpha})`;
+                    case 'Medyczna': return `rgba(170, 0, 0, ${alpha})`;
+                    case 'Usługowa': return `rgba(17, 160, 54, ${alpha})`;
+                    default: return `rgba(255, 255, 255, 0.1)`;
                 }
             }
 
@@ -281,7 +404,7 @@
                     if (responses.some(res => !res.ok)) throw new Error('Network response was not ok');
 
                     const texts = await Promise.all(responses.map(res => res.text()));
-                    
+
                     const [plotsResult, mergedResult, streetsResult, localsResult] = await Promise.all([
                         new Promise(resolve => Papa.parse(texts[0], { header: true, skipEmptyLines: true, complete: resolve })),
                         new Promise(resolve => Papa.parse(texts[1], { header: true, skipEmptyLines: true, complete: resolve })),
@@ -298,7 +421,7 @@
                             value: d['Wartość'], owner: d['Aktualny właściciel'], district: d['Dzielnica'],
                             street: d['Ulica'], buildingNumber: d['Numer budynku']
                         }));
-                    
+
                     allLocals = localsResult.data.filter(l => l['Numer porządkowy'] && l['Numer działki'])
                         .map(l => ({
                             id: l['Numer porządkowy'], plotName: l['Numer działki'], street: l['Ulica'],
@@ -306,7 +429,7 @@
                             area: parseInt(l['Powierzchnia']) || 0, beds: parseInt(l['Ilość łóżek']) || 0,
                             workplaces: parseInt(l['Ilość miejsc pracy']) || 0, tenant: l['Najemca']
                         }));
-                    
+
                     const connections = mergedResult.data.filter(m => m['Działka główna'] && m['Działka dołączana'])
                         .map(d => ({ plot1: d['Działka główna'], plot2: d['Działka dołączana'] }));
                     mergedPlots = processMergedPlots(connections);
@@ -327,9 +450,9 @@
                     loader.innerHTML = `<div class="text-center"><p class="text-lg font-medium text-red-500">Błąd ładowania danych</p><p class="text-sm text-gray-400">Sprawdź konsolę.</p></div>`;
                 }
             }
-            
+
             function processMergedPlots(connections) {
-                 const adj = new Map();
+                const adj = new Map();
                 const allPlotIdsInConnections = new Set();
 
                 connections.forEach(({ plot1, plot2 }) => {
@@ -363,7 +486,7 @@
                         groups.push(group);
                     }
                 }
-                
+
                 return groups.map(group => {
                     const plotsInGroup = group.map(id => allPlots.find(p => p.name === id)).filter(Boolean);
                     if (plotsInGroup.length === 0) return null;
@@ -384,9 +507,9 @@
 
             function drawMap() {
                 if (!allPlots.length) return;
-                svg.innerHTML = ''; 
+                svg.innerHTML = '';
 
-                const mapImage = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+                const mapImage = document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'image');
                 mapImage.setAttribute('href', MAP_IMAGE_URL);
                 mapImage.setAttribute('x', -MAP_WIDTH / 2);
                 mapImage.setAttribute('y', -MAP_HEIGHT / 2);
@@ -395,7 +518,7 @@
                 svg.appendChild(mapImage);
 
                 Object.values(layers).forEach(layer => layer.innerHTML = '');
-                
+
                 // Set layer IDs for toggling
                 layers.districts.id = 'districts-layer';
                 layers.merged.id = 'merged-layer';
@@ -418,29 +541,29 @@
                 const maxX = Math.max(...allPlots.map(p => p.x2));
                 const minZ = Math.min(...allPlots.map(p => p.z1));
                 const maxZ = Math.max(...allPlots.map(p => p.z2));
-                
+
                 viewBox.w = (maxX - minX) + (padding * 2);
                 viewBox.h = (maxZ - minZ) + (padding * 2);
                 viewBox.x = minX - padding;
                 viewBox.y = minZ - padding;
-                
+
                 Object.assign(initialViewBox, viewBox);
                 setViewBox(viewBox.x, viewBox.y, viewBox.w, viewBox.h);
             }
 
             function drawStreets() {
                 streets.forEach(street => {
-                    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-                    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    const g = document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'g');
+                    const rect = document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'rect');
                     rect.setAttribute('x', street.x1); rect.setAttribute('y', street.z1);
                     rect.setAttribute('width', street.width); rect.setAttribute('height', street.height);
                     rect.setAttribute('class', 'street-rect');
 
-                    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    const text = document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'text');
                     text.setAttribute('x', street.x1 + street.width / 2);
                     text.setAttribute('y', street.z1 + street.height / 2);
                     text.setAttribute('class', 'street-text');
-                    if(street.height > street.width) {
+                    if (street.height > street.width) {
                         text.classList.add('street-vertical');
                     }
                     text.textContent = street.name;
@@ -459,7 +582,7 @@
 
             function drawMergedPlots() {
                 mergedPlots.forEach((merged) => {
-                    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    const rect = document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'rect');
                     rect.setAttribute('x', merged.x1); rect.setAttribute('y', merged.z1);
                     rect.setAttribute('width', merged.width); rect.setAttribute('height', merged.height);
                     rect.setAttribute('class', 'merged-plot');
@@ -471,9 +594,9 @@
                     });
                     rect.addEventListener('mouseleave', hideTooltip);
                     rect.addEventListener('mousemove', moveTooltip);
-                    
+
                     rect.addEventListener('click', (e) => { e.stopPropagation(); showMergedModal(merged); });
-                    
+
                     let mergedTouchStartInfo = {};
                     rect.addEventListener('touchstart', (e) => {
                         if (e.touches.length === 1) mergedTouchStartInfo = { time: Date.now(), x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -494,12 +617,12 @@
 
             function drawPlots() {
                 allPlots.forEach(plot => {
-                    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                    const g = document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'g');
                     g.dataset.plotId = plot.id;
                     g.dataset.plotName = plot.name;
                     g.dataset.plotDistrict = plot.district || '';
-                    
-                    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+
+                    const rect = document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'rect');
                     rect.setAttribute('x', plot.x1); rect.setAttribute('y', plot.z1);
                     rect.setAttribute('width', plot.width); rect.setAttribute('height', plot.height);
                     rect.setAttribute('class', 'plot-rect');
@@ -507,12 +630,12 @@
                     const isOwned = plot.owner && plot.owner.trim() !== '' && plot.owner.toLowerCase().trim() !== 'skarb miasta';
                     rect.style.stroke = isOwned ? '#ef4444' : '#22c55e';
 
-                    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    const text = document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'text');
                     text.setAttribute('x', plot.x1 + plot.width / 2);
                     text.setAttribute('y', plot.z1 + plot.height / 2);
                     text.setAttribute('class', 'plot-text');
                     text.textContent = plot.id.padStart(3, '0');
-                    
+
                     g.appendChild(rect); g.appendChild(text);
 
                     g.addEventListener('mouseenter', (e) => { showSimpleTooltip(e, plot); if (plot.district) highlightDistrict(plot.district); });
@@ -544,21 +667,21 @@
 
                 Object.entries(districts).forEach(([districtName, districtPlots]) => {
                     if (districtPlots.length === 0) return;
-                    const clusters = createDistrictClusters(districtPlots, 1); // Use smaller distance for more precise clustering
+                    const clusters = createDistrictClusters(districtPlots, 1);
                     clusters.forEach((cluster) => {
-                        const boundary = createComplexBoundary(cluster);
+                        const boundary = createDistrictOutline(cluster);
                         if (!boundary) return;
 
-                        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        const path = document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'path');
                         path.setAttribute('d', boundary);
                         path.style.cssText = "fill:none; stroke:#8b5cf6; stroke-width:2; stroke-dasharray:8,4; opacity:0.7; cursor:pointer; pointer-events:all;";
                         path.dataset.districtName = districtName;
-                        
+
                         path.addEventListener('mouseenter', () => highlightDistrict(districtName));
                         path.addEventListener('mouseleave', () => clearHighlight());
-                        
+
                         path.addEventListener('click', (e) => { e.stopPropagation(); showDistrictModal(districtName, cluster); });
-                        
+
                         let districtTouchStartInfo = {};
                         path.addEventListener('touchstart', (e) => {
                             if (e.touches.length === 1) districtTouchStartInfo = { time: Date.now(), x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -578,8 +701,8 @@
                         const minX = Math.min(...cluster.map(p => p.x1));
                         const maxX = Math.max(...cluster.map(p => p.x2));
                         const minZ = Math.min(...cluster.map(p => p.z1));
-                        
-                        const districtLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+
+                        const districtLabel = document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'text');
                         districtLabel.setAttribute('x', minX + (maxX - minX) / 2);
                         districtLabel.setAttribute('y', minZ - 8);
                         districtLabel.style.cssText = "fill:#a78bfa; font-size:7px; font-weight:bold; text-anchor:middle; pointer-events:none;";
@@ -608,7 +731,7 @@
                                         currentPlot.z1 <= otherPlot.z2 + maxDistance &&
                                         currentPlot.z2 >= otherPlot.z1 - maxDistance
                                     );
-                                    if(isAdjacent) {
+                                    if (isAdjacent) {
                                         visited.add(otherPlot.id);
                                         queue.push(otherPlot);
                                     }
@@ -620,92 +743,100 @@
                 });
                 return clusters;
             }
-            
-            function createComplexBoundary(plots) {
-                if (plots.length === 0) return '';
-                const PADDING = 2;
-                const edges = new Map();
 
-                const addEdge = (p1, p2) => {
-                    const key = [p1, p2].sort().join(',');
+            /**
+             * Tworzy kontur SVG wokół klastra (grupy) sąsiadujących działek.
+             * @param {Array} plots - Tablica obiektów działek należących do jednego klastra.
+             * @returns {string} - Ciąg znaków 'd' dla atrybutu ścieżki SVG lub pusty ciąg.
+             */
+            function createDistrictOutline(plots) {
+                if (!plots || plots.length === 0) return '';
+
+                const edges = new Map();
+                const PADDING = 2; // Odstęp wizualny granicy od działek
+
+                // Funkcja pomocnicza do dodawania krawędzi do mapy.
+                // Klucz jest kanoniczny (zawsze w tej samej kolejności), aby krawędź (p1, p2) była taka sama jak (p2, p1).
+                const addEdge = (x1, y1, x2, y2) => {
+                    const p1 = `${x1},${y1}`;
+                    const p2 = `${x2},${y2}`;
+                    const key = p1 < p2 ? `${p1}|${p2}` : `${p2}|${p1}`;
                     edges.set(key, (edges.get(key) || 0) + 1);
                 };
 
+                // 1. Zbierz wszystkie krawędzie ze wszystkich działek w klastrze.
                 plots.forEach(plot => {
-                    const p1 = `${plot.x1},${plot.z1}`;
-                    const p2 = `${plot.x2},${plot.z1}`;
-                    const p3 = `${plot.x2},${plot.z2}`;
-                    const p4 = `${plot.x1},${plot.z2}`;
-                    addEdge(p1, p2);
-                    addEdge(p2, p3);
-                    addEdge(p3, p4);
-                    addEdge(p4, p1);
+                    addEdge(plot.x1, plot.z1, plot.x2, plot.z1); // Górna
+                    addEdge(plot.x1, plot.z2, plot.x2, plot.z2); // Dolna
+                    addEdge(plot.x1, plot.z1, plot.x1, plot.z2); // Lewa
+                    addEdge(plot.x2, plot.z1, plot.x2, plot.z2); // Prawa
                 });
 
+                // 2. Filtruj krawędzie, aby znaleźć tylko te zewnętrzne (występujące raz).
+                // Krawędzie wewnętrzne występują dwa razy (raz dla każdej sąsiadującej działki).
                 const boundaryEdges = [];
                 for (const [key, count] of edges.entries()) {
                     if (count === 1) {
-                        boundaryEdges.push(key.split(',').map(Number));
+                        boundaryEdges.push(key);
                     }
                 }
-                
+
                 if (boundaryEdges.length === 0) return '';
 
+                // 3. Zbuduj listę sąsiedztwa, aby połączyć punkty w ścieżkę.
                 const adj = new Map();
-                boundaryEdges.forEach(([x1, y1, x2, y2]) => {
-                    const p1Key = `${x1},${y1}`;
-                    const p2Key = `${x2},${y2}`;
-                    if (!adj.has(p1Key)) adj.set(p1Key, []);
-                    if (!adj.has(p2Key)) adj.set(p2Key, []);
-                    adj.get(p1Key).push(p2Key);
-                    adj.get(p2Key).push(p1Key);
+                boundaryEdges.forEach(key => {
+                    const [p1, p2] = key.split('|');
+                    if (!adj.has(p1)) adj.set(p1, []);
+                    if (!adj.has(p2)) adj.set(p2, []);
+                    adj.get(p1).push(p2);
+                    adj.get(p2).push(p1);
                 });
 
-                let currentKey = `${boundaryEdges[0][0]},${boundaryEdges[0][1]}`;
-                const startKey = currentKey;
-                const pathPoints = [currentKey];
-                const visited = new Set([currentKey]);
+                // 4. Prześledź ścieżkę, łącząc punkty graniczne.
+                const pathPoints = [];
+                const visited = new Set();
+                let [startNode,] = boundaryEdges[0].split('|'); // Wybierz dowolny punkt startowy
+                let currentNode = startNode;
 
-                while (pathPoints.length < boundaryEdges.length * 2) {
-                    const neighbors = adj.get(currentKey);
-                    let nextKey = null;
+                while (currentNode && !visited.has(currentNode)) {
+                    pathPoints.push(currentNode);
+                    visited.add(currentNode);
+
+                    const neighbors = adj.get(currentNode);
+                    let nextNode = null;
                     for (const neighbor of neighbors) {
                         if (!visited.has(neighbor)) {
-                            nextKey = neighbor;
+                            nextNode = neighbor;
                             break;
                         }
                     }
-                    if (!nextKey) {
-                        // Attempt to find a bridge to an unvisited component if path breaks
-                        const unvisited = [...adj.keys()].find(k => !visited.has(k));
-                        if(unvisited) nextKey = unvisited;
-                        else break; // No more points
-                    }
-                    
-                    visited.add(nextKey);
-                    pathPoints.push(nextKey);
-                    currentKey = nextKey;
-                    if(currentKey === startKey && pathPoints.length > 2) break; // closed loop
+                    currentNode = nextNode;
                 }
 
-                const centroid = pathPoints.reduce((acc, p) => {
-                    const [x, y] = p.split(',').map(Number);
-                    return { x: acc.x + x, y: acc.y + y };
-                }, { x: 0, y: 0 });
-                centroid.x /= pathPoints.length;
-                centroid.y /= pathPoints.length;
+                if (pathPoints.length < 3) return ''; // Nie można utworzyć wielokąta
 
-                const paddedPath = pathPoints.map(p => {
-                    const [x, y] = p.split(',').map(Number);
-                    const vecX = x - centroid.x;
-                    const vecY = y - centroid.y;
+                // 5. Dodaj wizualny padding, odsuwając punkty od środka.
+                let centroidX = 0, centroidY = 0;
+                pathPoints.forEach(pStr => {
+                    const [x, y] = pStr.split(',').map(Number);
+                    centroidX += x;
+                    centroidY += y;
+                });
+                centroidX /= pathPoints.length;
+                centroidY /= pathPoints.length;
+
+                const paddedPath = pathPoints.map(pStr => {
+                    const [x, y] = pStr.split(',').map(Number);
+                    const vecX = x - centroidX;
+                    const vecY = y - centroidY;
                     const len = Math.hypot(vecX, vecY);
                     if (len === 0) return `${x},${y}`;
                     return `${x + (vecX / len) * PADDING},${y + (vecY / len) * PADDING}`;
                 });
 
-
-                return `M ${paddedPath[0]} L ${paddedPath.slice(1).join(' L ')} Z`;
+                // 6. Zwróć sformatowaną ścieżkę dla atrybutu 'd' SVG.
+                return `M ${paddedPath.join(' L ')} Z`;
             }
 
             function highlightDistrict(districtName) {
@@ -733,7 +864,7 @@
                 modalTitle.textContent = 'Szczegóły działki';
                 const isOwned = plot.owner && plot.owner.trim() !== '' && plot.owner.toLowerCase().trim() !== 'skarb miasta';
                 const ownerInfo = isOwned ? plot.owner : 'Skarb Miasta';
-                
+
                 const localsOnPlot = allLocals.filter(l => l.plotName === plot.name);
                 let localsHTML = '';
                 if (localsOnPlot.length > 0) {
@@ -741,7 +872,7 @@
                     const totalWorkplaces = localsOnPlot.reduce((sum, l) => sum + l.workplaces, 0);
                     const totalLocalArea = localsOnPlot.reduce((sum, l) => sum + l.area, 0);
 
-                    const localLinks = localsOnPlot.map(l => 
+                    const localLinks = localsOnPlot.map(l =>
                         `<li><a href="#" class="text-purple-400 hover:underline" data-local-id="${l.id}">Lokal #${l.localNum} (${l.area} m²)</a></li>`
                     ).join('');
 
@@ -767,13 +898,13 @@
                         <span class="text-gray-400">Powierzchnia:</span><span class="font-medium">${plot.area || 'Brak'} m²</span>
                     </div>
                     ${localsHTML}`;
-                
+
                 modal.classList.add('show');
                 addModalEventListeners();
             }
-            
+
             function showMergedModal(mergedPlot) {
-                 destroyActiveCharts();
+                destroyActiveCharts();
                 modalTitle.textContent = 'Szczegóły połączenia';
                 const constituentPlotsDetails = mergedPlot.plots.map(plotName => {
                     const plotData = allPlots.find(p => p.name === plotName);
@@ -800,7 +931,7 @@
                 destroyActiveCharts();
                 const local = allLocals.find(l => l.id === localId);
                 if (!local) return;
-                
+
                 const plot = allPlots.find(p => p.name === local.plotName);
                 const owner = plot ? plot.owner : 'Nieznany';
 
@@ -818,7 +949,7 @@
                 modal.classList.add('show');
                 addModalEventListeners();
             }
-            
+
             function showOwnerModal(ownerName) {
                 destroyActiveCharts();
                 if (!ownerName || ownerName.toLowerCase() === 'skarb miasta' || ownerName.toLowerCase() === 'brak') return;
@@ -834,15 +965,15 @@
 
                 const totalPlotArea = ownedPlots.reduce((sum, p) => sum + (parseInt(p.area) || 0), 0);
                 const totalPlotValue = ownedPlots.reduce((sum, p) => sum + (parseInt(p.value) || 0), 0);
-                
+
                 const totalOwnedLocalArea = ownedLocals.reduce((sum, l) => sum + l.area, 0);
                 const totalOwnedBeds = ownedLocals.reduce((sum, l) => sum + l.beds, 0);
                 const totalOwnedWorkplaces = ownedLocals.reduce((sum, l) => sum + l.workplaces, 0);
 
                 const ownedPlotsHTML = ownedPlots.map(p => `<li><a href="#" data-plot-name="${p.name}" class="text-purple-400 hover:underline">${p.name}</a> (${p.area} m²)</li>`).join('');
                 const rentedLocalsHTML = rentedLocals.map(l => {
-                     const plot = allPlots.find(p => p.name === l.plotName);
-                     return `<li>Lokal #${l.localNum} od <span class="font-medium clickable-name" data-owner-name="${plot.owner}">${plot.owner}</span></li>`
+                    const plot = allPlots.find(p => p.name === l.plotName);
+                    return `<li>Lokal #${l.localNum} od <span class="font-medium clickable-name" data-owner-name="${plot.owner}">${plot.owner}</span></li>`
                 }).join('');
 
                 modalContent.innerHTML = `
@@ -924,24 +1055,24 @@
                 createChart('plot-type-chart', 'pie', { labels: typeLabels, data: Object.values(plotTypes), colors: typeColors }, 'Typy działek');
 
                 const occupancyLabels = Object.keys(occupancy);
-                createChart('occupancy-chart', 'doughnut', { labels: occupancyLabels, data: Object.values(occupancy), colors: ['rgba(239, 68, 68, 0.8)', 'rgba(34, 197, 94, 0.8)']}, 'Zajętość');
-                
+                createChart('occupancy-chart', 'doughnut', { labels: occupancyLabels, data: Object.values(occupancy), colors: ['rgba(239, 68, 68, 0.8)', 'rgba(34, 197, 94, 0.8)'] }, 'Zajętość');
+
                 const ownerLabels = Object.keys(owners);
                 createChart('owners-chart', 'bar', { labels: ownerLabels, data: Object.values(owners) }, 'Właściciele działek');
-                
+
                 modal.classList.add('show');
                 addModalEventListeners();
             }
-            
+
             function createChart(canvasId, type, chartData, label) {
                 const ctx = document.getElementById(canvasId);
                 if (!ctx) return;
-                
+
                 if (chartData.data.length === 0) {
-                     ctx.parentElement.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500">Brak danych</div>`;
-                     return;
+                    ctx.parentElement.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500">Brak danych</div>`;
+                    return;
                 }
-                
+
                 const chart = new Chart(ctx, {
                     type: type,
                     data: {
@@ -954,7 +1085,8 @@
                             borderWidth: 1
                         }]
                     },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: type === 'bar' ? 'top' : 'right', labels: { color: '#d1d5db' } } },
+                    options: {
+                        responsive: true, maintainAspectRatio: false, plugins: { legend: { position: type === 'bar' ? 'top' : 'right', labels: { color: '#d1d5db' } } },
                         scales: type === 'bar' ? { y: { beginAtZero: true, ticks: { color: '#9ca3af', stepSize: 1 } }, x: { ticks: { color: '#9ca3af' } } } : {}
                     }
                 });
@@ -1019,7 +1151,7 @@
 
             // --- Event Listeners ---
             closeModalBtn.addEventListener('click', () => { modal.classList.remove('show'); destroyActiveCharts(); });
-            mapContainer.addEventListener('click', (e) => { 
+            mapContainer.addEventListener('click', (e) => {
                 if (e.target === mapContainer || e.target === svg || e.target.id === 'map-svg') { modal.classList.remove('show'); destroyActiveCharts(); }
             });
             searchButton.addEventListener('click', () => findPlotAndCenter(searchInput.value));
@@ -1033,7 +1165,7 @@
                 setViewBox(viewBox.x + dx, viewBox.y + dy, viewBox.w - dw, viewBox.h - dh);
             }, { passive: false });
 
-            mapContainer.addEventListener('mousedown', (e) => { if (e.button === 0) { isPanning = true; mapContainer.classList.add('grabbing'); startPoint = { x: e.x, y: e.y }; }});
+            mapContainer.addEventListener('mousedown', (e) => { if (e.button === 0) { isPanning = true; mapContainer.classList.add('grabbing'); startPoint = { x: e.x, y: e.y }; } });
             mapContainer.addEventListener('mousemove', (e) => {
                 if (!isPanning) return;
                 const dx = (startPoint.x - e.x) * (viewBox.w / mapContainer.clientWidth);
@@ -1042,7 +1174,7 @@
                 startPoint = { x: e.x, y: e.y };
             });
             document.addEventListener('mouseup', () => { isPanning = false; mapContainer.classList.remove('grabbing'); });
-            
+
             let touchPanning = false; let pinchZooming = false;
             mapContainer.addEventListener('touchstart', (e) => {
                 if (e.touches.length === 1) {
@@ -1074,13 +1206,13 @@
                     lastTouchDistance = newDist;
                 }
             }, { passive: true });
-            mapContainer.addEventListener('touchend', (e) => { 
-                touchPanning = false; pinchZooming = false; 
+            mapContainer.addEventListener('touchend', (e) => {
+                touchPanning = false; pinchZooming = false;
                 if (e.touches.length === 0) touchStartInfo.time = 0;
             });
-            
-            document.getElementById('zoom-in').addEventListener('click', () => { const dw = viewBox.w * -0.2; setViewBox(viewBox.x - dw/2, viewBox.y - (dw/initialViewBox.w * initialViewBox.h)/2, viewBox.w + dw, viewBox.h + (dw/initialViewBox.w * initialViewBox.h)); });
-            document.getElementById('zoom-out').addEventListener('click', () => { const dw = viewBox.w * 0.2; setViewBox(viewBox.x - dw/2, viewBox.y - (dw/initialViewBox.w * initialViewBox.h)/2, viewBox.w + dw, viewBox.h + (dw/initialViewBox.w * initialViewBox.h)); });
+
+            document.getElementById('zoom-in').addEventListener('click', () => { const dw = viewBox.w * -0.2; setViewBox(viewBox.x - dw / 2, viewBox.y - (dw / initialViewBox.w * initialViewBox.h) / 2, viewBox.w + dw, viewBox.h + (dw / initialViewBox.w * initialViewBox.h)); });
+            document.getElementById('zoom-out').addEventListener('click', () => { const dw = viewBox.w * 0.2; setViewBox(viewBox.x - dw / 2, viewBox.y - (dw / initialViewBox.w * initialViewBox.h) / 2, viewBox.w + dw, viewBox.h + (dw / initialViewBox.w * initialViewBox.h)); });
             document.getElementById('reset-view').addEventListener('click', () => { setViewBox(initialViewBox.x, initialViewBox.y, initialViewBox.w, initialViewBox.h); });
 
             document.getElementById('toggle-plots').addEventListener('click', () => toggleLayer('plots'));
@@ -1092,5 +1224,5 @@
         });
     </script>
 </body>
-</html>
 
+</html>
