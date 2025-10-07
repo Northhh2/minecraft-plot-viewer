@@ -736,14 +736,13 @@
                 });
                 return clusters;
             }
-
             /**
-             * Tworzy kontur dzielnicy używając algorytmu opartego na odcinkach granic działek.
-             * 
-             * @param {Array<Object>} plots Lista obiektów działek z polami x1, z1, x2, z2.
-             * @returns {string} Ścieżka SVG konturu.
-             */
-             function createDistrictOutline(plots) {
+                         * Tworzy kontur dzielnicy używając algorytmu opartego na odcinkach granic działek.
+                         * 
+                         * @param {Array<Object>} plots Lista obiektów działek z polami x1, z1, x2, z2.
+                         * @returns {string} Ścieżka SVG konturu.
+                         */
+            function createDistrictOutline(plots) {
                 if (plots.length === 0) return '';
                 const districtName = plots[0].district;
                 console.log(`🎨 Tworzenie konturu dla dzielnicy '${districtName}' (${plots.length} działek)`);
@@ -755,7 +754,7 @@
                     const x_max = Math.max(plot.x1, plot.x2);
                     const z_min = Math.min(plot.z1, plot.z2);
                     const z_max = Math.max(plot.z1, plot.z2);
-                    
+
                     minX = Math.min(minX, x_min);
                     maxX = Math.max(maxX, x_max);
                     minZ = Math.min(minZ, z_min);
@@ -769,41 +768,41 @@
                 const centerZ = (minZ + maxZ) / 2;
                 console.log(`  🎯 Centrum: (${centerX}, ${centerZ})`);
 
-                // Krok 3: Zbierz wszystkie krawędzie działek
-                const edges = [];
+                // Krok 3: Zbierz wszystkie krawędzie działek z informacją o stronie
+                const allEdges = [];
                 plots.forEach(plot => {
                     const x_min = Math.min(plot.x1, plot.x2);
                     const x_max = Math.max(plot.x1, plot.x2);
                     const z_min = Math.min(plot.z1, plot.z2);
                     const z_max = Math.max(plot.z1, plot.z2);
-                    
-                    // 4 krawędzie każdej działki
-                    edges.push(
-                        { x1: x_min, z1: z_min, x2: x_max, z2: z_min, side: 'horizontal' }, // dół
-                        { x1: x_max, z1: z_min, x2: x_max, z2: z_max, side: 'vertical' },   // prawo
-                        { x1: x_min, z1: z_max, x2: x_max, z2: z_max, side: 'horizontal' }, // góra
-                        { x1: x_min, z1: z_min, x2: x_min, z2: z_max, side: 'vertical' }    // lewo
+
+                    // Każda krawędź z informacją po której stronie centrum się znajduje
+                    allEdges.push(
+                        { x1: x_min, z1: z_min, x2: x_max, z2: z_min, type: 'horizontal', position: z_min }, // dół
+                        { x1: x_max, z1: z_min, x2: x_max, z2: z_max, type: 'vertical', position: x_max },   // prawo
+                        { x1: x_min, z1: z_max, x2: x_max, z2: z_max, type: 'horizontal', position: z_max }, // góra
+                        { x1: x_min, z1: z_min, x2: x_min, z2: z_max, type: 'vertical', position: x_min }    // lewo
                     );
                 });
 
-                // Krok 4: Znajdź zewnętrzne krawędzie (te, które są na granicy dzielnicy)
+                // Krok 4: Znajdź zewnętrzne krawędzie (niezasłonięte przez inne działki)
                 const outerEdges = [];
-                
-                // Góra: krawędzie poziome na maxZ
-                const topEdges = edges.filter(e => e.side === 'horizontal' && e.z1 === maxZ);
-                outerEdges.push(...mergeSegments(topEdges, 'horizontal'));
-                
-                // Prawo: krawędzie pionowe na maxX
-                const rightEdges = edges.filter(e => e.side === 'vertical' && e.x1 === maxX);
-                outerEdges.push(...mergeSegments(rightEdges, 'vertical'));
-                
-                // Dół: krawędzie poziome na minZ
-                const bottomEdges = edges.filter(e => e.side === 'horizontal' && e.z1 === minZ);
-                outerEdges.push(...mergeSegments(bottomEdges, 'horizontal'));
-                
-                // Lewo: krawędzie pionowe na minX
-                const leftEdges = edges.filter(e => e.side === 'vertical' && e.x1 === minX);
-                outerEdges.push(...mergeSegments(leftEdges, 'vertical'));
+
+                // Góra: krawędzie poziome powyżej centrum, niezasłonięte od góry
+                const topEdges = findUnblockedEdges(allEdges, plots, 'top', centerZ);
+                outerEdges.push(...topEdges);
+
+                // Prawo: krawędzie pionowe na prawo od centrum, niezasłonięte od prawej
+                const rightEdges = findUnblockedEdges(allEdges, plots, 'right', centerX);
+                outerEdges.push(...rightEdges);
+
+                // Dół: krawędzie poziome poniżej centrum, niezasłonięte od dołu
+                const bottomEdges = findUnblockedEdges(allEdges, plots, 'bottom', centerZ);
+                outerEdges.push(...bottomEdges);
+
+                // Lewo: krawędzie pionowe na lewo od centrum, niezasłonięte od lewej
+                const leftEdges = findUnblockedEdges(allEdges, plots, 'left', centerX);
+                outerEdges.push(...leftEdges);
 
                 console.log(`  📏 Znaleziono ${outerEdges.length} zewnętrznych krawędzi`);
 
@@ -812,61 +811,375 @@
                     return '';
                 }
 
-                // Krok 5 & 6: Połącz odcinki w zamknięty kontur (ruch wskazówek zegara)
-                const path = buildClosedPath(outerEdges, minX, maxX, minZ, maxZ);
+                // Krok 5: Rozszerz krawędzie maksymalnie
+                const expandedEdges = expandEdges(outerEdges, plots, minX, maxX, minZ, maxZ);
+                console.log(`  🔧 Rozszerzono krawędzie: ${expandedEdges.length} odcinków`);
+
+                // Krok 6: Połącz odcinki w zamknięty kontur (ruch wskazówek zegara)
+                const path = buildClosedPath(expandedEdges, minX, maxX, minZ, maxZ);
 
                 console.log('  ✨ Kontur gotowy!');
                 return path;
             }
 
             /**
-             * Łączy nachodzące na siebie odcinki w ciągłe segmenty.
+             * Znajduje krawędzie niezasłonięte od danej strony.
              */
-            function mergeSegments(segments, orientation) {
-                if (segments.length === 0) return [];
-                
-                // Sortuj odcinki
-                if (orientation === 'horizontal') {
-                    segments.sort((a, b) => a.x1 - b.x1);
-                } else {
-                    segments.sort((a, b) => a.z1 - b.z1);
-                }
+            function findUnblockedEdges(allEdges, plots, side, centerValue) {
+                const unblockedEdges = [];
+
+                allEdges.forEach(edge => {
+                    let isRelevantSide = false;
+                    let isUnblocked = true;
+
+                    // Sprawdź czy krawędź jest po odpowiedniej stronie centrum
+                    if (side === 'top' && edge.type === 'horizontal' && edge.position >= centerValue) {
+                        isRelevantSide = true;
+                        // Sprawdź czy jest zasłonięta od góry
+                        isUnblocked = !isEdgeBlockedFromTop(edge, plots);
+                    } else if (side === 'bottom' && edge.type === 'horizontal' && edge.position <= centerValue) {
+                        isRelevantSide = true;
+                        // Sprawdź czy jest zasłonięta od dołu
+                        isUnblocked = !isEdgeBlockedFromBottom(edge, plots);
+                    } else if (side === 'right' && edge.type === 'vertical' && edge.position >= centerValue) {
+                        isRelevantSide = true;
+                        // Sprawdź czy jest zasłonięta od prawej
+                        isUnblocked = !isEdgeBlockedFromRight(edge, plots);
+                    } else if (side === 'left' && edge.type === 'vertical' && edge.position <= centerValue) {
+                        isRelevantSide = true;
+                        // Sprawdź czy jest zasłonięta od lewej
+                        isUnblocked = !isEdgeBlockedFromLeft(edge, plots);
+                    }
+
+                    if (isRelevantSide && isUnblocked) {
+                        unblockedEdges.push({ ...edge, side });
+                    }
+                });
+
+                return mergeAdjacentEdges(unblockedEdges);
+            }
+
+            /**
+             * Sprawdza czy pozioma krawędź jest zasłonięta od góry.
+             */
+            function isEdgeBlockedFromTop(edge, plots) {
+                return plots.some(plot => {
+                    const x_min = Math.min(plot.x1, plot.x2);
+                    const x_max = Math.max(plot.x1, plot.x2);
+                    const z_min = Math.min(plot.z1, plot.z2);
+                    const z_max = Math.max(plot.z1, plot.z2);
+
+                    // Sprawdź czy działka jest powyżej krawędzi i ją zasłania
+                    return z_min > edge.z1 &&
+                        x_min < edge.x2 &&
+                        x_max > edge.x1;
+                });
+            }
+
+            /**
+             * Sprawdza czy pozioma krawędź jest zasłonięta od dołu.
+             */
+            function isEdgeBlockedFromBottom(edge, plots) {
+                return plots.some(plot => {
+                    const x_min = Math.min(plot.x1, plot.x2);
+                    const x_max = Math.max(plot.x1, plot.x2);
+                    const z_min = Math.min(plot.z1, plot.z2);
+                    const z_max = Math.max(plot.z1, plot.z2);
+
+                    // Sprawdź czy działka jest poniżej krawędzi i ją zasłania
+                    return z_max < edge.z1 &&
+                        x_min < edge.x2 &&
+                        x_max > edge.x1;
+                });
+            }
+
+            /**
+             * Sprawdza czy pionowa krawędź jest zasłonięta od prawej.
+             */
+            function isEdgeBlockedFromRight(edge, plots) {
+                return plots.some(plot => {
+                    const x_min = Math.min(plot.x1, plot.x2);
+                    const x_max = Math.max(plot.x1, plot.x2);
+                    const z_min = Math.min(plot.z1, plot.z2);
+                    const z_max = Math.max(plot.z1, plot.z2);
+
+                    // Sprawdź czy działka jest na prawo od krawędzi i ją zasłania
+                    return x_min > edge.x1 &&
+                        z_min < edge.z2 &&
+                        z_max > edge.z1;
+                });
+            }
+
+            /**
+             * Sprawdza czy pionowa krawędź jest zasłonięta od lewej.
+             */
+            function isEdgeBlockedFromLeft(edge, plots) {
+                return plots.some(plot => {
+                    const x_min = Math.min(plot.x1, plot.x2);
+                    const x_max = Math.max(plot.x1, plot.x2);
+                    const z_min = Math.min(plot.z1, plot.z2);
+                    const z_max = Math.max(plot.z1, plot.z2);
+
+                    // Sprawdź czy działka jest na lewo od krawędzi i ją zasłania
+                    return x_max < edge.x1 &&
+                        z_min < edge.z2 &&
+                        z_max > edge.z1;
+                });
+            }
+
+            /**
+             * Łączy sąsiadujące krawędzie w dłuższe odcinki.
+             */
+            function mergeAdjacentEdges(edges) {
+                if (edges.length === 0) return [];
+
+                // Grupuj według typu i pozycji
+                const groups = {};
+                edges.forEach(edge => {
+                    const key = `${edge.type}_${edge.position}`;
+                    if (!groups[key]) groups[key] = [];
+                    groups[key].push(edge);
+                });
 
                 const merged = [];
-                let current = { ...segments[0] };
+                Object.values(groups).forEach(group => {
+                    if (group.length === 0) return;
 
-                for (let i = 1; i < segments.length; i++) {
-                    const next = segments[i];
-                    
-                    if (orientation === 'horizontal') {
-                        // Sprawdź czy odcinki się stykają lub nachodzą
-                        if (next.x1 <= current.x2 && next.z1 === current.z1) {
-                            current.x2 = Math.max(current.x2, next.x2);
-                        } else {
-                            merged.push(current);
-                            current = { ...next };
-                        }
+                    // Sortuj
+                    if (group[0].type === 'horizontal') {
+                        group.sort((a, b) => a.x1 - b.x1);
                     } else {
-                        if (next.z1 <= current.z2 && next.x1 === current.x1) {
-                            current.z2 = Math.max(current.z2, next.z2);
+                        group.sort((a, b) => a.z1 - b.z1);
+                    }
+
+                    let current = { ...group[0] };
+                    for (let i = 1; i < group.length; i++) {
+                        const next = group[i];
+
+                        if (current.type === 'horizontal') {
+                            // Sprawdź czy się stykają
+                            if (Math.abs(next.x1 - current.x2) <= 1 && next.z1 === current.z1) {
+                                current.x2 = next.x2;
+                            } else {
+                                merged.push(current);
+                                current = { ...next };
+                            }
                         } else {
-                            merged.push(current);
-                            current = { ...next };
+                            if (Math.abs(next.z1 - current.z2) <= 1 && next.x1 === current.x1) {
+                                current.z2 = next.z2;
+                            } else {
+                                merged.push(current);
+                                current = { ...next };
+                            }
                         }
                     }
-                }
-                merged.push(current);
-                
+                    merged.push(current);
+                });
+
                 return merged;
+            }
+
+            /**
+             * Rozszerza krawędzie maksymalnie, nie nachodząc na działki.
+             */
+            function expandEdges(edges, plots, minX, maxX, minZ, maxZ) {
+                return edges.map(edge => {
+                    const expanded = { ...edge };
+
+                    if (edge.type === 'horizontal') {
+                        // Rozszerz poziomo w obie strony do granic lub do przeszkody
+                        expanded.x1 = findMaxExpansion(edge, plots, 'left', minX);
+                        expanded.x2 = findMaxExpansion(edge, plots, 'right', maxX);
+                    } else {
+                        // Rozszerz pionowo w obie strony do granic lub do przeszkody
+                        expanded.z1 = findMaxExpansion(edge, plots, 'down', minZ);
+                        expanded.z2 = findMaxExpansion(edge, plots, 'up', maxZ);
+                    }
+
+                    return expanded;
+                });
+            }
+
+            /**
+             * Znajduje maksymalne rozszerzenie krawędzi w danym kierunku.
+             */
+            function findMaxExpansion(edge, plots, direction, boundaryLimit) {
+                if (edge.type === 'horizontal') {
+                    if (direction === 'left') {
+                        let newX = edge.x1;
+                        // Szukaj w lewo aż do przeszkody lub granicy
+                        while (newX > boundaryLimit) {
+                            const testPoint = newX - 1;
+                            const isBlocked = plots.some(plot => {
+                                const x_min = Math.min(plot.x1, plot.x2);
+                                const x_max = Math.max(plot.x1, plot.x2);
+                                const z_min = Math.min(plot.z1, plot.z2);
+                                const z_max = Math.max(plot.z1, plot.z2);
+                                return testPoint >= x_min && testPoint <= x_max &&
+                                    edge.z1 >= z_min && edge.z1 <= z_max;
+                            });
+                            if (isBlocked) break;
+                            newX--;
+                        }
+                        return Math.max(newX, boundaryLimit);
+                    } else { // right
+                        let newX = edge.x2;
+                        while (newX < boundaryLimit) {
+                            const testPoint = newX + 1;
+                            const isBlocked = plots.some(plot => {
+                                const x_min = Math.min(plot.x1, plot.x2);
+                                const x_max = Math.max(plot.x1, plot.x2);
+                                const z_min = Math.min(plot.z1, plot.z2);
+                                const z_max = Math.max(plot.z1, plot.z2);
+                                return testPoint >= x_min && testPoint <= x_max &&
+                                    edge.z1 >= z_min && edge.z1 <= z_max;
+                            });
+                            if (isBlocked) break;
+                            newX++;
+                        }
+                        return Math.min(newX, boundaryLimit);
+                    }
+                } else { // vertical
+                    if (direction === 'down') {
+                        let newZ = edge.z1;
+                        while (newZ > boundaryLimit) {
+                            const testPoint = newZ - 1;
+                            const isBlocked = plots.some(plot => {
+                                const x_min = Math.min(plot.x1, plot.x2);
+                                const x_max = Math.max(plot.x1, plot.x2);
+                                const z_min = Math.min(plot.z1, plot.z2);
+                                const z_max = Math.max(plot.z1, plot.z2);
+                                return edge.x1 >= x_min && edge.x1 <= x_max &&
+                                    testPoint >= z_min && testPoint <= z_max;
+                            });
+                            if (isBlocked) break;
+                            newZ--;
+                        }
+                        return Math.max(newZ, boundaryLimit);
+                    } else { // up
+                        let newZ = edge.z2;
+                        while (newZ < boundaryLimit) {
+                            const testPoint = newZ + 1;
+                            const isBlocked = plots.some(plot => {
+                                const x_min = Math.min(plot.x1, plot.x2);
+                                const x_max = Math.max(plot.x1, plot.x2);
+                                const z_min = Math.min(plot.z1, plot.z2);
+                                const z_max = Math.max(plot.z1, plot.z2);
+                                return edge.x1 >= x_min && edge.x1 <= x_max &&
+                                    testPoint >= z_min && testPoint <= z_max;
+                            });
+                            if (isBlocked) break;
+                            newZ++;
+                        }
+                        return Math.min(newZ, boundaryLimit);
+                    }
+                }
             }
 
             /**
              * Buduje zamkniętą ścieżkę SVG z zewnętrznych krawędzi.
              */
             function buildClosedPath(edges, minX, maxX, minZ, maxZ) {
-                // Prostokątny kontur dzielnicy (ruch wskazówek zegara od lewego górnego)
-                const path = `M ${minX} ${maxZ} L ${maxX} ${maxZ} L ${maxX} ${minZ} L ${minX} ${minZ} Z`;
-                return path;
+                if (edges.length === 0) return '';
+
+                // Grupuj krawędzie według stron
+                const topEdges = edges.filter(e => e.side === 'top').sort((a, b) => a.x1 - b.x1);
+                const rightEdges = edges.filter(e => e.side === 'right').sort((a, b) => b.z2 - a.z2);
+                const bottomEdges = edges.filter(e => e.side === 'bottom').sort((a, b) => b.x2 - a.x2);
+                const leftEdges = edges.filter(e => e.side === 'left').sort((a, b) => a.z1 - b.z1);
+
+                const pathPoints = [];
+
+                // Rozpocznij od lewego górnego rogu i idź zgodnie z ruchem wskazówek zegara
+                let currentX = minX;
+                let currentZ = maxZ;
+                pathPoints.push({ x: currentX, z: currentZ });
+
+                // Góra (w prawo)
+                topEdges.forEach(edge => {
+                    if (edge.x1 > currentX) {
+                        pathPoints.push({ x: edge.x1, z: currentZ });
+                    }
+                    pathPoints.push({ x: edge.x2, z: edge.z1 });
+                    currentX = edge.x2;
+                    currentZ = edge.z1;
+                });
+
+                // Przejście do prawego górnego rogu
+                if (currentX < maxX) {
+                    pathPoints.push({ x: maxX, z: currentZ });
+                    currentX = maxX;
+                }
+                if (currentZ > maxZ) {
+                    pathPoints.push({ x: currentX, z: maxZ });
+                    currentZ = maxZ;
+                }
+
+                // Prawo (w dół)
+                rightEdges.forEach(edge => {
+                    if (edge.z2 < currentZ) {
+                        pathPoints.push({ x: currentX, z: edge.z2 });
+                    }
+                    pathPoints.push({ x: edge.x1, z: edge.z1 });
+                    currentX = edge.x1;
+                    currentZ = edge.z1;
+                });
+
+                // Przejście do prawego dolnego rogu
+                if (currentZ > minZ) {
+                    pathPoints.push({ x: currentX, z: minZ });
+                    currentZ = minZ;
+                }
+                if (currentX > maxX) {
+                    pathPoints.push({ x: maxX, z: currentZ });
+                    currentX = maxX;
+                }
+
+                // Dół (w lewo)
+                bottomEdges.forEach(edge => {
+                    if (edge.x2 < currentX) {
+                        pathPoints.push({ x: edge.x2, z: currentZ });
+                    }
+                    pathPoints.push({ x: edge.x1, z: edge.z1 });
+                    currentX = edge.x1;
+                    currentZ = edge.z1;
+                });
+
+                // Przejście do lewego dolnego rogu
+                if (currentX > minX) {
+                    pathPoints.push({ x: minX, z: currentZ });
+                    currentX = minX;
+                }
+                if (currentZ < minZ) {
+                    pathPoints.push({ x: currentX, z: minZ });
+                    currentZ = minZ;
+                }
+
+                // Lewo (w górę)
+                leftEdges.forEach(edge => {
+                    if (edge.z1 > currentZ) {
+                        pathPoints.push({ x: currentX, z: edge.z1 });
+                    }
+                    pathPoints.push({ x: edge.x1, z: edge.z2 });
+                    currentX = edge.x1;
+                    currentZ = edge.z2;
+                });
+
+                // Zamknij ścieżkę wracając do początku
+                if (currentZ < maxZ) {
+                    pathPoints.push({ x: currentX, z: maxZ });
+                }
+
+                // Konwertuj punkty na ścieżkę SVG
+                if (pathPoints.length < 3) return '';
+
+                let svgPath = `M ${pathPoints[0].x} ${pathPoints[0].z}`;
+                for (let i = 1; i < pathPoints.length; i++) {
+                    svgPath += ` L ${pathPoints[i].x} ${pathPoints[i].z}`;
+                }
+                svgPath += ' Z';
+
+                return svgPath;
             }
 
             function highlightDistrict(districtName) {
