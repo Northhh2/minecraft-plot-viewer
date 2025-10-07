@@ -738,28 +738,28 @@
             }
 
             /**
-             * Tworzy kontur dzielnicy używając algorytmu bounding polygon.
-             * Zamiast śledzić wspólne krawędzie, tworzy prostokątną otoczkę wokół grupy działek.
+             * Tworzy kontur dzielnicy używając algorytmu Convex Hull (Graham Scan).
+             * Tworzy wypukły wielokąt okalający wszystkie działki w dzielnicy.
              * 
              * @param {Array<Object>} plots Lista obiektów działek z polami x1, z1, x2, z2.
              * @returns {string} Ścieżka SVG konturu.
              */
-             function createDistrictOutline(plots) {
+            function createDistrictOutline(plots) {
                 if (plots.length === 0) return '';
                 const districtName = plots[0].district;
                 console.log(`🎨 Tworzenie konturu dla dzielnicy '${districtName}' (${plots.length} działek)`);
 
-                // Najpierw znajdź wszystkie zewnętrzne narożniki wszystkich działek
-                const allCorners = [];
-                
+                // Zbierz wszystkie narożniki wszystkich działek
+                const allPoints = [];
+
                 plots.forEach(plot => {
                     const x_min = Math.min(plot.x1, plot.x2);
                     const x_max = Math.max(plot.x1, plot.x2);
                     const z_min = Math.min(plot.z1, plot.z2);
                     const z_max = Math.max(plot.z1, plot.z2);
 
-                    // Dodaj wszystkie 4 narożniki
-                    allCorners.push(
+                    // Dodaj wszystkie 4 narożniki działki
+                    allPoints.push(
                         { x: x_min, z: z_min },
                         { x: x_max, z: z_min },
                         { x: x_max, z: z_max },
@@ -767,93 +767,41 @@
                     );
                 });
 
-                // Znajdź skrajne punkty (bounding box)
-                const minX = Math.min(...allCorners.map(c => c.x));
-                const maxX = Math.max(...allCorners.map(c => c.x));
-                const minZ = Math.min(...allCorners.map(c => c.z));
-                const maxZ = Math.max(...allCorners.map(c => c.z));
+                console.log(`  📍 Zebrano ${allPoints.length} punktów z ${plots.length} działek`);
 
-                console.log(`  📦 Bounding box: (${minX}, ${minZ}) do (${maxX}, ${maxZ})`);
+                // Usuń duplikaty punktów
+                const uniquePoints = [];
+                const pointSet = new Set();
 
-                // Stwórz siatę segmentów poziomych i pionowych
-                const horizontalSegments = new Map(); // z -> [{x1, x2, plotId}, ...]
-                const verticalSegments = new Map();   // x -> [{z1, z2, plotId}, ...]
-
-                plots.forEach(plot => {
-                    const x_min = Math.min(plot.x1, plot.x2);
-                    const x_max = Math.max(plot.x1, plot.x2);
-                    const z_min = Math.min(plot.z1, plot.z2);
-                    const z_max = Math.max(plot.z1, plot.z2);
-
-                    // Dodaj poziome krawędzie (górna i dolna)
-                    [z_min, z_max].forEach(z => {
-                        if (!horizontalSegments.has(z)) horizontalSegments.set(z, []);
-                        horizontalSegments.get(z).push({ x1: x_min, x2: x_max, plotId: plot.id });
-                    });
-
-                    // Dodaj pionowe krawędzie (lewa i prawa)
-                    [x_min, x_max].forEach(x => {
-                        if (!verticalSegments.has(x)) verticalSegments.set(x, []);
-                        verticalSegments.get(x).push({ z1: z_min, z2: z_max, plotId: plot.id });
-                    });
+                allPoints.forEach(p => {
+                    const key = `${p.x},${p.z}`;
+                    if (!pointSet.has(key)) {
+                        pointSet.add(key);
+                        uniquePoints.push(p);
+                    }
                 });
 
-                // Znajdź segmenty zewnętrzne (te, które nie są zasłonięte przez inne działki)
-                const outerEdges = [];
+                console.log(`  🔍 Po usunięciu duplikatów: ${uniquePoints.length} unikalnych punktów`);
 
-                // Sprawdź górną i dolną krawędź
-                [minZ, maxZ].forEach(z => {
-                    const segments = horizontalSegments.get(z) || [];
-                    segments.forEach(seg => {
-                        // Krawędź jest zewnętrzna jeśli:
-                        // - Jest na górze (z = minZ) i nie ma działki nad nią
-                        // - Jest na dole (z = maxZ) i nie ma działki pod nią
-                        const isOuter = (z === minZ) || (z === maxZ);
-                        
-                        if (isOuter || !isSegmentCovered(seg, segments)) {
-                            outerEdges.push({
-                                type: 'horizontal',
-                                z: z,
-                                x1: seg.x1,
-                                x2: seg.x2
-                            });
-                        }
-                    });
-                });
+                if (uniquePoints.length < 3) {
+                    console.warn('  ⚠️ Za mało punktów do utworzenia konturu!');
+                    return '';
+                }
 
-                // Sprawdź lewą i prawą krawędź
-                [minX, maxX].forEach(x => {
-                    const segments = verticalSegments.get(x) || [];
-                    segments.forEach(seg => {
-                        const isOuter = (x === minX) || (x === maxX);
-                        
-                        if (isOuter || !isSegmentCovered(seg, segments)) {
-                            outerEdges.push({
-                                type: 'vertical',
-                                x: x,
-                                z1: seg.z1,
-                                z2: seg.z2
-                            });
-                        }
-                    });
-                });
+                // Oblicz Convex Hull używając algorytmu Graham Scan
+                const hull = convexHull(uniquePoints);
 
-                console.log(`  🔍 Znaleziono ${outerEdges.length} zewnętrznych krawędzi`);
+                console.log(`  📐 Convex Hull zawiera ${hull.length} punktów`);
 
-                // Dla prostoty, użyj prostokątnego konturu (możemy to ulepszyć później)
-                const path = [
-                    { x: minX, z: minZ },
-                    { x: maxX, z: minZ },
-                    { x: maxX, z: maxZ },
-                    { x: minX, z: maxZ }
-                ];
-
-                console.log(`  📍 Utworzono prostokątny kontur z ${path.length} punktów`);
+                if (hull.length < 3) {
+                    console.warn('  ⚠️ Convex Hull za mały!');
+                    return '';
+                }
 
                 // Konwersja do SVG
-                let svgPath = `M ${path[0].x} ${path[0].z}`;
-                for (let i = 1; i < path.length; i++) {
-                    svgPath += ` L ${path[i].x} ${path[i].z}`;
+                let svgPath = `M ${hull[0].x} ${hull[0].z}`;
+                for (let i = 1; i < hull.length; i++) {
+                    svgPath += ` L ${hull[i].x} ${hull[i].z}`;
                 }
                 svgPath += ' Z';
 
@@ -861,10 +809,69 @@
                 return svgPath;
             }
 
-            // Funkcja pomocnicza - sprawdza czy segment jest przykryty przez inne segmenty
-            function isSegmentCovered(segment, allSegments) {
-                // Dla uproszczenia zwracamy false - wszystkie segmenty na brzegach są zewnętrzne
-                return false;
+            /**
+             * Algorytm Graham Scan do obliczania wypukłej otoczki (Convex Hull).
+             * 
+             * @param {Array<Object>} points Tablica punktów {x, z}
+             * @returns {Array<Object>} Tablica punktów tworzących convex hull (uporządkowane przeciwnie do ruchu wskazówek zegara)
+             */
+            function convexHull(points) {
+                if (points.length < 3) return points;
+
+                // Znajdź punkt bazowy (najniższy, a przy równości - najbardziej lewy)
+                let pivot = points[0];
+                for (let i = 1; i < points.length; i++) {
+                    if (points[i].z < pivot.z || (points[i].z === pivot.z && points[i].x < pivot.x)) {
+                        pivot = points[i];
+                    }
+                }
+
+                // Sortuj punkty według kąta polarnego względem pivota
+                const sortedPoints = points.filter(p => p !== pivot).sort((a, b) => {
+                    const angleA = Math.atan2(a.z - pivot.z, a.x - pivot.x);
+                    const angleB = Math.atan2(b.z - pivot.z, b.x - pivot.x);
+
+                    if (angleA !== angleB) {
+                        return angleA - angleB;
+                    }
+
+                    // Jeśli kąty są równe, sortuj po odległości (bliższe punkty pierwsze)
+                    const distA = Math.pow(a.x - pivot.x, 2) + Math.pow(a.z - pivot.z, 2);
+                    const distB = Math.pow(b.x - pivot.x, 2) + Math.pow(b.z - pivot.z, 2);
+                    return distA - distB;
+                });
+
+                // Dodaj pivot na początku
+                sortedPoints.unshift(pivot);
+
+                // Buduj convex hull
+                const hull = [sortedPoints[0], sortedPoints[1]];
+
+                for (let i = 2; i < sortedPoints.length; i++) {
+                    let top = hull[hull.length - 1];
+                    let nextToTop = hull[hull.length - 2];
+
+                    // Usuń punkty, które tworzą skręt w prawo (clockwise)
+                    while (hull.length > 1 && crossProduct(nextToTop, top, sortedPoints[i]) <= 0) {
+                        hull.pop();
+                        top = hull[hull.length - 1];
+                        nextToTop = hull[hull.length - 2];
+                    }
+
+                    hull.push(sortedPoints[i]);
+                }
+
+                return hull;
+            }
+
+            /**
+             * Oblicza iloczyn wektorowy (cross product) dla trzech punktów.
+             * Dodatni = skręt w lewo (counter-clockwise)
+             * Ujemny = skręt w prawo (clockwise)
+             * Zero = punkty kolinearne
+             */
+            function crossProduct(o, a, b) {
+                return (a.x - o.x) * (b.z - o.z) - (a.z - o.z) * (b.x - o.x);
             }
 
             function highlightDistrict(districtName) {
