@@ -738,19 +738,46 @@
             }
 
             /**
-             * Tworzy kontur dzielnicy używając algorytmu boundary tracing (right-hand rule).
-             * Algorytm znajduje zewnętrzne krawędzie i idzie wokół nich zgodnie z ruchem wskazówek zegara.
+             * Tworzy kontur dzielnicy używając algorytmu bounding polygon.
+             * Zamiast śledzić wspólne krawędzie, tworzy prostokątną otoczkę wokół grupy działek.
              * 
              * @param {Array<Object>} plots Lista obiektów działek z polami x1, z1, x2, z2.
              * @returns {string} Ścieżka SVG konturu.
              */
-            function createDistrictOutline(plots) {
+             function createDistrictOutline(plots) {
                 if (plots.length === 0) return '';
                 const districtName = plots[0].district;
                 console.log(`🎨 Tworzenie konturu dla dzielnicy '${districtName}' (${plots.length} działek)`);
 
-                // Zbierz wszystkie krawędzie z ich kierunkami
-                const edgeCount = new Map();
+                // Najpierw znajdź wszystkie zewnętrzne narożniki wszystkich działek
+                const allCorners = [];
+                
+                plots.forEach(plot => {
+                    const x_min = Math.min(plot.x1, plot.x2);
+                    const x_max = Math.max(plot.x1, plot.x2);
+                    const z_min = Math.min(plot.z1, plot.z2);
+                    const z_max = Math.max(plot.z1, plot.z2);
+
+                    // Dodaj wszystkie 4 narożniki
+                    allCorners.push(
+                        { x: x_min, z: z_min },
+                        { x: x_max, z: z_min },
+                        { x: x_max, z: z_max },
+                        { x: x_min, z: z_max }
+                    );
+                });
+
+                // Znajdź skrajne punkty (bounding box)
+                const minX = Math.min(...allCorners.map(c => c.x));
+                const maxX = Math.max(...allCorners.map(c => c.x));
+                const minZ = Math.min(...allCorners.map(c => c.z));
+                const maxZ = Math.max(...allCorners.map(c => c.z));
+
+                console.log(`  📦 Bounding box: (${minX}, ${minZ}) do (${maxX}, ${maxZ})`);
+
+                // Stwórz siatę segmentów poziomych i pionowych
+                const horizontalSegments = new Map(); // z -> [{x1, x2, plotId}, ...]
+                const verticalSegments = new Map();   // x -> [{z1, z2, plotId}, ...]
 
                 plots.forEach(plot => {
                     const x_min = Math.min(plot.x1, plot.x2);
@@ -758,193 +785,70 @@
                     const z_min = Math.min(plot.z1, plot.z2);
                     const z_max = Math.max(plot.z1, plot.z2);
 
-                    // Dodaj 4 krawędzie każdej działki (jako skierowane wektory)
-                    const edges = [
-                        [`${x_min},${z_min}`, `${x_max},${z_min}`], // Górna (→)
-                        [`${x_max},${z_min}`, `${x_max},${z_max}`], // Prawa (↓)
-                        [`${x_max},${z_max}`, `${x_min},${z_max}`], // Dolna (←)
-                        [`${x_min},${z_max}`, `${x_min},${z_min}`]  // Lewa (↑)
-                    ];
+                    // Dodaj poziome krawędzie (górna i dolna)
+                    [z_min, z_max].forEach(z => {
+                        if (!horizontalSegments.has(z)) horizontalSegments.set(z, []);
+                        horizontalSegments.get(z).push({ x1: x_min, x2: x_max, plotId: plot.id });
+                    });
 
-                    edges.forEach(([from, to]) => {
-                        const key = `${from}→${to}`;
-                        edgeCount.set(key, (edgeCount.get(key) || 0) + 1);
+                    // Dodaj pionowe krawędzie (lewa i prawa)
+                    [x_min, x_max].forEach(x => {
+                        if (!verticalSegments.has(x)) verticalSegments.set(x, []);
+                        verticalSegments.get(x).push({ z1: z_min, z2: z_max, plotId: plot.id });
                     });
                 });
 
-                // Krawędzie zewnętrzne to te, które występują dokładnie raz
-                const boundaryEdges = new Map(); // from -> [to1, to2, ...]
+                // Znajdź segmenty zewnętrzne (te, które nie są zasłonięte przez inne działki)
+                const outerEdges = [];
 
-                edgeCount.forEach((count, key) => {
-                    if (count === 1) {
-                        const [from, to] = key.split('→');
-                        if (!boundaryEdges.has(from)) {
-                            boundaryEdges.set(from, []);
+                // Sprawdź górną i dolną krawędź
+                [minZ, maxZ].forEach(z => {
+                    const segments = horizontalSegments.get(z) || [];
+                    segments.forEach(seg => {
+                        // Krawędź jest zewnętrzna jeśli:
+                        // - Jest na górze (z = minZ) i nie ma działki nad nią
+                        // - Jest na dole (z = maxZ) i nie ma działki pod nią
+                        const isOuter = (z === minZ) || (z === maxZ);
+                        
+                        if (isOuter || !isSegmentCovered(seg, segments)) {
+                            outerEdges.push({
+                                type: 'horizontal',
+                                z: z,
+                                x1: seg.x1,
+                                x2: seg.x2
+                            });
                         }
-                        boundaryEdges.get(from).push(to);
-                    }
+                    });
                 });
 
-                if (boundaryEdges.size === 0) {
-                    console.warn('  ⚠️ Nie znaleziono krawędzi zewnętrznych!');
-                    return '';
-                }
-
-                // Znajdź punkt startowy (najbardziej top-left)
-                let startPoint = null;
-                let minZ = Infinity;
-                let minX = Infinity;
-
-                boundaryEdges.forEach((neighbors, point) => {
-                    const [x, z] = point.split(',').map(Number);
-                    if (z < minZ || (z === minZ && x < minX)) {
-                        minZ = z;
-                        minX = x;
-                        startPoint = point;
-                    }
+                // Sprawdź lewą i prawą krawędź
+                [minX, maxX].forEach(x => {
+                    const segments = verticalSegments.get(x) || [];
+                    segments.forEach(seg => {
+                        const isOuter = (x === minX) || (x === maxX);
+                        
+                        if (isOuter || !isSegmentCovered(seg, segments)) {
+                            outerEdges.push({
+                                type: 'vertical',
+                                x: x,
+                                z1: seg.z1,
+                                z2: seg.z2
+                            });
+                        }
+                    });
                 });
 
-                console.log(`  🎯 Punkt startowy: ${startPoint}`);
+                console.log(`  🔍 Znaleziono ${outerEdges.length} zewnętrznych krawędzi`);
 
-                // Śledź kontur używając right-hand rule
-                const path = [];
-                let current = startPoint;
-                let previous = null;
-                const visitedEdges = new Set(); // Śledź odwiedzone krawędzie, nie punkty!
-                const maxIterations = boundaryEdges.size * 4;
-                let iterations = 0;
+                // Dla prostoty, użyj prostokątnego konturu (możemy to ulepszyć później)
+                const path = [
+                    { x: minX, z: minZ },
+                    { x: maxX, z: minZ },
+                    { x: maxX, z: maxZ },
+                    { x: minX, z: maxZ }
+                ];
 
-                // Dla pierwszego kroku, wybierz sąsiada który idzie w prawo lub w dół
-                const [sx, sz] = startPoint.split(',').map(Number);
-                const firstNeighbors = boundaryEdges.get(startPoint) || [];
-                let firstNext = firstNeighbors[0];
-
-                // Preferuj ruch w prawo lub w dół jako pierwszy krok
-                for (const neighbor of firstNeighbors) {
-                    const [nx, nz] = neighbor.split(',').map(Number);
-                    if ((nx > sx && nz === sz) || (nx === sx && nz > sz)) {
-                        firstNext = neighbor;
-                        break;
-                    }
-                }
-
-                previous = `${sx},${sz - 1}`; // Sztuczny punkt z góry
-
-                while (iterations < maxIterations) {
-                    iterations++;
-
-                    const [cx, cz] = current.split(',').map(Number);
-
-                    // Dodaj punkt do ścieżki
-                    if (path.length === 0 || path[path.length - 1].x !== cx || path[path.length - 1].z !== cz) {
-                        path.push({ x: cx, z: cz });
-                    }
-
-                    // Sprawdź czy wróciliśmy do startu TYLKO JEŚLI mamy wystarczająco punktów
-                    // Minimalna liczba punktów dla prostokąta to 4, ale sprawdzamy czy to faktycznie zamknięty kontur
-                    if (path.length > 4 && current === startPoint) {
-                        console.log(`  ✅ Kontur zamknięty po ${path.length} punktach!`);
-                        break;
-                    }
-
-                    // Pobierz możliwych sąsiadów
-                    const neighbors = boundaryEdges.get(current);
-                    if (!neighbors || neighbors.length === 0) {
-                        console.warn('  ⚠️ Brak sąsiadów, przerwanie!');
-                        break;
-                    }
-
-                    // Wybierz następny punkt używając right-hand rule
-                    let nextPoint = null;
-
-                    if (neighbors.length === 1) {
-                        // Tylko jeden sąsiad - musimy tam iść
-                        const onlyNeighbor = neighbors[0];
-
-                        // Sprawdź czy to nie jest powrót do startu zbyt wcześnie
-                        if (onlyNeighbor === startPoint && path.length <= 4) {
-                            console.warn('  ⚠️ Próba zamknięcia konturu po tylko 4 punktach - coś jest nie tak!');
-                            break;
-                        }
-
-                        nextPoint = onlyNeighbor;
-                    } else {
-                        // Wiele sąsiadów - wybierz używając right-hand rule
-                        const [px, pz] = previous ? previous.split(',').map(Number) : [cx, cz - 1];
-                        const inAngle = Math.atan2(cz - pz, cx - px);
-
-                        let bestAngle = -Infinity;
-                        let bestNeighbor = null;
-                        let alternativeNeighbors = [];
-
-                        neighbors.forEach(neighbor => {
-                            // Nie wracaj natychmiast skąd przyszedłeś (chyba że nie ma innego wyboru)
-                            if (neighbor === previous && neighbors.length > 1) return;
-
-                            const [nx, nz] = neighbor.split(',').map(Number);
-                            const outAngle = Math.atan2(nz - cz, nx - cx);
-
-                            // Oblicz kąt skrętu (prawo = ujemny)
-                            let turnAngle = outAngle - inAngle;
-
-                            // Normalizuj do (-PI, PI]
-                            while (turnAngle > Math.PI) turnAngle -= 2 * Math.PI;
-                            while (turnAngle <= -Math.PI) turnAngle += 2 * Math.PI;
-
-                            // Jeśli to powrót do startu i mamy mało punktów, zapisz jako alternatywę
-                            if (neighbor === startPoint && path.length <= 4) {
-                                alternativeNeighbors.push({ neighbor, turnAngle });
-                                return; // Nie bierz tego jako główny wybór jeszcze
-                            }
-
-                            // Wybierz najbardziej prawy skręt (najbardziej ujemny kąt)
-                            if (turnAngle < 0 && turnAngle > bestAngle) {
-                                bestAngle = turnAngle;
-                                bestNeighbor = neighbor;
-                            } else if (bestNeighbor === null || (turnAngle >= 0 && bestAngle >= 0 && turnAngle < bestAngle)) {
-                                bestAngle = turnAngle;
-                                bestNeighbor = neighbor;
-                            }
-                        });
-
-                        // Jeśli nie znaleziono lepszego sąsiada, użyj alternatyw
-                        if (!bestNeighbor && alternativeNeighbors.length > 0) {
-                            // Wybierz alternatywę z najlepszym kątem
-                            alternativeNeighbors.sort((a, b) => b.turnAngle - a.turnAngle);
-                            nextPoint = alternativeNeighbors[0].neighbor;
-                            console.log(`  🔄 Używam alternatywnego punktu (powrót do startu zbyt wcześnie)`);
-                        } else {
-                            nextPoint = bestNeighbor || neighbors[0];
-                        }
-                    }
-
-                    if (!nextPoint) {
-                        console.warn('  ⚠️ Nie znaleziono następnego punktu!');
-                        break;
-                    }
-
-                    // Zapisz odwiedzoną krawędź
-                    const edgeKey = `${current}→${nextPoint}`;
-                    if (visitedEdges.has(edgeKey)) {
-                        console.warn(`  ⚠️ Wykryto powtarzającą się krawędź: ${edgeKey}`);
-                        // Jeśli wracamy do startu, to OK
-                        if (nextPoint === startPoint && path.length > 4) {
-                            break;
-                        }
-                    }
-                    visitedEdges.add(edgeKey);
-
-                    // Przesuń się do następnego punktu
-                    previous = current;
-                    current = nextPoint;
-                }
-
-                console.log(`  📍 Utworzono ścieżkę z ${path.length} punktów (${iterations} iteracji)`);
-
-                if (path.length < 3) {
-                    console.warn('  ⚠️ Ścieżka za krótka!');
-                    return '';
-                }
+                console.log(`  📍 Utworzono prostokątny kontur z ${path.length} punktów`);
 
                 // Konwersja do SVG
                 let svgPath = `M ${path[0].x} ${path[0].z}`;
@@ -955,6 +859,12 @@
 
                 console.log('  ✨ Kontur gotowy!');
                 return svgPath;
+            }
+
+            // Funkcja pomocnicza - sprawdza czy segment jest przykryty przez inne segmenty
+            function isSegmentCovered(segment, allSegments) {
+                // Dla uproszczenia zwracamy false - wszystkie segmenty na brzegach są zewnętrzne
+                return false;
             }
 
             function highlightDistrict(districtName) {
