@@ -751,12 +751,26 @@
 
                 // Zbierz wszystkie narożniki wszystkich działek
                 const allPoints = [];
+                let corners = {
+                    topLeft: { x: 0, z: 0 },
+                    topRight: { x: 0, z: 0 },
+                    bottomLeft: { x: 0, z: 0 },
+                    bottomRight: { x: 0, z: 0 },
+                }
 
                 plots.forEach(plot => {
                     const x_min = Math.min(plot.x1, plot.x2);
                     const x_max = Math.max(plot.x1, plot.x2);
                     const z_min = Math.min(plot.z1, plot.z2);
                     const z_max = Math.max(plot.z1, plot.z2);
+                    corners.topLeft.x = Math.min(corners.topLeft.x, x_min);
+                    corners.topLeft.z = Math.min(corners.topLeft.z, z_max);
+                    corners.topRight.x = Math.max(corners.topRight.x, x_max);
+                    corners.topRight.z = Math.max(corners.topRight.z, z_max);
+                    corners.bottomLeft.x = Math.min(corners.bottomLeft.x, x_min);
+                    corners.bottomLeft.z = Math.min(corners.bottomLeft.z, z_min);
+                    corners.bottomRight.x = Math.max(corners.bottomRight.x, x_max);
+                    corners.bottomRight.z = Math.max(corners.bottomRight.z, z_min);
 
                     // Dodaj wszystkie 4 narożniki działki
                     allPoints.push(
@@ -768,6 +782,7 @@
                 });
 
                 console.log(`  📍 Zebrano ${allPoints.length} punktów z ${plots.length} działek`);
+                console.log(`Rogi dzielnicy: ${corners}`);
 
                 // Usuń duplikaty punktów
                 const uniquePoints = [];
@@ -788,9 +803,6 @@
                     return '';
                 }
 
-                // Oblicz Convex Hull używając algorytmu Graham Scan
-                const hull = convexHull(uniquePoints);
-
                 console.log(`  📐 Convex Hull zawiera ${hull.length} punktów`);
 
                 if (hull.length < 3) {
@@ -807,71 +819,6 @@
 
                 console.log('  ✨ Kontur gotowy!');
                 return svgPath;
-            }
-
-            /**
-             * Algorytm Graham Scan do obliczania wypukłej otoczki (Convex Hull).
-             * 
-             * @param {Array<Object>} points Tablica punktów {x, z}
-             * @returns {Array<Object>} Tablica punktów tworzących convex hull (uporządkowane przeciwnie do ruchu wskazówek zegara)
-             */
-            function convexHull(points) {
-                if (points.length < 3) return points;
-
-                // Znajdź punkt bazowy (najniższy, a przy równości - najbardziej lewy)
-                let pivot = points[0];
-                for (let i = 1; i < points.length; i++) {
-                    if (points[i].z < pivot.z || (points[i].z === pivot.z && points[i].x < pivot.x)) {
-                        pivot = points[i];
-                    }
-                }
-
-                // Sortuj punkty według kąta polarnego względem pivota
-                const sortedPoints = points.filter(p => p !== pivot).sort((a, b) => {
-                    const angleA = Math.atan2(a.z - pivot.z, a.x - pivot.x);
-                    const angleB = Math.atan2(b.z - pivot.z, b.x - pivot.x);
-
-                    if (angleA !== angleB) {
-                        return angleA - angleB;
-                    }
-
-                    // Jeśli kąty są równe, sortuj po odległości (bliższe punkty pierwsze)
-                    const distA = Math.pow(a.x - pivot.x, 2) + Math.pow(a.z - pivot.z, 2);
-                    const distB = Math.pow(b.x - pivot.x, 2) + Math.pow(b.z - pivot.z, 2);
-                    return distA - distB;
-                });
-
-                // Dodaj pivot na początku
-                sortedPoints.unshift(pivot);
-
-                // Buduj convex hull
-                const hull = [sortedPoints[0], sortedPoints[1]];
-
-                for (let i = 2; i < sortedPoints.length; i++) {
-                    let top = hull[hull.length - 1];
-                    let nextToTop = hull[hull.length - 2];
-
-                    // Usuń punkty, które tworzą skręt w prawo (clockwise)
-                    while (hull.length > 1 && crossProduct(nextToTop, top, sortedPoints[i]) <= 0) {
-                        hull.pop();
-                        top = hull[hull.length - 1];
-                        nextToTop = hull[hull.length - 2];
-                    }
-
-                    hull.push(sortedPoints[i]);
-                }
-
-                return hull;
-            }
-
-            /**
-             * Oblicza iloczyn wektorowy (cross product) dla trzech punktów.
-             * Dodatni = skręt w lewo (counter-clockwise)
-             * Ujemny = skręt w prawo (clockwise)
-             * Zero = punkty kolinearne
-             */
-            function crossProduct(o, a, b) {
-                return (a.x - o.x) * (b.z - o.z) - (a.z - o.z) * (b.x - o.x);
             }
 
             function highlightDistrict(districtName) {
