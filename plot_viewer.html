@@ -736,13 +736,14 @@
                 });
                 return clusters;
             }
+
             /**
-                         * Tworzy kontur dzielnicy używając algorytmu opartego na odcinkach granic działek.
-                         * 
-                         * @param {Array<Object>} plots Lista obiektów działek z polami x1, z1, x2, z2.
-                         * @returns {string} Ścieżka SVG konturu.
-                         */
-            function createDistrictOutline(plots) {
+             * Tworzy kontur dzielnicy używając algorytmu opartego na odcinkach granic działek.
+             * 
+             * @param {Array<Object>} plots Lista obiektów działek z polami x1, z1, x2, z2.
+             * @returns {string} Ścieżka SVG konturu.
+             */
+             function createDistrictOutline(plots) {
                 if (plots.length === 0) return '';
                 const districtName = plots[0].district;
                 console.log(`🎨 Tworzenie konturu dla dzielnicy '${districtName}' (${plots.length} działek)`);
@@ -754,7 +755,7 @@
                     const x_max = Math.max(plot.x1, plot.x2);
                     const z_min = Math.min(plot.z1, plot.z2);
                     const z_max = Math.max(plot.z1, plot.z2);
-
+                    
                     minX = Math.min(minX, x_min);
                     maxX = Math.max(maxX, x_max);
                     minZ = Math.min(minZ, z_min);
@@ -775,7 +776,7 @@
                     const x_max = Math.max(plot.x1, plot.x2);
                     const z_min = Math.min(plot.z1, plot.z2);
                     const z_max = Math.max(plot.z1, plot.z2);
-
+                    
                     // Każda krawędź z informacją po której stronie centrum się znajduje
                     allEdges.push(
                         { x1: x_min, z1: z_min, x2: x_max, z2: z_min, type: 'horizontal', position: z_min }, // dół
@@ -787,19 +788,19 @@
 
                 // Krok 4: Znajdź zewnętrzne krawędzie (niezasłonięte przez inne działki)
                 const outerEdges = [];
-
+                
                 // Góra: krawędzie poziome powyżej centrum, niezasłonięte od góry
                 const topEdges = findUnblockedEdges(allEdges, plots, 'top', centerZ);
                 outerEdges.push(...topEdges);
-
+                
                 // Prawo: krawędzie pionowe na prawo od centrum, niezasłonięte od prawej
                 const rightEdges = findUnblockedEdges(allEdges, plots, 'right', centerX);
                 outerEdges.push(...rightEdges);
-
+                
                 // Dół: krawędzie poziome poniżej centrum, niezasłonięte od dołu
                 const bottomEdges = findUnblockedEdges(allEdges, plots, 'bottom', centerZ);
                 outerEdges.push(...bottomEdges);
-
+                
                 // Lewo: krawędzie pionowe na lewo od centrum, niezasłonięte od lewej
                 const leftEdges = findUnblockedEdges(allEdges, plots, 'left', centerX);
                 outerEdges.push(...leftEdges);
@@ -827,11 +828,11 @@
              */
             function findUnblockedEdges(allEdges, plots, side, centerValue) {
                 const unblockedEdges = [];
-
+                
                 allEdges.forEach(edge => {
                     let isRelevantSide = false;
                     let isUnblocked = true;
-
+                    
                     // Sprawdź czy krawędź jest po odpowiedniej stronie centrum
                     if (side === 'top' && edge.type === 'horizontal' && edge.position >= centerValue) {
                         isRelevantSide = true;
@@ -850,12 +851,12 @@
                         // Sprawdź czy jest zasłonięta od lewej
                         isUnblocked = !isEdgeBlockedFromLeft(edge, plots);
                     }
-
+                    
                     if (isRelevantSide && isUnblocked) {
                         unblockedEdges.push({ ...edge, side });
                     }
                 });
-
+                
                 return mergeAdjacentEdges(unblockedEdges);
             }
 
@@ -868,11 +869,11 @@
                     const x_max = Math.max(plot.x1, plot.x2);
                     const z_min = Math.min(plot.z1, plot.z2);
                     const z_max = Math.max(plot.z1, plot.z2);
-
+                    
                     // Sprawdź czy działka jest powyżej krawędzi i ją zasłania
-                    return z_min > edge.z1 &&
-                        x_min < edge.x2 &&
-                        x_max > edge.x1;
+                    return z_min > edge.z1 && 
+                           x_min < edge.x2 && 
+                           x_max > edge.x1;
                 });
             }
 
@@ -885,11 +886,11 @@
                     const x_max = Math.max(plot.x1, plot.x2);
                     const z_min = Math.min(plot.z1, plot.z2);
                     const z_max = Math.max(plot.z1, plot.z2);
-
+                    
                     // Sprawdź czy działka jest poniżej krawędzi i ją zasłania
-                    return z_max < edge.z1 &&
-                        x_min < edge.x2 &&
-                        x_max > edge.x1;
+                    return z_max < edge.z1 && 
+                           x_min < edge.x2 && 
+                           x_max > edge.x1;
                 });
             }
 
@@ -902,11 +903,11 @@
                     const x_max = Math.max(plot.x1, plot.x2);
                     const z_min = Math.min(plot.z1, plot.z2);
                     const z_max = Math.max(plot.z1, plot.z2);
-
+                    
                     // Sprawdź czy działka jest na prawo od krawędzi i ją zasłania
-                    return x_min > edge.x1 &&
-                        z_min < edge.z2 &&
-                        z_max > edge.z1;
+                    return x_min > edge.x1 && 
+                           z_min < edge.z2 && 
+                           z_max > edge.z1;
                 });
             }
 
@@ -919,11 +920,11 @@
                     const x_max = Math.max(plot.x1, plot.x2);
                     const z_min = Math.min(plot.z1, plot.z2);
                     const z_max = Math.max(plot.z1, plot.z2);
-
+                    
                     // Sprawdź czy działka jest na lewo od krawędzi i ją zasłania
-                    return x_max < edge.x1 &&
-                        z_min < edge.z2 &&
-                        z_max > edge.z1;
+                    return x_max < edge.x1 && 
+                           z_min < edge.z2 && 
+                           z_max > edge.z1;
                 });
             }
 
@@ -932,7 +933,7 @@
              */
             function mergeAdjacentEdges(edges) {
                 if (edges.length === 0) return [];
-
+                
                 // Grupuj według typu i pozycji
                 const groups = {};
                 edges.forEach(edge => {
@@ -940,22 +941,22 @@
                     if (!groups[key]) groups[key] = [];
                     groups[key].push(edge);
                 });
-
+                
                 const merged = [];
                 Object.values(groups).forEach(group => {
                     if (group.length === 0) return;
-
+                    
                     // Sortuj
                     if (group[0].type === 'horizontal') {
                         group.sort((a, b) => a.x1 - b.x1);
                     } else {
                         group.sort((a, b) => a.z1 - b.z1);
                     }
-
+                    
                     let current = { ...group[0] };
                     for (let i = 1; i < group.length; i++) {
                         const next = group[i];
-
+                        
                         if (current.type === 'horizontal') {
                             // Sprawdź czy się stykają
                             if (Math.abs(next.x1 - current.x2) <= 1 && next.z1 === current.z1) {
@@ -975,7 +976,7 @@
                     }
                     merged.push(current);
                 });
-
+                
                 return merged;
             }
 
@@ -985,7 +986,7 @@
             function expandEdges(edges, plots, minX, maxX, minZ, maxZ) {
                 return edges.map(edge => {
                     const expanded = { ...edge };
-
+                    
                     if (edge.type === 'horizontal') {
                         // Rozszerz poziomo w obie strony do granic lub do przeszkody
                         expanded.x1 = findMaxExpansion(edge, plots, 'left', minX);
@@ -995,7 +996,7 @@
                         expanded.z1 = findMaxExpansion(edge, plots, 'down', minZ);
                         expanded.z2 = findMaxExpansion(edge, plots, 'up', maxZ);
                     }
-
+                    
                     return expanded;
                 });
             }
@@ -1015,8 +1016,8 @@
                                 const x_max = Math.max(plot.x1, plot.x2);
                                 const z_min = Math.min(plot.z1, plot.z2);
                                 const z_max = Math.max(plot.z1, plot.z2);
-                                return testPoint >= x_min && testPoint <= x_max &&
-                                    edge.z1 >= z_min && edge.z1 <= z_max;
+                                return testPoint >= x_min && testPoint <= x_max && 
+                                       edge.z1 >= z_min && edge.z1 <= z_max;
                             });
                             if (isBlocked) break;
                             newX--;
@@ -1031,8 +1032,8 @@
                                 const x_max = Math.max(plot.x1, plot.x2);
                                 const z_min = Math.min(plot.z1, plot.z2);
                                 const z_max = Math.max(plot.z1, plot.z2);
-                                return testPoint >= x_min && testPoint <= x_max &&
-                                    edge.z1 >= z_min && edge.z1 <= z_max;
+                                return testPoint >= x_min && testPoint <= x_max && 
+                                       edge.z1 >= z_min && edge.z1 <= z_max;
                             });
                             if (isBlocked) break;
                             newX++;
@@ -1049,8 +1050,8 @@
                                 const x_max = Math.max(plot.x1, plot.x2);
                                 const z_min = Math.min(plot.z1, plot.z2);
                                 const z_max = Math.max(plot.z1, plot.z2);
-                                return edge.x1 >= x_min && edge.x1 <= x_max &&
-                                    testPoint >= z_min && testPoint <= z_max;
+                                return edge.x1 >= x_min && edge.x1 <= x_max && 
+                                       testPoint >= z_min && testPoint <= z_max;
                             });
                             if (isBlocked) break;
                             newZ--;
@@ -1065,8 +1066,8 @@
                                 const x_max = Math.max(plot.x1, plot.x2);
                                 const z_min = Math.min(plot.z1, plot.z2);
                                 const z_max = Math.max(plot.z1, plot.z2);
-                                return edge.x1 >= x_min && edge.x1 <= x_max &&
-                                    testPoint >= z_min && testPoint <= z_max;
+                                return edge.x1 >= x_min && edge.x1 <= x_max && 
+                                       testPoint >= z_min && testPoint <= z_max;
                             });
                             if (isBlocked) break;
                             newZ++;
@@ -1081,104 +1082,175 @@
              */
             function buildClosedPath(edges, minX, maxX, minZ, maxZ) {
                 if (edges.length === 0) return '';
-
+                
+                console.log(`  🔨 Budowanie ścieżki z ${edges.length} krawędzi`);
+                
                 // Grupuj krawędzie według stron
-                const topEdges = edges.filter(e => e.side === 'top').sort((a, b) => a.x1 - b.x1);
-                const rightEdges = edges.filter(e => e.side === 'right').sort((a, b) => b.z2 - a.z2);
-                const bottomEdges = edges.filter(e => e.side === 'bottom').sort((a, b) => b.x2 - a.x2);
-                const leftEdges = edges.filter(e => e.side === 'left').sort((a, b) => a.z1 - b.z1);
-
-                const pathPoints = [];
-
-                // Rozpocznij od lewego górnego rogu i idź zgodnie z ruchem wskazówek zegara
-                let currentX = minX;
-                let currentZ = maxZ;
-                pathPoints.push({ x: currentX, z: currentZ });
-
-                // Góra (w prawo)
-                topEdges.forEach(edge => {
-                    if (edge.x1 > currentX) {
-                        pathPoints.push({ x: edge.x1, z: currentZ });
+                const sideEdges = {
+                    top: edges.filter(e => e.side === 'top').sort((a, b) => a.x1 - b.x1),
+                    right: edges.filter(e => e.side === 'right').sort((a, b) => a.z1 - b.z1),
+                    bottom: edges.filter(e => e.side === 'bottom').sort((a, b) => b.x1 - a.x1), // odwrotnie
+                    left: edges.filter(e => e.side === 'left').sort((a, b) => b.z1 - a.z1) // odwrotnie
+                };
+                
+                console.log(`  Krawędzie: góra=${sideEdges.top.length}, prawo=${sideEdges.right.length}, dół=${sideEdges.bottom.length}, lewo=${sideEdges.left.length}`);
+                
+                const points = [];
+                
+                // Zaczynamy od lewego górnego rogu (minX, maxZ)
+                points.push({ x: minX, z: maxZ });
+                
+                // === GÓRA (idź w prawo) ===
+                let lastX = minX;
+                let lastZ = maxZ;
+                
+                sideEdges.top.forEach((edge, idx) => {
+                    console.log(`  Góra ${idx}: (${edge.x1},${edge.z1}) -> (${edge.x2},${edge.z2})`);
+                    
+                    // Jeśli jest przerwa, dodaj linię łączącą
+                    if (edge.x1 > lastX) {
+                        points.push({ x: edge.x1, z: lastZ });
                     }
-                    pathPoints.push({ x: edge.x2, z: edge.z1 });
-                    currentX = edge.x2;
-                    currentZ = edge.z1;
-                });
-
-                // Przejście do prawego górnego rogu
-                if (currentX < maxX) {
-                    pathPoints.push({ x: maxX, z: currentZ });
-                    currentX = maxX;
-                }
-                if (currentZ > maxZ) {
-                    pathPoints.push({ x: currentX, z: maxZ });
-                    currentZ = maxZ;
-                }
-
-                // Prawo (w dół)
-                rightEdges.forEach(edge => {
-                    if (edge.z2 < currentZ) {
-                        pathPoints.push({ x: currentX, z: edge.z2 });
+                    
+                    // Dodaj początek krawędzi jeśli zmienia się Z
+                    if (edge.z1 !== lastZ) {
+                        points.push({ x: edge.x1, z: edge.z1 });
                     }
-                    pathPoints.push({ x: edge.x1, z: edge.z1 });
-                    currentX = edge.x1;
-                    currentZ = edge.z1;
+                    
+                    // Dodaj koniec krawędzi
+                    points.push({ x: edge.x2, z: edge.z2 });
+                    
+                    lastX = edge.x2;
+                    lastZ = edge.z2;
                 });
-
-                // Przejście do prawego dolnego rogu
-                if (currentZ > minZ) {
-                    pathPoints.push({ x: currentX, z: minZ });
-                    currentZ = minZ;
+                
+                // Połącz z prawym górnym rogiem
+                if (lastX < maxX) {
+                    points.push({ x: maxX, z: lastZ });
                 }
-                if (currentX > maxX) {
-                    pathPoints.push({ x: maxX, z: currentZ });
-                    currentX = maxX;
+                if (lastZ !== maxZ) {
+                    points.push({ x: maxX, z: maxZ });
                 }
-
-                // Dół (w lewo)
-                bottomEdges.forEach(edge => {
-                    if (edge.x2 < currentX) {
-                        pathPoints.push({ x: edge.x2, z: currentZ });
+                
+                // === PRAWO (idź w dół) ===
+                lastX = maxX;
+                lastZ = maxZ;
+                
+                sideEdges.right.forEach((edge, idx) => {
+                    console.log(`  Prawo ${idx}: (${edge.x1},${edge.z1}) -> (${edge.x2},${edge.z2})`);
+                    
+                    // Jeśli jest przerwa, dodaj linię łączącą
+                    if (edge.z1 > lastZ) {
+                        points.push({ x: lastX, z: edge.z1 });
                     }
-                    pathPoints.push({ x: edge.x1, z: edge.z1 });
-                    currentX = edge.x1;
-                    currentZ = edge.z1;
-                });
-
-                // Przejście do lewego dolnego rogu
-                if (currentX > minX) {
-                    pathPoints.push({ x: minX, z: currentZ });
-                    currentX = minX;
-                }
-                if (currentZ < minZ) {
-                    pathPoints.push({ x: currentX, z: minZ });
-                    currentZ = minZ;
-                }
-
-                // Lewo (w górę)
-                leftEdges.forEach(edge => {
-                    if (edge.z1 > currentZ) {
-                        pathPoints.push({ x: currentX, z: edge.z1 });
+                    
+                    // Dodaj początek krawędzi jeśli zmienia się X
+                    if (edge.x1 !== lastX) {
+                        points.push({ x: edge.x1, z: edge.z1 });
                     }
-                    pathPoints.push({ x: edge.x1, z: edge.z2 });
-                    currentX = edge.x1;
-                    currentZ = edge.z2;
+                    
+                    // Dodaj koniec krawędzi
+                    points.push({ x: edge.x2, z: edge.z2 });
+                    
+                    lastX = edge.x2;
+                    lastZ = edge.z2;
                 });
-
-                // Zamknij ścieżkę wracając do początku
-                if (currentZ < maxZ) {
-                    pathPoints.push({ x: currentX, z: maxZ });
+                
+                // Połącz z prawym dolnym rogiem
+                if (lastZ > minZ) {
+                    points.push({ x: lastX, z: minZ });
                 }
-
+                if (lastX !== maxX) {
+                    points.push({ x: maxX, z: minZ });
+                }
+                
+                // === DÓŁ (idź w lewo) ===
+                lastX = maxX;
+                lastZ = minZ;
+                
+                sideEdges.bottom.forEach((edge, idx) => {
+                    console.log(`  Dół ${idx}: (${edge.x1},${edge.z1}) -> (${edge.x2},${edge.z2})`);
+                    
+                    // Dla dołu idziemy od prawej do lewej, więc x2 -> x1
+                    // Jeśli jest przerwa, dodaj linię łączącą
+                    if (edge.x2 < lastX) {
+                        points.push({ x: edge.x2, z: lastZ });
+                    }
+                    
+                    // Dodaj koniec krawędzi jeśli zmienia się Z
+                    if (edge.z2 !== lastZ) {
+                        points.push({ x: edge.x2, z: edge.z2 });
+                    }
+                    
+                    // Dodaj początek krawędzi
+                    points.push({ x: edge.x1, z: edge.z1 });
+                    
+                    lastX = edge.x1;
+                    lastZ = edge.z1;
+                });
+                
+                // Połącz z lewym dolnym rogiem
+                if (lastX > minX) {
+                    points.push({ x: minX, z: lastZ });
+                }
+                if (lastZ !== minZ) {
+                    points.push({ x: minX, z: minZ });
+                }
+                
+                // === LEWO (idź w górę) ===
+                lastX = minX;
+                lastZ = minZ;
+                
+                sideEdges.left.forEach((edge, idx) => {
+                    console.log(`  Lewo ${idx}: (${edge.x1},${edge.z1}) -> (${edge.x2},${edge.z2})`);
+                    
+                    // Dla lewej strony idziemy od dołu do góry, więc z2 -> z1
+                    // Jeśli jest przerwa, dodaj linię łączącą
+                    if (edge.z2 < lastZ) {
+                        points.push({ x: lastX, z: edge.z2 });
+                    }
+                    
+                    // Dodaj koniec krawędzi jeśli zmienia się X
+                    if (edge.x2 !== lastX) {
+                        points.push({ x: edge.x2, z: edge.z2 });
+                    }
+                    
+                    // Dodaj początek krawędzi
+                    points.push({ x: edge.x1, z: edge.z1 });
+                    
+                    lastX = edge.x1;
+                    lastZ = edge.z1;
+                });
+                
+                // Zamknij ścieżkę - wróć do początku
+                // (nie trzeba dodawać punktu startowego, SVG zamknie się automatycznie przez 'Z')
+                
+                console.log(`  📍 Wygenerowano ${points.length} punktów ścieżki`);
+                
+                // Usuń duplikaty sąsiadujących punktów
+                const cleanPoints = [points[0]];
+                for (let i = 1; i < points.length; i++) {
+                    const prev = cleanPoints[cleanPoints.length - 1];
+                    const curr = points[i];
+                    if (prev.x !== curr.x || prev.z !== curr.z) {
+                        cleanPoints.push(curr);
+                    }
+                }
+                
+                console.log(`  🧹 Po czyszczeniu: ${cleanPoints.length} punktów`);
+                
+                if (cleanPoints.length < 3) {
+                    console.warn('  ⚠️ Za mało punktów do utworzenia konturu!');
+                    return '';
+                }
+                
                 // Konwertuj punkty na ścieżkę SVG
-                if (pathPoints.length < 3) return '';
-
-                let svgPath = `M ${pathPoints[0].x} ${pathPoints[0].z}`;
-                for (let i = 1; i < pathPoints.length; i++) {
-                    svgPath += ` L ${pathPoints[i].x} ${pathPoints[i].z}`;
+                let svgPath = `M ${cleanPoints[0].x} ${cleanPoints[0].z}`;
+                for (let i = 1; i < cleanPoints.length; i++) {
+                    svgPath += ` L ${cleanPoints[i].x} ${cleanPoints[i].z}`;
                 }
                 svgPath += ' Z';
-
+                
                 return svgPath;
             }
 
