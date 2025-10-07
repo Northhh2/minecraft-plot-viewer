@@ -769,10 +769,10 @@
                     borders.right.push({fcrd: z_max, scrd: [x_min, x_max]});
                 });
 
-                borders.top.sort((a, b) => a.fcrd - b.fcrd);
-                borders.bottom.sort((a, b) => b.fcrd - a.fcrd);
-                borders.left.sort((a, b) => a.fcrd - b.fcrd);
-                borders.right.sort((a, b) => b.fcrd - a.fcrd);
+                borders.top.sort((a, b) => b.fcrd - a.fcrd);
+                borders.bottom.sort((a, b) => a.fcrd - b.fcrd);
+                borders.left.sort((a, b) => b.fcrd - a.fcrd);
+                borders.right.sort((a, b) => a.fcrd - b.fcrd);
                 console.log(borders);
 
                 return '';
