@@ -774,7 +774,9 @@
                 borders.right.sort((a, b) => a.fcrd - b.fcrd);
                 console.log(borders);
 
-                return '';
+                let svgPath = `M ${hull[0].x} ${hull[0].z}`;
+                svgPath += ' Z';
+                return svgPath;
             }
 
             function highlightDistrict(districtName) {
