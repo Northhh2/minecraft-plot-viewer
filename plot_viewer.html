@@ -803,9 +803,9 @@
                     return '';
                 }
 
+                let hull = null;
                 console.log(`  📐 Convex Hull zawiera ${hull.length} punktów`);
 
-                let hull = null;
                 if (hull.length < 3) {
                     console.warn('  ⚠️ Convex Hull za mały!');
                     return '';
