@@ -770,13 +770,38 @@
 
                 borders.top.sort((a, b) => b.fcrd - a.fcrd);
                 borders.bottom.sort((a, b) => a.fcrd - b.fcrd);
-                borders.left.sort((a, b) => b.fcrd - a.fcrd);
-                borders.right.sort((a, b) => a.fcrd - b.fcrd);
+                borders.left.sort((a, b) => a.fcrd - b.fcrd);
+                borders.right.sort((a, b) => b.fcrd - a.fcrd);
                 console.log(borders);
+
+                let outsideBorders = {
+                    top: filterBorders(borders.top),
+                    bottom: filterBorders(borders.botton),
+                    left: filterBorders(borders.left),
+                    right: filterBorders(borders.right),
+                }
+
+                console.log(outsideBorders);
 
                 let svgPath = `M 0 0`;
                 svgPath += ' Z';
                 return svgPath;
+            }
+
+            function filterBorders(group) {
+                let outsideBorders = [];
+                group.forEach((border, index) => {
+                    if(outsideBorders.length <= 0) {
+                        outsideBorders.push(group.splice(index, 1)[0]);
+                    }
+                    else {
+                        if(!outsideBorders.some(outBorder => {
+                            return (border.scrd[0] > outBorder.scrd[0] && border.scrd[0] < outBorder.scrd[1]) || (border.scrd[1] > outBorder.scrd[0] && border.scrd[1] < outBorder.scrd[1]);
+                        })) {
+                            outsideBorders.push(group.splice(index, 1)[0]);
+                        }
+                    }
+                });
             }
 
             function highlightDistrict(districtName) {
