@@ -527,7 +527,7 @@
                 drawStreets();
                 drawPlots();
                 drawMergedPlots();
-                drawDistrictBoundaries();
+                // drawDistrictBoundaries();
 
                 const padding = 100;
                 const minX = Math.min(...allPlots.map(p => p.x1));
@@ -808,7 +808,7 @@
                     }
                 });
 
-                return outsideBorders;
+                return outsideBorders; 
             }
 
             function highlightDistrict(districtName) {
