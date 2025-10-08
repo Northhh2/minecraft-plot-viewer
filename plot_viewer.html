@@ -838,6 +838,7 @@
             function filterBorders(group) {
                 let outsideBorders = [];
                 let indicesToRemove = [];
+                console.log(group);
 
                 group.forEach((border, index) => {
                     if (outsideBorders.length <= 0) {
@@ -846,7 +847,6 @@
                         if (!outsideBorders.some(outBorder => {
                             return (border.scrd[0] > outBorder.scrd[0] && border.scrd[0] < outBorder.scrd[1]) || (border.scrd[1] > outBorder.scrd[0] && border.scrd[1] < outBorder.scrd[1]);
                         })) {
-                            console.log(border);
                             outsideBorders.push(border);
                         }
                     }
