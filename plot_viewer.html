@@ -527,7 +527,7 @@
                 drawStreets();
                 drawPlots();
                 drawMergedPlots();
-                // drawDistrictBoundaries();
+                drawDistrictBoundaries();
 
                 const padding = 100;
                 const minX = Math.min(...allPlots.map(p => p.x1));
@@ -757,15 +757,15 @@
                     const x_max = Math.max(plot.x1, plot.x2);
                     const z_min = Math.min(plot.z1, plot.z2);
                     const z_max = Math.max(plot.z1, plot.z2);
-                    gxmin = (gxmin ? (gxmin > x_min ? x_min: gxmin) : x_min);
-                    gxmax = (gxmax ? (gxmax < x_max ? x_max: gxmax) : x_max);
-                    gzmin = (gzmin ? (gzmin > z_min ? z_min: gzmin) : z_min);
-                    gzmax = (gzmax ? (gzmax < z_max ? z_max: gzmax) : z_max);
+                    gxmin = (gxmin ? (gxmin > x_min ? x_min : gxmin) : x_min);
+                    gxmax = (gxmax ? (gxmax < x_max ? x_max : gxmax) : x_max);
+                    gzmin = (gzmin ? (gzmin > z_min ? z_min : gzmin) : z_min);
+                    gzmax = (gzmax ? (gzmax < z_max ? z_max : gzmax) : z_max);
 
-                    borders.top.push({fcrd: x_max, scrd: [z_min, z_max]});
-                    borders.bottom.push({fcrd: x_min, scrd: [z_min, z_max]});
-                    borders.left.push({fcrd: z_min, scrd: [x_min, x_max]});
-                    borders.right.push({fcrd: z_max, scrd: [x_min, x_max]});
+                    borders.top.push({ fcrd: x_max, scrd: [z_min, z_max] });
+                    borders.bottom.push({ fcrd: x_min, scrd: [z_min, z_max] });
+                    borders.left.push({ fcrd: z_min, scrd: [x_min, x_max] });
+                    borders.right.push({ fcrd: z_max, scrd: [x_min, x_max] });
                 });
 
                 borders.top.sort((a, b) => b.fcrd - a.fcrd);
@@ -781,11 +781,10 @@
                     right: null,
                 }
 
-                outsideBorders.top = filterBorders(borders.top);
-                outsideBorders.bottom = filterBorders(borders.bottom);
-                outsideBorders.left = filterBorders(borders.left);
-                outsideBorders.right = filterBorders(borders.right);
-
+                outsideBorders.top = extendBorders(filterBorders(borders.top));
+                outsideBorders.bottom = extendBorders(filterBorders(borders.bottom));
+                outsideBorders.left = extendBorders(filterBorders(borders.left));
+                outsideBorders.right = extendBorders(filterBorders(borders.right));
                 console.log(outsideBorders);
 
                 let svgPath = `M 0 0`;
@@ -796,11 +795,11 @@
             function filterBorders(group) {
                 let outsideBorders = [];
                 group.forEach((border, index) => {
-                    if(outsideBorders.length <= 0) {
+                    if (outsideBorders.length <= 0) {
                         outsideBorders.push(group.splice(index, 1)[0]);
                     }
                     else {
-                        if(!outsideBorders.some(outBorder => {
+                        if (!outsideBorders.some(outBorder => {
                             return (border.scrd[0] > outBorder.scrd[0] && border.scrd[0] < outBorder.scrd[1]) || (border.scrd[1] > outBorder.scrd[0] && border.scrd[1] < outBorder.scrd[1]);
                         })) {
                             outsideBorders.push(group.splice(index, 1)[0]);
@@ -808,7 +807,43 @@
                     }
                 });
 
-                return outsideBorders; 
+                return outsideBorders;
+            }
+
+            function extendBorders(borders) {
+                let extendedBorders = [];
+
+                borders.forEach(currentBorder => {
+                    const currentXMin = currentBorder.scrd[0];
+                    const currentXMax = currentBorder.scrd[1];
+
+                    let newXMin = currentXMin;
+                    const closestLower = borders
+                        .filter(item => item.scrd[0] < currentXMin)
+                        .sort((a, b) => b.scrd[0] - a.scrd[0])
+                    [0];
+
+                    if (closestLower) {
+                        newXMin = closestLower.scrd[0];
+                    }
+
+                    let newXMax = currentXMax;
+                    const closestHigher = borders
+                        .filter(item => item.scrd[1] > currentXMax)
+                        .sort((a, b) => a.scrd[1] - b.scrd[1])
+                    [0];
+
+                    if (closestHigher) {
+                        newXMax = closestHigher.scrd[1];
+                    }
+
+                    extendedBorders.push({
+                        fcrd: currentBorder.fcrd,
+                        scrd: [newXMin, newXMax]
+                    });
+                });
+
+                return extendedBorders;
             }
 
             function highlightDistrict(districtName) {
