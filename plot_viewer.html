@@ -841,14 +841,13 @@
 
                 group.forEach((border, index) => {
                     if (outsideBorders.length <= 0) {
+                        console.log(border);
                         outsideBorders.push(border);
-                        indicesToRemove.push(index);
                     } else {
                         if (!outsideBorders.some(outBorder => {
                             return (border.scrd[0] > outBorder.scrd[0] && border.scrd[0] < outBorder.scrd[1]) || (border.scrd[1] > outBorder.scrd[0] && border.scrd[1] < outBorder.scrd[1]);
                         })) {
                             outsideBorders.push(border);
-                            indicesToRemove.push(index);
                         }
                     }
                 });
