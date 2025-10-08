@@ -535,8 +535,26 @@
                 const minZ = Math.min(...allPlots.map(p => p.z1));
                 const maxZ = Math.max(...allPlots.map(p => p.z2));
 
-                Object.assign(initialViewBox, viewBox);
-                setViewBox(viewBox.x, viewBox.y, viewBox.w, viewBox.h);
+                const mapContentWidth = maxX - minX + 2 * padding;
+                const mapContentHeight = maxZ - minZ + 2 * padding;
+                const clientRatio = mapContainer.clientWidth / mapContainer.clientHeight;
+                const contentRatio = mapContentWidth / mapContentHeight;
+
+                let w, h;
+                if (clientRatio > contentRatio) {
+                    h = mapContentHeight;
+                    w = h * clientRatio;
+                } else {
+                    w = mapContentWidth;
+                    h = w / clientRatio;
+                }
+
+                initialViewBox.x = minX - (w - mapContentWidth + 2 * padding) / 2;
+                initialViewBox.y = minZ - (h - mapContentHeight + 2 * padding) / 2;
+                initialViewBox.w = w;
+                initialViewBox.h = h;
+                
+                setViewBox(initialViewBox.x, initialViewBox.y, initialViewBox.w, initialViewBox.h);
             }
 
             function drawStreets() {
