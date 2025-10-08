@@ -756,7 +756,6 @@
                 console.log(plots[0].district)
 
                 plots.forEach(plot => {
-                    console.log(plot);
                     const x_min = Math.min(plot.x1, plot.x2);
                     const x_max = Math.max(plot.x1, plot.x2);
                     const z_min = Math.min(plot.z1, plot.z2);
@@ -839,11 +838,11 @@
             function filterBorders(group) {
                 let outsideBorders = [];
                 let indicesToRemove = [];
-                console.log(group);
 
                 group.forEach((border, index) => {
                     if (outsideBorders.length <= 0) {
                         outsideBorders.push(border);
+                        console.log(border);
                     } else {
                         if (!outsideBorders.some(outBorder => {
                             return (border.scrd[0] > outBorder.scrd[0] && border.scrd[0] < outBorder.scrd[1]) || (border.scrd[1] > outBorder.scrd[0] && border.scrd[1] < outBorder.scrd[1]);
