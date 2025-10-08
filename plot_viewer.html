@@ -534,7 +534,7 @@
                 const maxX = Math.max(...allPlots.map(p => p.x2));
                 const minZ = Math.min(...allPlots.map(p => p.z1));
                 const maxZ = Math.max(...allPlots.map(p => p.z2));
-
+                
                 const mapContentWidth = maxX - minX + 2 * padding;
                 const mapContentHeight = maxZ - minZ + 2 * padding;
                 const clientRatio = mapContainer.clientWidth / mapContainer.clientHeight;
@@ -752,72 +752,103 @@
 
             function createDistrictOutline(plots) {
                 if (plots.length === 0) return '';
-                const districtName = plots[0].district;
-                console.log(`🎨 Tworzenie konturu dla dzielnicy '${districtName}' (${plots.length} działek)`);
-
-                const borders = {
-                    top: [],
-                    right: [],
-                    bottom: [],
-                    left: []
-                };
-                let gxmin, gxmax, gzmin, gzmax;
+                const borders = { top: [], right: [], bottom: [], left: [] };
 
                 plots.forEach(plot => {
                     const x_min = Math.min(plot.x1, plot.x2);
                     const x_max = Math.max(plot.x1, plot.x2);
                     const z_min = Math.min(plot.z1, plot.z2);
                     const z_max = Math.max(plot.z1, plot.z2);
-                    gxmin = (gxmin ? (gxmin > x_min ? x_min : gxmin) : x_min);
-                    gxmax = (gxmax ? (gxmax < x_max ? x_max : gxmax) : x_max);
-                    gzmin = (gzmin ? (gzmin > z_min ? z_min : gzmin) : z_min);
-                    gzmax = (gzmax ? (gzmax < z_max ? z_max : gzmax) : z_max);
-
-                    borders.top.push({ fcrd: x_max, scrd: [z_min, z_max] });
-                    borders.bottom.push({ fcrd: x_min, scrd: [z_min, z_max] });
-                    borders.left.push({ fcrd: z_min, scrd: [x_min, x_max] });
-                    borders.right.push({ fcrd: z_max, scrd: [x_min, x_max] });
+                    
+                    borders.top.push({ fcrd: z_min, scrd: [x_min, x_max] });
+                    borders.bottom.push({ fcrd: z_max, scrd: [x_min, x_max] });
+                    borders.left.push({ fcrd: x_min, scrd: [z_min, z_max] });
+                    borders.right.push({ fcrd: x_max, scrd: [z_min, z_max] });
                 });
 
                 borders.top.sort((a, b) => b.fcrd - a.fcrd);
                 borders.bottom.sort((a, b) => a.fcrd - b.fcrd);
                 borders.left.sort((a, b) => a.fcrd - b.fcrd);
                 borders.right.sort((a, b) => b.fcrd - a.fcrd);
-                console.log(borders);
 
                 let outsideBorders = {
-                    top: null,
-                    bottom: null,
-                    left: null,
-                    right: null,
+                    top: extendBorders(filterBorders(JSON.parse(JSON.stringify(borders.top)))),
+                    bottom: extendBorders(filterBorders(JSON.parse(JSON.stringify(borders.bottom)))),
+                    left: extendBorders(filterBorders(JSON.parse(JSON.stringify(borders.left)))),
+                    right: extendBorders(filterBorders(JSON.parse(JSON.stringify(borders.right)))),
+                };
+
+                const allPoints = [];
+                
+                const topBorders = outsideBorders.top.sort((a, b) => a.scrd[0] - b.scrd[0]);
+                topBorders.forEach(b => {
+                    allPoints.push([b.scrd[0], b.fcrd]);
+                    allPoints.push([b.scrd[1], b.fcrd]);
+                });
+
+                const rightBorders = outsideBorders.right.sort((a, b) => a.scrd[0] - b.scrd[0]);
+                rightBorders.forEach(b => {
+                    allPoints.push([b.fcrd, b.scrd[0]]);
+                    allPoints.push([b.fcrd, b.scrd[1]]);
+                });
+
+                const bottomBorders = outsideBorders.bottom.sort((a, b) => b.scrd[1] - a.scrd[1]);
+                bottomBorders.forEach(b => {
+                    allPoints.push([b.scrd[1], b.fcrd]);
+                    allPoints.push([b.scrd[0], b.fcrd]);
+                });
+
+                const leftBorders = outsideBorders.left.sort((a, b) => b.scrd[1] - a.scrd[1]);
+                leftBorders.forEach(b => {
+                    allPoints.push([b.fcrd, b.scrd[1]]);
+                    allPoints.push([b.fcrd, b.scrd[0]]);
+                });
+                
+                if (allPoints.length < 2) return '';
+
+                const pathPoints = allPoints.filter((point, i, arr) => {
+                    if (i === 0) return true;
+                    const prev = arr[i - 1];
+                    return point[0] !== prev[0] || point[1] !== prev[1];
+                });
+
+                if (pathPoints.length > 1) {
+                    const first = pathPoints[0];
+                    const last = pathPoints[pathPoints.length - 1];
+                    if (first[0] === last[0] && first[1] === last[1]) {
+                        pathPoints.pop();
+                    }
                 }
 
-                outsideBorders.top = extendBorders(filterBorders(borders.top));
-                outsideBorders.bottom = extendBorders(filterBorders(borders.bottom));
-                outsideBorders.left = extendBorders(filterBorders(borders.left));
-                outsideBorders.right = extendBorders(filterBorders(borders.right));
-                console.log(outsideBorders);
+                if (pathPoints.length < 2) return '';
 
-                let svgPath = `M 0 0`;
+                let svgPath = 'M ' + pathPoints[0].join(' ');
+                for (let i = 1; i < pathPoints.length; i++) {
+                    svgPath += ' L ' + pathPoints[i].join(' ');
+                }
                 svgPath += ' Z';
+                
                 return svgPath;
             }
 
             function filterBorders(group) {
                 let outsideBorders = [];
+                let indicesToRemove = [];
+
                 group.forEach((border, index) => {
                     if (outsideBorders.length <= 0) {
-                        outsideBorders.push(group.splice(index, 1)[0]);
-                    }
-                    else {
+                        outsideBorders.push(border);
+                        indicesToRemove.push(index);
+                    } else {
                         if (!outsideBorders.some(outBorder => {
                             return (border.scrd[0] > outBorder.scrd[0] && border.scrd[0] < outBorder.scrd[1]) || (border.scrd[1] > outBorder.scrd[0] && border.scrd[1] < outBorder.scrd[1]);
                         })) {
-                            outsideBorders.push(group.splice(index, 1)[0]);
+                            outsideBorders.push(border);
+                            indicesToRemove.push(index);
                         }
                     }
                 });
-
+                
                 return outsideBorders;
             }
 
@@ -1245,3 +1276,4 @@
 </body>
 
 </html>
+
