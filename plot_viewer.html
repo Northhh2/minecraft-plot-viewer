@@ -786,26 +786,42 @@
                 
                 const topBorders = outsideBorders.top.sort((a, b) => a.scrd[0] - b.scrd[0]);
                 topBorders.forEach(b => {
-                    allPoints.push([b.scrd[0], b.fcrd]);
-                    allPoints.push([b.scrd[1], b.fcrd]);
+                    if (allPoints.length === 0 || allPoints[allPoints.length - 1][0] !== b.scrd[0]) {
+                        allPoints.push([b.scrd[0], b.fcrd]);
+                    }
+                    if (allPoints[allPoints.length - 1][0] !== b.scrd[1]) {
+                        allPoints.push([b.scrd[1], b.fcrd]);
+                    }
                 });
 
                 const rightBorders = outsideBorders.right.sort((a, b) => a.scrd[0] - b.scrd[0]);
                 rightBorders.forEach(b => {
-                    allPoints.push([b.fcrd, b.scrd[0]]);
-                    allPoints.push([b.fcrd, b.scrd[1]]);
+                    if (allPoints.length === 0 || !(allPoints[allPoints.length - 1][0] === b.fcrd && allPoints[allPoints.length - 1][1] === b.scrd[0])) {
+                        allPoints.push([b.fcrd, b.scrd[0]]);
+                    }
+                    if (!(allPoints[allPoints.length - 1][0] === b.fcrd && allPoints[allPoints.length - 1][1] === b.scrd[1])) {
+                        allPoints.push([b.fcrd, b.scrd[1]]);
+                    }
                 });
 
                 const bottomBorders = outsideBorders.bottom.sort((a, b) => b.scrd[1] - a.scrd[1]);
                 bottomBorders.forEach(b => {
-                    allPoints.push([b.scrd[1], b.fcrd]);
-                    allPoints.push([b.scrd[0], b.fcrd]);
+                    if (allPoints.length === 0 || !(allPoints[allPoints.length - 1][0] === b.scrd[1] && allPoints[allPoints.length - 1][1] === b.fcrd)) {
+                        allPoints.push([b.scrd[1], b.fcrd]);
+                    }
+                    if (!(allPoints[allPoints.length - 1][0] === b.scrd[0] && allPoints[allPoints.length - 1][1] === b.fcrd)) {
+                        allPoints.push([b.scrd[0], b.fcrd]);
+                    }
                 });
 
                 const leftBorders = outsideBorders.left.sort((a, b) => b.scrd[1] - a.scrd[1]);
                 leftBorders.forEach(b => {
-                    allPoints.push([b.fcrd, b.scrd[1]]);
-                    allPoints.push([b.fcrd, b.scrd[0]]);
+                    if (allPoints.length === 0 || !(allPoints[allPoints.length - 1][0] === b.fcrd && allPoints[allPoints.length - 1][1] === b.scrd[1])) {
+                        allPoints.push([b.fcrd, b.scrd[1]]);
+                    }
+                    if (!(allPoints[allPoints.length - 1][0] === b.fcrd && allPoints[allPoints.length - 1][1] === b.scrd[0])) {
+                        allPoints.push([b.fcrd, b.scrd[0]]);
+                    }
                 });
                 
                 if (allPoints.length < 2) return '';
