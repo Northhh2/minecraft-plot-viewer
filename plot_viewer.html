@@ -753,6 +753,7 @@
             function createDistrictOutline(plots) {
                 if (plots.length === 0) return '';
                 const borders = { top: [], right: [], bottom: [], left: [] };
+                console.log(plots[0].district)
 
                 plots.forEach(plot => {
                     const x_min = Math.min(plot.x1, plot.x2);
