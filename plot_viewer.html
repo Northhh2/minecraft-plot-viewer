@@ -761,10 +761,10 @@
                     const z_min = Math.min(plot.z1, plot.z2);
                     const z_max = Math.max(plot.z1, plot.z2);
                     
-                    borders.top.push({ fcrd: z_min, scrd: [x_min, x_max] });
-                    borders.bottom.push({ fcrd: z_max, scrd: [x_min, x_max] });
-                    borders.left.push({ fcrd: x_min, scrd: [z_min, z_max] });
-                    borders.right.push({ fcrd: x_max, scrd: [z_min, z_max] });
+                    borders.top.push({ name: plot.name, fcrd: z_min, scrd: [x_min, x_max] });
+                    borders.bottom.push({ name: plot.name, fcrd: z_max, scrd: [x_min, x_max] });
+                    borders.left.push({ name: plot.name, fcrd: x_min, scrd: [z_min, z_max] });
+                    borders.right.push({ name: plot.name, fcrd: x_max, scrd: [z_min, z_max] });
                 });
 
                 borders.top.sort((a, b) => a.fcrd - b.fcrd);
