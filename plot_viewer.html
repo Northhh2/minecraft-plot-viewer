@@ -778,6 +778,8 @@
                     right: extendBorders(filterBorders(JSON.parse(JSON.stringify(borders.right)))),
                 };
 
+                console.log(outsideBorders);
+
                 const allPoints = [];
                 
                 const topBorders = outsideBorders.top.sort((a, b) => a.scrd[0] - b.scrd[0]);
