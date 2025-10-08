@@ -732,64 +732,101 @@
                 return clusters;
             }
 
-            /**
-             * Tworzy kontur dzielnicy używając algorytmu Convex Hull (Graham Scan).
-             * Tworzy wypukły wielokąt okalający wszystkie działki w dzielnicy.
-             * 
-             * @param {Array<Object>} plots Lista obiektów działek z polami x1, z1, x2, z2.
-             * @returns {string} Ścieżka SVG konturu.
-             */
             function createDistrictOutline(plots) {
                 if (plots.length === 0) return '';
                 const districtName = plots[0].district;
-                console.log(`🎨 Tworzenie konturu dla dzielnicy '${districtName}' (${plots.length} działek)`);
-
-                const borders = {
-                    top: [],
-                    right: [],
-                    bottom: [],
-                    left: []
-                };
-                let gxmin, gxmax, gzmin, gzmax;
-
+                
+                const borders = { top: [], right: [], bottom: [], left: [] };
+            
                 plots.forEach(plot => {
                     const x_min = Math.min(plot.x1, plot.x2);
                     const x_max = Math.max(plot.x1, plot.x2);
                     const z_min = Math.min(plot.z1, plot.z2);
                     const z_max = Math.max(plot.z1, plot.z2);
-                    gxmin = (gxmin ? (gxmin > x_min ? x_min : gxmin) : x_min);
-                    gxmax = (gxmax ? (gxmax < x_max ? x_max : gxmax) : x_max);
-                    gzmin = (gzmin ? (gzmin > z_min ? z_min : gzmin) : z_min);
-                    gzmax = (gzmax ? (gzmax < z_max ? z_max : gzmax) : z_max);
 
-                    borders.top.push({ fcrd: x_max, scrd: [z_min, z_max] });
-                    borders.bottom.push({ fcrd: x_min, scrd: [z_min, z_max] });
-                    borders.left.push({ fcrd: z_min, scrd: [x_min, x_max] });
-                    borders.right.push({ fcrd: z_max, scrd: [x_min, x_max] });
+                    // [MODYFIKACJA] Poprawione przypisanie współrzędnych.
+                    // Dla krawędzi poziomych (top, bottom), 'fcrd' to Z, a 'scrd' to zakres [X1, X2].
+                    // Dla krawędzi pionowych (left, right), 'fcrd' to X, a 'scrd' to zakres [Z1, Z2].
+                    borders.top.push({ fcrd: z_min, scrd: [x_min, x_max] });
+                    borders.bottom.push({ fcrd: z_max, scrd: [x_min, x_max] });
+                    borders.left.push({ fcrd: x_min, scrd: [z_min, z_max] });
+                    borders.right.push({ fcrd: x_max, scrd: [z_min, z_max] });
                 });
 
-                borders.top.sort((a, b) => b.fcrd - a.fcrd);
-                borders.bottom.sort((a, b) => a.fcrd - b.fcrd);
-                borders.left.sort((a, b) => a.fcrd - b.fcrd);
-                borders.right.sort((a, b) => b.fcrd - a.fcrd);
-                console.log(borders);
+                // [MODYFIKACJA] Poprawione sortowanie, aby logika filtrowania miała większe szanse na znalezienie zewnętrznych krawędzi.
+                borders.top.sort((a, b) => a.fcrd - b.fcrd || a.scrd[0] - b.scrd[0]);
+                borders.bottom.sort((a, b) => b.fcrd - a.fcrd || a.scrd[0] - b.scrd[0]);
+                borders.left.sort((a, b) => a.fcrd - b.fcrd || a.scrd[0] - b.scrd[0]);
+                borders.right.sort((a, b) => b.fcrd - a.fcrd || a.scrd[0] - b.scrd[0]);
 
-                let outsideBorders = {
-                    top: null,
-                    bottom: null,
-                    left: null,
-                    right: null,
-                }
+                let outsideBorders = { top: null, bottom: null, left: null, right: null };
 
                 outsideBorders.top = extendBorders(filterBorders(borders.top));
                 outsideBorders.bottom = extendBorders(filterBorders(borders.bottom));
                 outsideBorders.left = extendBorders(filterBorders(borders.left));
                 outsideBorders.right = extendBorders(filterBorders(borders.right));
-                console.log(outsideBorders);
+                
+                // --- POCZĄTEK NOWEGO KODU ---
+                
+                const allPoints = [];
 
-                let svgPath = `M 0 0`;
-                svgPath += ' Z';
+                // 1. Górne krawędzie, od lewej do prawej
+                const topBorders = outsideBorders.top.sort((a, b) => a.scrd[0] - b.scrd[0]);
+                topBorders.forEach(b => {
+                    allPoints.push([b.scrd[0], b.fcrd]); // lewy punkt
+                    allPoints.push([b.scrd[1], b.fcrd]); // prawy punkt
+                });
+
+                // 2. Prawe krawędzie, od góry do dołu
+                const rightBorders = outsideBorders.right.sort((a, b) => a.scrd[0] - b.scrd[0]);
+                rightBorders.forEach(b => {
+                    allPoints.push([b.fcrd, b.scrd[0]]); // górny punkt
+                    allPoints.push([b.fcrd, b.scrd[1]]); // dolny punkt
+                });
+
+                // 3. Dolne krawędzie, od prawej do lewej
+                const bottomBorders = outsideBorders.bottom.sort((a, b) => b.scrd[1] - a.scrd[1]);
+                bottomBorders.forEach(b => {
+                    allPoints.push([b.scrd[1], b.fcrd]); // prawy punkt
+                    allPoints.push([b.scrd[0], b.fcrd]); // lewy punkt
+                });
+
+                // 4. Lewe krawędzie, od dołu do góry
+                const leftBorders = outsideBorders.left.sort((a, b) => b.scrd[1] - a.scrd[1]);
+                leftBorders.forEach(b => {
+                    allPoints.push([b.fcrd, b.scrd[1]]); // dolny punkt
+                    allPoints.push([b.fcrd, b.scrd[0]]); // górny punkt
+                });
+                
+                if (allPoints.length < 2) return '';
+
+                // Usuwanie zduplikowanych, następujących po sobie punktów
+                const pathPoints = allPoints.filter((point, i, arr) => {
+                    if (i === 0) return true;
+                    const prev = arr[i - 1];
+                    return point[0] !== prev[0] || point[1] !== prev[1];
+                });
+
+                // Usunięcie ostatniego punktu, jeśli jest taki sam jak pierwszy
+                if (pathPoints.length > 1) {
+                    const first = pathPoints[0];
+                    const last = pathPoints[pathPoints.length - 1];
+                    if (first[0] === last[0] && first[1] === last[1]) {
+                        pathPoints.pop();
+                    }
+                }
+
+                if (pathPoints.length < 2) return '';
+
+                // Budowanie finalnej ścieżki SVG
+                let svgPath = 'M ' + pathPoints[0].join(' ');
+                for (let i = 1; i < pathPoints.length; i++) {
+                    svgPath += ' L ' + pathPoints[i].join(' ');
+                }
+                svgPath += ' Z'; // Zamknięcie ścieżki
+                
                 return svgPath;
+                // --- KONIEC NOWEGO KODU ---
             }
 
             function filterBorders(group) {
