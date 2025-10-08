@@ -775,11 +775,16 @@
                 console.log(borders);
 
                 let outsideBorders = {
-                    top: filterBorders(borders.top),
-                    bottom: filterBorders(borders.botton),
-                    left: filterBorders(borders.left),
-                    right: filterBorders(borders.right),
+                    top,
+                    bottom,
+                    left,
+                    right,
                 }
+
+                outsideBorders.top = filterBorders(borders.top);
+                outsideBorders.bottom = filterBorders(borders.bottom);
+                outsideBorders.left = filterBorders(borders.left);
+                outsideBorders.right = filterBorders(borders.right);
 
                 console.log(outsideBorders);
 
