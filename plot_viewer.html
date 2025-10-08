@@ -767,8 +767,8 @@
                     borders.right.push({ fcrd: x_max, scrd: [z_min, z_max] });
                 });
 
-                borders.top.sort((a, b) => b.fcrd - a.fcrd);
-                borders.bottom.sort((a, b) => a.fcrd - b.fcrd);
+                borders.top.sort((a, b) => a.fcrd - b.fcrd);
+                borders.bottom.sort((a, b) => b.fcrd - a.fcrd);
                 borders.left.sort((a, b) => a.fcrd - b.fcrd);
                 borders.right.sort((a, b) => b.fcrd - a.fcrd);
 
