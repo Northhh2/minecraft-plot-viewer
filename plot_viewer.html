@@ -805,6 +805,8 @@
 
                 if (allSegments.length === 0) return '';
 
+                console.log('All segments:', allSegments);
+
                 // Build adjacency map: each point maps to its connected points
                 const adjMap = new Map();
 
@@ -819,6 +821,8 @@
                     adjMap.get(key1).push(key2);
                     adjMap.get(key2).push(key1);
                 });
+
+                console.log('Adjacency map size:', adjMap.size);
 
                 // Find contours by traversing the graph
                 const visited = new Set();
@@ -851,6 +855,9 @@
                     }
                 }
 
+                console.log('Contours found:', contours.length);
+                console.log('Contour details:', contours);
+
                 // Build SVG path from contours
                 let svgPath = '';
                 contours.forEach(contour => {
@@ -862,6 +869,8 @@
                     }
                     svgPath += 'Z ';
                 });
+
+                console.log('Final SVG path:', svgPath);
 
                 return svgPath.trim();
             }
