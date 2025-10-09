@@ -743,7 +743,7 @@
             function createDistrictOutline(plots) {
                 if (plots.length === 0) return '';
 
-                // --- Krok 1: Przygotowanie danych (bez zmian) ---
+                // --- Krok 1 i 2: Znajdowanie zewnętrznych krawędzi (bez zmian) ---
                 const borders = { top: [], right: [], bottom: [], left: [] };
                 let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
 
@@ -791,85 +791,38 @@
                     return externalBorders;
                 };
 
-                // --- Krok 2: Znajdź zewnętrzne segmenty (bez zmian) ---
                 const topExt = sweepAndFindBorders(borders.top, [minX, maxX], true);
                 const bottomExt = sweepAndFindBorders(borders.bottom, [minX, maxX], false);
                 const leftExt = sweepAndFindBorders(borders.left, [minZ, maxZ], true);
                 const rightExt = sweepAndFindBorders(borders.right, [minZ, maxZ], false);
 
-                const allSegmentsRaw = [
+                const allSegments = [
                     ...topExt.map(s => [[s.scrd[0], s.fcrd], [s.scrd[1], s.fcrd]]),
                     ...bottomExt.map(s => [[s.scrd[0], s.fcrd], [s.scrd[1], s.fcrd]]),
                     ...leftExt.map(s => [[s.fcrd, s.scrd[0]], [s.fcrd, s.scrd[1]]]),
                     ...rightExt.map(s => [[s.fcrd, s.scrd[0]], [s.fcrd, s.scrd[1]]]),
                 ];
-                let segments = allSegmentsRaw.filter(s => s[0][0] !== s[1][0] || s[0][1] !== s[1][1]);
 
-                // --- Krok 3: NOWA, UPROSZCZONA LOGIKA ŁĄCZENIA ŚCIEŻEK ---
-                if (segments.length === 0) return '';
+                // --- Krok 3: WIZUALIZACJA PUNKTÓW KOŃCOWYCH ---
+                // Zamiast łączyć linie, rysujemy krzyżyki w punktach, gdzie
+                // linie powinny się zaczynać i kończyć.
+                let debugPath = '';
+                const markerSize = 2; // Wielkość krzyżyka
 
-                let svgPath = '';
-                while (segments.length > 0) {
-                    // Zacznij nową ścieżkę od pierwszego dostępnego segmentu
-                    let currentPath = segments.shift();
-                    let head = currentPath[0];
-                    let tail = currentPath[currentPath.length - 1];
+                allSegments.forEach(segment => {
+                    const p1 = segment[0]; // Punkt [x, z]
+                    const p2 = segment[1]; // Punkt [x, z]
 
-                    let foundConnection = true;
-                    while (foundConnection) {
-                        foundConnection = false;
-                        for (let i = 0; i < segments.length; i++) {
-                            const nextSegment = segments[i];
-                            const nextHead = nextSegment[0];
-                            const nextTail = nextSegment[1];
+                    // Rysuj krzyżyk w punkcie p1
+                    debugPath += ` M ${p1[0] - markerSize} ${p1[1] - markerSize} L ${p1[0] + markerSize} ${p1[1] + markerSize}`;
+                    debugPath += ` M ${p1[0] - markerSize} ${p1[1] + markerSize} L ${p1[0] + markerSize} ${p1[1] - markerSize}`;
 
-                            // Sprawdź, czy następny segment łączy się z końcem naszej ścieżki
-                            if (tail[0] === nextHead[0] && tail[1] === nextHead[1]) {
-                                currentPath.push(nextTail);
-                                tail = nextTail;
-                                segments.splice(i, 1);
-                                foundConnection = true;
-                                break;
-                            }
-                            // Sprawdź, czy łączy się z końcem (ale w odwrotnej kolejności)
-                            if (tail[0] === nextTail[0] && tail[1] === nextTail[1]) {
-                                currentPath.push(nextHead);
-                                tail = nextHead;
-                                segments.splice(i, 1);
-                                foundConnection = true;
-                                break;
-                            }
-                            // Sprawdź, czy łączy się z początkiem naszej ścieżki
-                            if (head[0] === nextTail[0] && head[1] === nextTail[1]) {
-                                currentPath.unshift(nextHead);
-                                head = nextHead;
-                                segments.splice(i, 1);
-                                foundConnection = true;
-                                break;
-                            }
-                            // Sprawdź, czy łączy się z początkiem (ale w odwrotnej kolejności)
-                            if (head[0] === nextHead[0] && head[1] === nextHead[1]) {
-                                currentPath.unshift(nextTail);
-                                head = nextTail;
-                                segments.splice(i, 1);
-                                foundConnection = true;
-                                break;
-                            }
-                        }
-                    }
+                    // Rysuj krzyżyk w punkcie p2
+                    debugPath += ` M ${p2[0] - markerSize} ${p2[1] - markerSize} L ${p2[0] + markerSize} ${p2[1] + markerSize}`;
+                    debugPath += ` M ${p2[0] - markerSize} ${p2[1] + markerSize} L ${p2[0] + markerSize} ${p2[1] - markerSize}`;
+                });
 
-                    // Zbuduj ścieżkę SVG z połączonych punktów
-                    svgPath += `M ${currentPath[0][0]} ${currentPath[0][1]} `;
-                    for (let i = 1; i < currentPath.length; i++) {
-                        svgPath += `L ${currentPath[i][0]} ${currentPath[i][1]} `;
-                    }
-                    // Jeśli ścieżka jest zamknięta, dodaj 'Z'
-                    if (head[0] === tail[0] && head[1] === tail[1]) {
-                        svgPath += 'Z ';
-                    }
-                }
-
-                return svgPath.trim();
+                return debugPath;
             }
 
             function filterBorders(group) {
