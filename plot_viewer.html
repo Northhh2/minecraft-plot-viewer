@@ -742,7 +742,10 @@
 
             function createDistrictOutline(plots) {
                 if (plots.length === 0) return '';
+
+                // --- Krok 1: Przygotowanie danych ---
                 const borders = { top: [], right: [], bottom: [], left: [] };
+                let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
 
                 plots.forEach(plot => {
                     const x_min = Math.min(plot.x1, plot.x2);
@@ -750,98 +753,132 @@
                     const z_min = Math.min(plot.z1, plot.z2);
                     const z_max = Math.max(plot.z1, plot.z2);
 
-                    borders.top.push({ name: plot.name, fcrd: z_min, scrd: [x_min, x_max] });
-                    borders.bottom.push({ name: plot.name, fcrd: z_max, scrd: [x_min, x_max] });
-                    borders.left.push({ name: plot.name, fcrd: x_min, scrd: [z_min, z_max] });
-                    borders.right.push({ name: plot.name, fcrd: x_max, scrd: [z_min, z_max] });
+                    minX = Math.min(minX, x_min);
+                    maxX = Math.max(maxX, x_max);
+                    minZ = Math.min(minZ, z_min);
+                    maxZ = Math.max(maxZ, z_max);
+
+                    borders.top.push({ fcrd: z_min, scrd: [x_min, x_max] });
+                    borders.bottom.push({ fcrd: z_max, scrd: [x_min, x_max] });
+                    borders.left.push({ fcrd: x_min, scrd: [z_min, z_max] });
+                    borders.right.push({ fcrd: x_max, scrd: [z_min, z_max] });
                 });
 
-                borders.top.sort((a, b) => a.fcrd - b.fcrd);
-                borders.bottom.sort((a, b) => b.fcrd - a.fcrd);
-                borders.left.sort((a, b) => a.fcrd - b.fcrd);
-                borders.right.sort((a, b) => b.fcrd - a.fcrd);
+                /**
+                 * Główna logika algorytmu "formy" / "skanera".
+                 * @param {Array} a_borders - Krawędzie do sprawdzenia (np. wszystkie górne).
+                 * @param {Array} span - Zakres skanowania (np. [minX, maxX] dla skanera góra-dół).
+                 * @param {boolean} sortAsc - Kierunek sortowania (true dla góra->dół i lewo->prawo).
+                 * @returns {Array} - Znalezione zewnętrzne segmenty granic.
+                 */
+                const sweepAndFindBorders = (a_borders, span, sortAsc) => {
+                    const externalBorders = [];
+                    let uncoveredSpan = [span]; // Początkowo cała przestrzeń jest "odkryta"
 
-                let outsideBorders = {
-                    top: extendBorders(filterBorders(JSON.parse(JSON.stringify(borders.top)))),
-                    bottom: extendBorders(filterBorders(JSON.parse(JSON.stringify(borders.bottom)))),
-                    left: extendBorders(filterBorders(JSON.parse(JSON.stringify(borders.left)))),
-                    right: extendBorders(filterBorders(JSON.parse(JSON.stringify(borders.right)))),
+                    // Sortujemy krawędzie, aby skaner przesuwał się w odpowiedniej kolejności
+                    a_borders.sort((a, b) => sortAsc ? a.fcrd - b.fcrd : b.fcrd - a.fcrd);
+
+                    for (const border of a_borders) {
+                        if (uncoveredSpan.length === 0) break; // Jeśli nic już nie jest odkryte, kończymy
+
+                        const [border_start, border_end] = border.scrd;
+                        const nextUncovered = [];
+
+                        for (const [span_start, span_end] of uncoveredSpan) {
+                            const overlap_start = Math.max(border_start, span_start);
+                            const overlap_end = Math.min(border_end, span_end);
+
+                            // Czy ta krawędź znajduje się w "odkrytym" jeszcze obszarze?
+                            if (overlap_end > overlap_start) {
+                                // Tak - znaleziony fragment jest granicą zewnętrzną
+                                externalBorders.push({ ...border, scrd: [overlap_start, overlap_end] });
+
+                                // Zaktualizuj "odkryty" obszar, usuwając z niego znaleziony fragment
+                                if (span_start < overlap_start) {
+                                    nextUncovered.push([span_start, overlap_start]);
+                                }
+                                if (span_end > overlap_end) {
+                                    nextUncovered.push([overlap_end, span_end]);
+                                }
+                            } else {
+                                // Nie - ten fragment odkrytego obszaru pozostaje bez zmian
+                                nextUncovered.push([span_start, span_end]);
+                            }
+                        }
+                        uncoveredSpan = nextUncovered;
+                    }
+                    return externalBorders;
                 };
 
-                console.log(borders);
-                console.log(outsideBorders);
+                // --- Krok 2: Uruchomienie "skanerów" dla każdej ze stron ---
+                const topExt = sweepAndFindBorders(borders.top, [minX, maxX], true);
+                const bottomExt = sweepAndFindBorders(borders.bottom, [minX, maxX], false);
+                const leftExt = sweepAndFindBorders(borders.left, [minZ, maxZ], true);
+                const rightExt = sweepAndFindBorders(borders.right, [minZ, maxZ], false);
 
-                const allPoints = [];
+                const allExternalSegments = [...topExt, ...bottomExt, ...leftExt, ...rightExt];
 
-                // Top borders: left to right (sort by X start, then add points left-to-right)
-                const topBorders = outsideBorders.top.sort((a, b) => a.scrd[0] - b.scrd[0]);
-                topBorders.forEach(b => {
-                    if (allPoints.length === 0 || allPoints[allPoints.length - 1][0] !== b.scrd[0]) {
-                        allPoints.push([b.scrd[0], b.fcrd]);
+                // --- Krok 3: Konwersja znalezionych segmentów na ścieżkę SVG ---
+                // Ta część jest skomplikowana, ale konieczna do połączenia oddzielnych
+                // fragmentów w jeden lub więcej ciągłych obrysów.
+                const points = new Map(); // Mapa do łączenia segmentów
+
+                allExternalSegments.forEach(seg => {
+                    let p1_key, p2_key;
+                    if (seg.fcrd === seg.scrd[0] || seg.fcrd === seg.scrd[1]) { // Pionowa linia
+                        p1_key = `${seg.fcrd},${seg.scrd[0]}`;
+                        p2_key = `${seg.fcrd},${seg.scrd[1]}`;
+                    } else { // Pozioma linia
+                        p1_key = `${seg.scrd[0]},${seg.fcrd}`;
+                        p2_key = `${seg.scrd[1]},${seg.fcrd}`;
                     }
-                    if (allPoints[allPoints.length - 1][0] !== b.scrd[1]) {
-                        allPoints.push([b.scrd[1], b.fcrd]);
-                    }
+
+                    if (!points.has(p1_key)) points.set(p1_key, []);
+                    if (!points.has(p2_key)) points.set(p2_key, []);
+                    points.get(p1_key).push(p2_key);
+                    points.get(p2_key).push(p1_key);
                 });
 
-                // Right borders: top to bottom (sort by Z start, then add points top-to-bottom)
-                const rightBorders = outsideBorders.right.sort((a, b) => a.scrd[0] - b.scrd[0]);
-                rightBorders.forEach(b => {
-                    if (allPoints.length === 0 || !(allPoints[allPoints.length - 1][0] === b.fcrd && allPoints[allPoints.length - 1][1] === b.scrd[0])) {
-                        allPoints.push([b.fcrd, b.scrd[0]]);
+                let svgPath = '';
+                while (points.size > 0) {
+                    const [startKey, startConnections] = points.entries().next().value;
+                    if (!startConnections || startConnections.length === 0) {
+                        points.delete(startKey);
+                        continue;
                     }
-                    if (!(allPoints[allPoints.length - 1][0] === b.fcrd && allPoints[allPoints.length - 1][1] === b.scrd[1])) {
-                        allPoints.push([b.fcrd, b.scrd[1]]);
-                    }
-                });
 
-                // Bottom borders: right to left (sort by X end descending, then add points right-to-left)
-                const bottomBorders = outsideBorders.bottom.sort((a, b) => b.scrd[1] - a.scrd[1]);
-                bottomBorders.forEach(b => {
-                    if (allPoints.length === 0 || !(allPoints[allPoints.length - 1][0] === b.scrd[1] && allPoints[allPoints.length - 1][1] === b.fcrd)) {
-                        allPoints.push([b.scrd[1], b.fcrd]);
-                    }
-                    if (!(allPoints[allPoints.length - 1][0] === b.scrd[0] && allPoints[allPoints.length - 1][1] === b.fcrd)) {
-                        allPoints.push([b.scrd[0], b.fcrd]);
-                    }
-                });
+                    let currentKey = startKey;
+                    svgPath += `M ${startKey.replace(',', ' ')} `;
 
-                // Left borders: bottom to top (sort by Z end descending, then add points bottom-to-top)
-                const leftBorders = outsideBorders.left.sort((a, b) => b.scrd[1] - a.scrd[1]);
-                leftBorders.forEach(b => {
-                    if (allPoints.length === 0 || !(allPoints[allPoints.length - 1][0] === b.fcrd && allPoints[allPoints.length - 1][1] === b.scrd[1])) {
-                        allPoints.push([b.fcrd, b.scrd[1]]);
-                    }
-                    if (!(allPoints[allPoints.length - 1][0] === b.fcrd && allPoints[allPoints.length - 1][1] === b.scrd[0])) {
-                        allPoints.push([b.fcrd, b.scrd[0]]);
-                    }
-                });
+                    while (currentKey) {
+                        const connections = points.get(currentKey);
+                        if (!connections || connections.length === 0) {
+                            points.delete(currentKey);
+                            break;
+                        }
+                        const nextKey = connections.shift();
 
-                if (allPoints.length < 2) return '';
+                        // Usuń połączenie zwrotne
+                        const nextConnections = points.get(nextKey);
+                        const index = nextConnections.indexOf(currentKey);
+                        if (index > -1) nextConnections.splice(index, 1);
 
-                const pathPoints = allPoints.filter((point, i, arr) => {
-                    if (i === 0) return true;
-                    const prev = arr[i - 1];
-                    return point[0] !== prev[0] || point[1] !== prev[1];
-                });
+                        svgPath += `L ${nextKey.replace(',', ' ')} `;
 
-                if (pathPoints.length > 1) {
-                    const first = pathPoints[0];
-                    const last = pathPoints[pathPoints.length - 1];
-                    if (first[0] === last[0] && first[1] === last[1]) {
-                        pathPoints.pop();
+                        if (connections.length === 0) points.delete(currentKey);
+
+                        currentKey = nextKey;
+
+                        if (currentKey === startKey) { // Zamknięta pętla
+                            svgPath += 'Z ';
+                            const finalConnections = points.get(currentKey);
+                            if (finalConnections && finalConnections.length === 0) points.delete(currentKey);
+                            break;
+                        }
                     }
                 }
 
-                if (pathPoints.length < 2) return '';
-
-                let svgPath = 'M ' + pathPoints[0].join(' ');
-                for (let i = 1; i < pathPoints.length; i++) {
-                    svgPath += ' L ' + pathPoints[i].join(' ');
-                }
-                svgPath += ' Z';
-
-                return svgPath;
+                return svgPath.trim();
             }
 
             function filterBorders(group) {
