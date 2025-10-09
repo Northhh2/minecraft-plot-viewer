@@ -805,8 +805,6 @@
 
                 if (allSegments.length === 0) return '';
 
-                console.log('All segments:', allSegments);
-
                 // Build adjacency map: each point maps to its connected points
                 const adjMap = new Map();
 
@@ -818,61 +816,106 @@
                     if (!adjMap.has(key1)) adjMap.set(key1, []);
                     if (!adjMap.has(key2)) adjMap.set(key2, []);
 
-                    adjMap.get(key1).push(key2);
-                    adjMap.get(key2).push(key1);
+                    adjMap.get(key1).push({ key: key2, point: p2 });
+                    adjMap.get(key2).push({ key: key1, point: p1 });
                 });
 
-                console.log('Adjacency map size:', adjMap.size);
+                // Helper function to calculate angle from point A to point B
+                function getAngle(fromKey, toKey) {
+                    const [fx, fy] = fromKey.split(',').map(Number);
+                    const [tx, ty] = toKey.split(',').map(Number);
+                    return Math.atan2(ty - fy, tx - fx);
+                }
 
-                // Find contours by traversing the graph
-                const visited = new Set();
-                const contours = [];
-
-                for (const startKey of adjMap.keys()) {
-                    if (visited.has(startKey)) continue;
-
-                    const contour = [startKey];
-                    visited.add(startKey);
-                    let current = startKey;
-
-                    // Follow the path
-                    while (true) {
-                        const neighbors = adjMap.get(current) || [];
-                        const next = neighbors.find(n => !visited.has(n));
-
-                        if (!next) {
-                            // Check if we can close the loop
-                            const lastNeighbors = adjMap.get(current) || [];
-                            if (lastNeighbors.includes(startKey) && contour.length > 2) {
-                                contours.push(contour);
-                            }
-                            break;
-                        }
-
-                        visited.add(next);
-                        contour.push(next);
-                        current = next;
+                // Find the starting point (leftmost, then topmost)
+                let startKey = null;
+                let minX = Infinity, minY = Infinity;
+                for (const key of adjMap.keys()) {
+                    const [x, y] = key.split(',').map(Number);
+                    if (x < minX || (x === minX && y < minY)) {
+                        minX = x;
+                        minY = y;
+                        startKey = key;
                     }
                 }
 
-                console.log('Contours found:', contours.length);
-                console.log('Contour details:', contours);
+                if (!startKey) return '';
 
-                // Build SVG path from contours
-                let svgPath = '';
-                contours.forEach(contour => {
-                    if (contour.length < 3) return;
+                // Traverse the boundary clockwise
+                const contour = [startKey];
+                const visited = new Set();
+                visited.add(startKey);
+                let current = startKey;
+                let prevKey = null;
 
-                    svgPath += `M ${contour[0].replace(',', ' ')} `;
-                    for (let i = 1; i < contour.length; i++) {
-                        svgPath += `L ${contour[i].replace(',', ' ')} `;
+                while (true) {
+                    const neighbors = adjMap.get(current) || [];
+
+                    if (neighbors.length === 0) break;
+
+                    // Sort neighbors by angle (counterclockwise from previous direction)
+                    let nextNeighbor = null;
+
+                    if (prevKey === null) {
+                        // First step: go to the rightmost neighbor (smallest angle from positive x-axis)
+                        let minAngle = Infinity;
+                        for (const neighbor of neighbors) {
+                            const angle = getAngle(current, neighbor.key);
+                            if (angle < minAngle) {
+                                minAngle = angle;
+                                nextNeighbor = neighbor;
+                            }
+                        }
+                    } else {
+                        // Choose the next neighbor by taking the rightmost turn
+                        const prevAngle = getAngle(current, prevKey);
+                        let bestAngle = Infinity;
+
+                        for (const neighbor of neighbors) {
+                            if (neighbor.key === prevKey) continue;
+
+                            const angle = getAngle(current, neighbor.key);
+                            let relativeAngle = angle - prevAngle;
+
+                            // Normalize to [0, 2π)
+                            while (relativeAngle < 0) relativeAngle += Math.PI * 2;
+                            while (relativeAngle >= Math.PI * 2) relativeAngle -= Math.PI * 2;
+
+                            // We want the smallest positive angle (rightmost turn)
+                            if (relativeAngle < bestAngle) {
+                                bestAngle = relativeAngle;
+                                nextNeighbor = neighbor;
+                            }
+                        }
                     }
-                    svgPath += 'Z ';
-                });
 
-                console.log('Final SVG path:', svgPath);
+                    if (!nextNeighbor) break;
 
-                return svgPath.trim();
+                    // Check if we've completed the loop
+                    if (nextNeighbor.key === startKey && contour.length > 2) {
+                        break;
+                    }
+
+                    if (visited.has(nextNeighbor.key)) break;
+
+                    visited.add(nextNeighbor.key);
+                    contour.push(nextNeighbor.key);
+                    prevKey = current;
+                    current = nextNeighbor.key;
+                }
+
+                console.log('Contour length:', contour.length);
+
+                // Build SVG path
+                if (contour.length < 3) return '';
+
+                let svgPath = `M ${contour[0].replace(',', ' ')} `;
+                for (let i = 1; i < contour.length; i++) {
+                    svgPath += `L ${contour[i].replace(',', ' ')} `;
+                }
+                svgPath += 'Z';
+
+                return svgPath;
             }
 
 
