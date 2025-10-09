@@ -844,59 +844,65 @@
 
                 // Traverse the boundary clockwise
                 const contour = [startKey];
-                const usedEdges = new Set(); // Track used edges instead of visited points
+                const usedEdges = new Set();
                 let current = startKey;
                 let prevKey = null;
+                let iterations = 0;
+                const maxIterations = adjMap.size * 4; // Safety limit
 
-                while (true) {
+                while (iterations++ < maxIterations) {
                     const neighbors = adjMap.get(current) || [];
 
                     if (neighbors.length === 0) break;
 
-                    // Sort neighbors by angle
                     let nextNeighbor = null;
 
                     if (prevKey === null) {
-                        // First step: go to the rightmost neighbor (smallest angle from positive x-axis)
-                        let minAngle = Infinity;
+                        // First step: go downward (or rightward if no downward option exists)
+                        let bestAngle = -Infinity;
                         for (const neighbor of neighbors) {
                             const edgeKey = `${current}->${neighbor.key}`;
                             if (usedEdges.has(edgeKey)) continue;
 
                             const angle = getAngle(current, neighbor.key);
-                            if (angle < minAngle) {
-                                minAngle = angle;
+                            // Prefer angles close to π/2 (downward) for starting
+                            const score = -Math.abs(angle - Math.PI / 2);
+                            if (score > bestAngle) {
+                                bestAngle = score;
                                 nextNeighbor = neighbor;
                             }
                         }
                     } else {
-                        // Choose the next neighbor by taking the rightmost turn
-                        const prevAngle = getAngle(current, prevKey);
-                        let bestAngle = Infinity;
+                        // Choose the next neighbor by taking the rightmost turn (most negative relative angle)
+                        const incomingAngle = getAngle(prevKey, current);
+                        let bestRelativeAngle = -Infinity;
 
                         for (const neighbor of neighbors) {
+                            if (neighbor.key === prevKey) continue; // Don't go back
+
                             const edgeKey = `${current}->${neighbor.key}`;
                             if (usedEdges.has(edgeKey)) continue;
 
-                            const angle = getAngle(current, neighbor.key);
-                            let relativeAngle = angle - prevAngle;
+                            const outgoingAngle = getAngle(current, neighbor.key);
+                            let relativeAngle = outgoingAngle - incomingAngle;
 
-                            // Normalize to [-π, π)
-                            while (relativeAngle < -Math.PI) relativeAngle += Math.PI * 2;
-                            while (relativeAngle >= Math.PI) relativeAngle -= Math.PI * 2;
+                            // Normalize to (-π, π]
+                            while (relativeAngle <= -Math.PI) relativeAngle += Math.PI * 2;
+                            while (relativeAngle > Math.PI) relativeAngle -= Math.PI * 2;
 
-                            // We want the smallest positive angle (rightmost turn)
-                            // If all angles are negative, take the largest (closest to 0)
-                            if (relativeAngle < 0) relativeAngle += Math.PI * 2;
-
-                            if (relativeAngle < bestAngle) {
-                                bestAngle = relativeAngle;
+                            // We want the most negative angle (sharpest right turn)
+                            // which means the smallest relativeAngle value
+                            if (relativeAngle > bestRelativeAngle) {
+                                bestRelativeAngle = relativeAngle;
                                 nextNeighbor = neighbor;
                             }
                         }
                     }
 
-                    if (!nextNeighbor) break;
+                    if (!nextNeighbor) {
+                        console.log('No next neighbor found at', current);
+                        break;
+                    }
 
                     // Mark edge as used
                     const edgeKey = `${current}->${nextNeighbor.key}`;
@@ -904,6 +910,7 @@
 
                     // Check if we've completed the loop
                     if (nextNeighbor.key === startKey && contour.length > 2) {
+                        console.log('Loop completed with', contour.length, 'points');
                         break;
                     }
 
@@ -913,7 +920,7 @@
                 }
 
                 console.log('Contour length:', contour.length);
-                console.log('Contour points:', contour);
+                console.log('Total segments:', allSegments.length);
 
                 // Build SVG path
                 if (contour.length < 3) return '';
