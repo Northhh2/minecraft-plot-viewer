@@ -52,16 +52,13 @@
             fill-opacity: 1 !important;
             filter: brightness(1.2);
             stroke: #facc15;
-            /* yellow-400 */
             stroke-width: 1.5;
         }
 
         .street-rect {
             fill: #4b5563;
-            /* gray-600 */
             fill-opacity: 0.9;
             stroke: transparent;
-            /* No stroke by default */
             stroke-width: 0.25;
             transition: fill-opacity 0.2s, stroke 0.2s;
         }
@@ -69,7 +66,6 @@
         .street-rect:hover {
             fill-opacity: 0.7;
             stroke: #9ca3af;
-            /* Add stroke on hover */
         }
 
         .merged-plot {
@@ -104,7 +100,6 @@
 
         .street-text.street-vertical {
             writing-mode: vertical-rl;
-            /* Vertical text for vertical streets */
         }
 
         #tooltip {
@@ -139,9 +134,7 @@
         .toggle-button.active {
             opacity: 1;
             background-color: #4338ca;
-            /* indigo-700 */
             border-color: #6d28d9;
-            /* purple-700 */
         }
 
         .hidden-layer {
@@ -161,7 +154,6 @@
 
         .clickable-name:hover {
             color: #a78bfa;
-            /* purple-400 */
         }
 
         @media (max-width: 768px) {
@@ -309,7 +301,7 @@
             const PLOTS_GID = '0';
             const MERGED_GID = '43897086';
             const STREETS_GID = '2101138806';
-            const LOCALS_GID = '875214507'; // New GID for locals
+            const LOCALS_GID = '875214507';
 
             const PLOTS_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${PLOTS_GID}`;
             const MERGED_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${MERGED_GID}`;
@@ -512,13 +504,11 @@
 
                 Object.values(layers).forEach(layer => layer.innerHTML = '');
 
-                // Set layer IDs for toggling
                 layers.districts.id = 'districts-layer';
                 layers.merged.id = 'merged-layer';
                 layers.streets.id = 'streets-layer';
                 layers.plots.id = 'plots-layer';
 
-                // Append layers in correct Z-order (bottom to top)
                 svg.appendChild(layers.districts);
                 svg.appendChild(layers.merged);
                 svg.appendChild(layers.streets);
@@ -753,7 +743,6 @@
             function createDistrictOutline(plots) {
                 if (plots.length === 0) return '';
                 const borders = { top: [], right: [], bottom: [], left: [] };
-                console.log(plots[0].district)
 
                 plots.forEach(plot => {
                     const x_min = Math.min(plot.x1, plot.x2);
@@ -779,11 +768,9 @@
                     right: extendBorders(filterBorders(JSON.parse(JSON.stringify(borders.right)))),
                 };
 
-                console.log(borders);
-                console.log(outsideBorders);
-
                 const allPoints = [];
                 
+                // Top borders: left to right (sort by X start, then add points left-to-right)
                 const topBorders = outsideBorders.top.sort((a, b) => a.scrd[0] - b.scrd[0]);
                 topBorders.forEach(b => {
                     if (allPoints.length === 0 || allPoints[allPoints.length - 1][0] !== b.scrd[0]) {
@@ -793,8 +780,8 @@
                         allPoints.push([b.scrd[1], b.fcrd]);
                     }
                 });
-                console.log(topBorders);
 
+                // Right borders: top to bottom (sort by Z start, then add points top-to-bottom)
                 const rightBorders = outsideBorders.right.sort((a, b) => a.scrd[0] - b.scrd[0]);
                 rightBorders.forEach(b => {
                     if (allPoints.length === 0 || !(allPoints[allPoints.length - 1][0] === b.fcrd && allPoints[allPoints.length - 1][1] === b.scrd[0])) {
@@ -804,8 +791,8 @@
                         allPoints.push([b.fcrd, b.scrd[1]]);
                     }
                 });
-                console.log(rightBorders);
 
+                // Bottom borders: right to left (sort by X end descending, then add points right-to-left)
                 const bottomBorders = outsideBorders.bottom.sort((a, b) => b.scrd[1] - a.scrd[1]);
                 bottomBorders.forEach(b => {
                     if (allPoints.length === 0 || !(allPoints[allPoints.length - 1][0] === b.scrd[1] && allPoints[allPoints.length - 1][1] === b.fcrd)) {
@@ -815,8 +802,8 @@
                         allPoints.push([b.scrd[0], b.fcrd]);
                     }
                 });
-                console.log(bottomBorders);
 
+                // Left borders: bottom to top (sort by Z end descending, then add points bottom-to-top)
                 const leftBorders = outsideBorders.left.sort((a, b) => b.scrd[1] - a.scrd[1]);
                 leftBorders.forEach(b => {
                     if (allPoints.length === 0 || !(allPoints[allPoints.length - 1][0] === b.fcrd && allPoints[allPoints.length - 1][1] === b.scrd[1])) {
@@ -826,7 +813,6 @@
                         allPoints.push([b.fcrd, b.scrd[0]]);
                     }
                 });
-                console.log(leftBorders);
                 
                 if (allPoints.length < 2) return '';
 
@@ -857,9 +843,8 @@
 
             function filterBorders(group) {
                 let outsideBorders = [];
-                let indicesToRemove = [];
 
-                group.forEach((border, index) => {
+                group.forEach((border) => {
                     if (outsideBorders.length <= 0) {
                         outsideBorders.push(border);
                     } else {
@@ -883,23 +868,23 @@
                     const currentXMax = currentBorder.scrd[1];
 
                     let newXMin = currentXMin;
-                    const closestLower = borders
-                        .filter(item => item.scrd[0] < currentXMin)
-                        .sort((a, b) => b.scrd[0] - a.scrd[0])
+                    const closestHigherForMin = borders
+                        .filter(item => item.scrd[0] > currentXMin)
+                        .sort((a, b) => a.scrd[0] - b.scrd[0])
                     [0];
 
-                    if (closestLower) {
-                        newXMin = closestLower.scrd[0];
+                    if (closestHigherForMin) {
+                        newXMin = closestHigherForMin.scrd[0];
                     }
 
                     let newXMax = currentXMax;
-                    const closestHigher = borders
-                        .filter(item => item.scrd[1] > currentXMax)
-                        .sort((a, b) => a.scrd[1] - b.scrd[1])
+                    const closestLowerForMax = borders
+                        .filter(item => item.scrd[1] < currentXMax)
+                        .sort((a, b) => b.scrd[1] - a.scrd[1])
                     [0];
 
-                    if (closestHigher) {
-                        newXMax = closestHigher.scrd[1];
+                    if (closestLowerForMax) {
+                        newXMax = closestLowerForMax.scrd[1];
                     }
 
                     extendedBorders.push({
@@ -1122,7 +1107,6 @@
                         <div class="chart-container"><canvas id="owners-chart"></canvas></div>
                     </div>`;
 
-                // Render charts with specific colors
                 const typeLabels = Object.keys(plotTypes);
                 const typeColors = typeLabels.map(label => getColorForType(label, 1));
                 createChart('plot-type-chart', 'pie', { labels: typeLabels, data: Object.values(plotTypes), colors: typeColors }, 'Typy działek');
@@ -1222,7 +1206,6 @@
                 modalContent.querySelectorAll('.clickable-name[data-owner-name]').forEach(span => span.addEventListener('click', e => { e.preventDefault(); showOwnerModal(e.target.dataset.ownerName); }));
             }
 
-            // --- Event Listeners ---
             closeModalBtn.addEventListener('click', () => { modal.classList.remove('show'); destroyActiveCharts(); });
             mapContainer.addEventListener('click', (e) => {
                 if (e.target === mapContainer || e.target === svg || e.target.id === 'map-svg') { modal.classList.remove('show'); destroyActiveCharts(); }
@@ -1260,7 +1243,7 @@
                 }
             }, { passive: true });
             mapContainer.addEventListener('touchmove', (e) => {
-                touchStartInfo.time = 0; // Invalidate tap if moving
+                touchStartInfo.time = 0;
                 if (touchPanning && e.touches.length === 1) {
                     const dx = (startPoint.x - e.touches[0].clientX) * (viewBox.w / mapContainer.clientWidth);
                     const dy = (startPoint.y - e.touches[0].clientY) * (viewBox.h / mapContainer.clientHeight);
@@ -1299,4 +1282,3 @@
 </body>
 
 </html>
-
