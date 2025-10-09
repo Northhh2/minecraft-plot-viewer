@@ -1252,7 +1252,14 @@
 
             function addModalEventListeners() {
                 modalContent.querySelectorAll('a[data-plot-name]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); findPlotAndCenter(e.target.dataset.plotName); }));
-                modalContent.querySelectorAll('a[data-local-id]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); showLocalModal(e.target.dataset.localId); }));
+
+                // POPRAWIONA LINIA - teraz szuka dowolnego elementu z atrybutem 'data-local-id'
+                modalContent.querySelectorAll('[data-local-id]').forEach(el => el.addEventListener('click', e => {
+                    // e.currentTarget zapewnia, że pobieramy ID z elementu, na którym jest event, a nie np. z klikniętego tekstu wewnątrz
+                    e.preventDefault();
+                    showLocalModal(e.currentTarget.dataset.localId);
+                }));
+
                 modalContent.querySelectorAll('.clickable-name[data-owner-name]').forEach(span => span.addEventListener('click', e => { e.preventDefault(); showOwnerModal(e.target.dataset.ownerName); }));
             }
 
