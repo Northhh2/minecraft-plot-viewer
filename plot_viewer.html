@@ -118,7 +118,6 @@
             transform: translateX(0);
         }
         
-        /* Animacje dla zawartości modalu */
         #modal-content {
             transition: opacity 0.15s ease-out;
         }
@@ -164,6 +163,11 @@
         .clickable-name:hover {
             color: #a78bfa;
         }
+        
+        #search-suggestions {
+            max-height: 300px;
+            overflow-y: auto;
+        }
 
         @media (max-width: 768px) {
             #tooltip {
@@ -198,12 +202,17 @@
 
     <!-- Search Bar -->
     <div class="absolute top-5 left-5 z-30">
-        <div class="flex bg-gray-800 rounded-lg border border-gray-600 shadow-lg">
-            <input type="text" id="search-input" placeholder="Wyszukaj (np. D4/021 lub 21)"
-                class="bg-transparent text-white px-4 py-2 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-purple-500 w-48 md:w-auto"
-                maxlength="15">
-            <button id="search-button"
-                class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-r-lg transition-colors">🔍</button>
+        <div class="relative">
+            <div class="flex bg-gray-800 rounded-lg border border-gray-600 shadow-lg">
+                <input type="text" id="search-input" placeholder="Wyszukaj (działka, właściciel, adres...)"
+                    class="bg-transparent text-white px-4 py-2 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-purple-500 w-48 md:w-64"
+                    maxlength="30" autocomplete="off">
+                <button id="search-button"
+                    class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-r-lg transition-colors">🔍</button>
+            </div>
+            <div id="search-suggestions" class="absolute left-0 mt-2 w-full bg-gray-800 border border-gray-600 rounded-lg shadow-lg z-10 hidden">
+                <!-- Suggestions will be populated here by JS -->
+            </div>
         </div>
     </div>
 
@@ -314,13 +323,15 @@
             const MERGED_GID = '43897086';
             const STREETS_GID = '2101138806';
             const LOCALS_GID = '875214507';
+            const OWNERS_GID = '92681717'; // NOWA TABELA
 
             const PLOTS_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${PLOTS_GID}`;
             const MERGED_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${MERGED_GID}`;
             const STREETS_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${STREETS_GID}`;
             const LOCALS_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${LOCALS_GID}`;
+            const OWNERS_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${OWNERS_GID}`;
 
-            const MAP_IMAGE_URL = 'map.png';
+            const MAP_IMAGE_URL = 'map.webp';
             const MAP_WIDTH = 4296;
             const MAP_HEIGHT = 2360;
 
@@ -333,13 +344,12 @@
             const mapContainer = document.getElementById('map-container');
             const searchInput = document.getElementById('search-input');
             const searchButton = document.getElementById('search-button');
+            const searchSuggestions = document.getElementById('search-suggestions');
             const closeModalBtn = document.getElementById('close-modal');
 
             let viewBox = { x: 0, y: 0, w: 0, h: 0 };
-            let mapBounds = { minX: -MAP_WIDTH / 2, maxX: MAP_WIDTH / 2, minY: -MAP_HEIGHT / 2, maxY: MAP_HEIGHT / 2 };
             let isPanning = false;
             let startPoint = { x: 0, y: 0 };
-            let lastTouchDistance = 0;
             const initialViewBox = {};
             let layerVisibility = { plots: true, streets: true, districts: true, merged: true };
             let touchStartInfo = { time: 0, x: 0, y: 0 };
@@ -349,6 +359,7 @@
 
             let allPlots = [];
             let allLocals = [];
+            let allOwners = []; // NOWA ZMIENNA
             let mergedPlots = [];
             let streets = [];
             
@@ -364,24 +375,15 @@
             function setViewBox(x, y, w, h) {
                 const isMobile = window.innerWidth <= 768;
                 const minZoom = isMobile ? 50 : 100;
-
                 w = Math.max(minZoom, w);
                 w = Math.min(w, maxViewboxWidth);
-                
-                if (initialViewBox.w) {
-                    h = (w / initialViewBox.w) * initialViewBox.h;
-                }
-
-                const minX_bound = -MAP_WIDTH / 2;
-                const minY_bound = -MAP_HEIGHT / 2;
-                const maxX_bound = MAP_WIDTH / 2;
-                const maxY_bound = MAP_HEIGHT / 2;
-
+                if (initialViewBox.w) { h = (w / initialViewBox.w) * initialViewBox.h; }
+                const minX_bound = -MAP_WIDTH / 2, minY_bound = -MAP_HEIGHT / 2;
+                const maxX_bound = MAP_WIDTH / 2, maxY_bound = MAP_HEIGHT / 2;
                 if (x < minX_bound) x = minX_bound;
                 if (y < minY_bound) y = minY_bound;
                 if (x + w > maxX_bound) x = maxX_bound - w;
                 if (y + h > maxY_bound) y = maxY_bound - h;
-
                 viewBox = { x, y, w, h };
                 svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
             }
@@ -402,7 +404,6 @@
                 }
             }
             
-            // --- NOWY SYSTEM NAWIGACJI W MODALU ---
             function openNewModal(state) {
                 modalHistory = [];
                 navigateToModal(state);
@@ -426,22 +427,22 @@
                 modal.classList.remove('show');
             }
 
-
             async function fetchAllData() {
                 try {
                     const responses = await Promise.all([
-                        fetch(PLOTS_URL), fetch(MERGED_URL), fetch(STREETS_URL), fetch(LOCALS_URL)
+                        fetch(PLOTS_URL), fetch(MERGED_URL), fetch(STREETS_URL), fetch(LOCALS_URL), fetch(OWNERS_URL)
                     ]);
 
                     if (responses.some(res => !res.ok)) throw new Error('Network response was not ok');
 
                     const texts = await Promise.all(responses.map(res => res.text()));
 
-                    const [plotsResult, mergedResult, streetsResult, localsResult] = await Promise.all([
+                    const [plotsResult, mergedResult, streetsResult, localsResult, ownersResult] = await Promise.all([
                         new Promise(resolve => Papa.parse(texts[0], { header: true, skipEmptyLines: true, complete: resolve })),
                         new Promise(resolve => Papa.parse(texts[1], { header: true, skipEmptyLines: true, complete: resolve })),
                         new Promise(resolve => Papa.parse(texts[2], { header: true, skipEmptyLines: true, complete: resolve })),
-                        new Promise(resolve => Papa.parse(texts[3], { header: true, skipEmptyLines: true, complete: resolve }))
+                        new Promise(resolve => Papa.parse(texts[3], { header: true, skipEmptyLines: true, complete: resolve })),
+                        new Promise(resolve => Papa.parse(texts[4], { header: true, skipEmptyLines: true, complete: resolve }))
                     ]);
 
                     allPlots = plotsResult.data.filter(p => p['Nr porządkowy'] && p['X (lewy górny)'])
@@ -461,6 +462,12 @@
                             area: parseInt(l['Powierzchnia']) || 0, beds: parseInt(l['Ilość łóżek']) || 0,
                             workplaces: parseInt(l['Ilość miejsc pracy']) || 0, tenant: l['Najemca']
                         }));
+
+                    allOwners = ownersResult.data.map(o => ({
+                        name: o['Nazwa'], type: o['Typ'], photo: o['Zdjęcie'],
+                        nio: o['NIO'], age: o['Wiek'], profession: o['Zawód'],
+                        legalForm: o['Forma prawna']
+                    }));
 
                     const connections = mergedResult.data.filter(m => m['Działka główna'] && m['Działka dołączana'])
                         .map(d => ({ plot1: d['Działka główna'], plot2: d['Działka dołączana'] }));
@@ -486,7 +493,6 @@
             function processMergedPlots(connections) {
                 const adj = new Map();
                 const allPlotIdsInConnections = new Set();
-
                 connections.forEach(({ plot1, plot2 }) => {
                     if (!adj.has(plot1)) adj.set(plot1, []);
                     if (!adj.has(plot2)) adj.set(plot2, []);
@@ -495,10 +501,8 @@
                     allPlotIdsInConnections.add(plot1);
                     allPlotIdsInConnections.add(plot2);
                 });
-
                 const visited = new Set();
                 const groups = [];
-
                 for (const plotId of allPlotIdsInConnections) {
                     if (!visited.has(plotId)) {
                         const group = [];
@@ -518,21 +522,17 @@
                         groups.push(group);
                     }
                 }
-
                 return groups.map(group => {
                     const plotsInGroup = group.map(id => allPlots.find(p => p.name === id)).filter(Boolean);
                     if (plotsInGroup.length === 0) return null;
-
                     const minX = Math.min(...plotsInGroup.map(p => p.x1));
                     const maxX = Math.max(...plotsInGroup.map(p => p.x2));
                     const minZ = Math.min(...plotsInGroup.map(p => p.z1));
                     const maxZ = Math.max(...plotsInGroup.map(p => p.z2));
                     const originalArea = plotsInGroup.reduce((sum, p) => sum + (parseInt(p.area) || 0), 0);
-                    const mergedArea = (maxX - minX) * (maxZ - minZ);
-
                     return {
                         plots: group, x1: minX, z1: minZ, x2: maxX, z2: maxZ,
-                        width: maxX - minX, height: maxZ - minZ, originalArea, mergedArea
+                        width: maxX - minX, height: maxZ - minZ, originalArea, mergedArea: (maxX - minX) * (maxZ - minZ)
                     };
                 }).filter(Boolean);
             }
@@ -540,7 +540,6 @@
             function drawMap() {
                 if (!allPlots.length) return;
                 svg.innerHTML = '';
-
                 const mapImage = document.createElementNS('http://www.w3.org/2000/svg', 'image');
                 mapImage.setAttribute('href', MAP_IMAGE_URL);
                 mapImage.setAttribute('x', -MAP_WIDTH / 2);
@@ -548,35 +547,28 @@
                 mapImage.setAttribute('width', MAP_WIDTH);
                 mapImage.setAttribute('height', MAP_HEIGHT);
                 svg.appendChild(mapImage);
-
                 Object.values(layers).forEach(layer => layer.innerHTML = '');
-
                 layers.districts.id = 'districts-layer';
                 layers.merged.id = 'merged-layer';
                 layers.streets.id = 'streets-layer';
                 layers.plots.id = 'plots-layer';
-
                 svg.appendChild(layers.districts);
                 svg.appendChild(layers.merged);
                 svg.appendChild(layers.streets);
                 svg.appendChild(layers.plots);
-
                 drawStreets();
                 drawPlots();
                 drawMergedPlots();
                 drawDistrictBoundaries();
-
                 const padding = 100;
                 const minX = Math.min(...allPlots.map(p => p.x1));
                 const maxX = Math.max(...allPlots.map(p => p.x2));
                 const minZ = Math.min(...allPlots.map(p => p.z1));
                 const maxZ = Math.max(...allPlots.map(p => p.z2));
-
                 const mapContentWidth = maxX - minX + 2 * padding;
                 const mapContentHeight = maxZ - minZ + 2 * padding;
                 const clientRatio = mapContainer.clientWidth / mapContainer.clientHeight;
                 const contentRatio = mapContentWidth / mapContentHeight;
-
                 let w, h;
                 if (clientRatio > contentRatio) {
                     h = mapContentHeight;
@@ -585,19 +577,16 @@
                     w = mapContentWidth;
                     h = w / clientRatio;
                 }
-
                 initialViewBox.x = minX - (w - mapContentWidth + 2 * padding) / 2;
                 initialViewBox.y = minZ - (h - mapContentHeight + 2 * padding) / 2;
                 initialViewBox.w = w;
                 initialViewBox.h = h;
-
                 const mapRatio = MAP_WIDTH / MAP_HEIGHT;
                 if (clientRatio > mapRatio) {
                     maxViewboxWidth = MAP_HEIGHT * clientRatio;
                 } else {
                     maxViewboxWidth = MAP_WIDTH;
                 }
-
                 setViewBox(initialViewBox.x, initialViewBox.y, initialViewBox.w, initialViewBox.h);
             }
 
@@ -608,7 +597,6 @@
                     rect.setAttribute('x', street.x1); rect.setAttribute('y', street.z1);
                     rect.setAttribute('width', street.width); rect.setAttribute('height', street.height);
                     rect.setAttribute('class', 'street-rect');
-
                     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                     text.setAttribute('x', street.x1 + street.width / 2);
                     text.setAttribute('y', street.z1 + street.height / 2);
@@ -618,7 +606,6 @@
                     }
                     text.textContent = street.name;
                     g.appendChild(rect); g.appendChild(text);
-
                     g.addEventListener('mouseenter', (e) => {
                         tooltip.innerHTML = `<div class="font-semibold">${street.name}</div>`;
                         tooltip.classList.remove('hidden');
@@ -636,7 +623,6 @@
                     rect.setAttribute('x', merged.x1); rect.setAttribute('y', merged.z1);
                     rect.setAttribute('width', merged.width); rect.setAttribute('height', merged.height);
                     rect.setAttribute('class', 'merged-plot');
-
                     rect.addEventListener('mouseenter', (e) => {
                         tooltip.innerHTML = `<div class="font-semibold mb-1">Połączone działki</div><div class="text-xs">Kliknij, by zobaczyć szczegóły</div>`;
                         tooltip.classList.remove('hidden');
@@ -645,21 +631,6 @@
                     rect.addEventListener('mouseleave', hideTooltip);
                     rect.addEventListener('mousemove', moveTooltip);
                     rect.addEventListener('click', (e) => { e.stopPropagation(); openNewModal({type: 'merged', data: merged}); });
-
-                    let mergedTouchStartInfo = {};
-                    rect.addEventListener('touchstart', (e) => {
-                        if (e.touches.length === 1) mergedTouchStartInfo = { time: Date.now(), x: e.touches[0].clientX, y: e.touches[0].clientY };
-                    }, { passive: true });
-
-                    rect.addEventListener('touchend', (e) => {
-                        if (mergedTouchStartInfo.time) {
-                            const timeDiff = Date.now() - mergedTouchStartInfo.time;
-                            const dist = Math.hypot(e.changedTouches[0].clientX - mergedTouchStartInfo.x, e.changedTouches[0].clientY - mergedTouchStartInfo.y);
-                            if (timeDiff < 250 && dist < 10) { e.preventDefault(); openNewModal({type: 'merged', data: merged}); }
-                            mergedTouchStartInfo = {};
-                        }
-                    });
-                    layers.merged.appendChild(rect);
                 });
             }
 
@@ -669,7 +640,6 @@
                     g.dataset.plotId = plot.id;
                     g.dataset.plotName = plot.name;
                     g.dataset.plotDistrict = plot.district || '';
-
                     const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
                     rect.setAttribute('x', plot.x1); rect.setAttribute('y', plot.z1);
                     rect.setAttribute('width', plot.width); rect.setAttribute('height', plot.height);
@@ -677,29 +647,16 @@
                     rect.style.fill = getColorForType(plot.type);
                     const isOwned = plot.owner && plot.owner.trim() !== '' && plot.owner.toLowerCase().trim() !== 'skarb miasta';
                     rect.style.stroke = isOwned ? '#ef4444' : '#22c55e';
-
                     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                     text.setAttribute('x', plot.x1 + plot.width / 2);
                     text.setAttribute('y', plot.z1 + plot.height / 2);
                     text.setAttribute('class', 'plot-text');
                     text.textContent = plot.id.padStart(3, '0');
-
                     g.appendChild(rect); g.appendChild(text);
-
                     g.addEventListener('mouseenter', (e) => { showSimpleTooltip(e, plot); if (plot.district) highlightDistrict(plot.district); });
                     g.addEventListener('mouseleave', () => { hideTooltip(); clearHighlight(); });
                     g.addEventListener('mousemove', moveTooltip);
                     g.addEventListener('click', (e) => { e.stopPropagation(); openNewModal({type: 'plot', data: plot}); });
-
-                    g.addEventListener('touchend', (e) => {
-                        if (touchStartInfo.time) {
-                            const timeDiff = Date.now() - touchStartInfo.time;
-                            const dist = Math.hypot(e.changedTouches[0].clientX - touchStartInfo.x, e.changedTouches[0].clientY - touchStartInfo.y);
-                            if (timeDiff < 250 && dist < 10) { e.preventDefault(); openNewModal({type: 'plot', data: plot}); }
-                        }
-                    });
-
-                    layers.plots.appendChild(g);
                 });
             }
 
@@ -712,43 +669,23 @@
                         districts[districtName].push(plot);
                     }
                 });
-
                 Object.entries(districts).forEach(([districtName, districtPlots]) => {
                     if (districtPlots.length === 0) return;
                     const clusters = createDistrictClusters(districtPlots, 50);
                     clusters.forEach((cluster) => {
                         const boundary = createDistrictOutline(cluster);
                         if (!boundary) return;
-
                         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                         path.setAttribute('d', boundary);
                         path.style.cssText = "fill:none; stroke:#8b5cf6; stroke-width:2; stroke-dasharray:8,4; opacity:0.7; cursor:pointer; pointer-events:all;";
                         path.dataset.districtName = districtName;
-
                         path.addEventListener('mouseenter', () => highlightDistrict(districtName));
                         path.addEventListener('mouseleave', () => clearHighlight());
                         path.addEventListener('click', (e) => { e.stopPropagation(); openNewModal({type: 'district', data: {name: districtName, plots: cluster}}); });
-
-                        let districtTouchStartInfo = {};
-                        path.addEventListener('touchstart', (e) => {
-                            if (e.touches.length === 1) districtTouchStartInfo = { time: Date.now(), x: e.touches[0].clientX, y: e.touches[0].clientY };
-                        }, { passive: true });
-
-                        path.addEventListener('touchend', (e) => {
-                            if (districtTouchStartInfo.time) {
-                                const timeDiff = Date.now() - districtTouchStartInfo.time;
-                                const dist = Math.hypot(e.changedTouches[0].clientX - districtTouchStartInfo.x, e.changedTouches[0].clientY - districtTouchStartInfo.y);
-                                if (timeDiff < 250 && dist < 10) { e.preventDefault(); openNewModal({type: 'district', data: {name: districtName, plots: cluster}}); }
-                                districtTouchStartInfo = {};
-                            }
-                        });
-
                         layers.districts.appendChild(path);
-
                         const minX = Math.min(...cluster.map(p => p.x1));
                         const maxX = Math.max(...cluster.map(p => p.x2));
                         const minZ = Math.min(...cluster.map(p => p.z1));
-
                         const districtLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                         districtLabel.setAttribute('x', minX + (maxX - minX) / 2);
                         districtLabel.setAttribute('y', minZ - 8);
@@ -760,25 +697,18 @@
             }
 
             function createDistrictClusters(plots, maxDistance) {
-                const clusters = [];
-                let visited = new Set();
+                const clusters = []; let visited = new Set();
                 plots.forEach(plot => {
                     if (!visited.has(plot.id)) {
-                        const newCluster = [];
-                        const queue = [plot];
+                        const newCluster = []; const queue = [plot];
                         visited.add(plot.id);
                         while (queue.length > 0) {
                             const currentPlot = queue.shift();
                             newCluster.push(currentPlot);
                             plots.forEach(otherPlot => {
                                 if (!visited.has(otherPlot.id)) {
-                                    const isAdjacent = (
-                                        currentPlot.x1 <= otherPlot.x2 + maxDistance &&
-                                        currentPlot.x2 >= otherPlot.x1 - maxDistance &&
-                                        currentPlot.z1 <= otherPlot.z2 + maxDistance &&
-                                        currentPlot.z2 >= otherPlot.z1 - maxDistance
-                                    );
-                                    if (isAdjacent) {
+                                    if (currentPlot.x1 <= otherPlot.x2 + maxDistance && currentPlot.x2 >= otherPlot.x1 - maxDistance &&
+                                        currentPlot.z1 <= otherPlot.z2 + maxDistance && currentPlot.z2 >= otherPlot.z1 - maxDistance) {
                                         visited.add(otherPlot.id);
                                         queue.push(otherPlot);
                                     }
@@ -857,18 +787,14 @@
                 let svgPath = '';
                 const visited = new Set(); 
                 for (const startNode of points.keys()) {
-                    if (visited.has(startNode)) {
-                        continue; 
-                    }
+                    if (visited.has(startNode)) continue;
                     const path = [startNode];
                     visited.add(startNode);
                     let currentNode = startNode;
                     while (true) {
                         const neighbors = points.get(currentNode);
                         const nextNode = neighbors.find(n => !visited.has(n));
-                        if (!nextNode) {
-                            break; 
-                        }
+                        if (!nextNode) break;
                         visited.add(nextNode);
                         path.push(nextNode);
                         currentNode = nextNode;
@@ -975,11 +901,29 @@
                 </div>`;
             }
 
+            function createOwnerCardHTML(ownerName) {
+                if (!ownerName) return '';
+                const owner = allOwners.find(o => o.name === ownerName);
+                const isClickable = ownerName.toLowerCase() !== 'skarb miasta';
+                const photo = owner?.photo || 'placeholder.webp';
+                const type = owner?.type ? (owner.type.charAt(0).toUpperCase() + owner.type.slice(1)) : 'Nieznany';
+                
+                const wrapperClass = isClickable ? 'clickable-name hover:bg-gray-600' : '';
+                return `
+                    <div class="flex items-center bg-gray-700 p-2 rounded-md transition-colors ${wrapperClass}" ${isClickable ? `data-owner-name="${ownerName}"` : ''}>
+                        <img src="${photo}" onerror="this.onerror=null;this.src='placeholder.webp';" class="w-10 h-10 rounded-full mr-3 object-cover">
+                        <div>
+                            <div class="font-semibold text-white">${ownerName}</div>
+                            <div class="text-xs text-gray-400">${type}</div>
+                        </div>
+                    </div>
+                `;
+            }
+
             function renderPlotContent(plot) {
                 const isOwned = plot.owner && plot.owner.trim() !== '' && plot.owner.toLowerCase().trim() !== 'skarb miasta';
                 const ownerInfo = isOwned ? plot.owner : 'Skarb Miasta';
-                const ownerHTML = isOwned ? `<span class="font-medium clickable-name" data-owner-name="${ownerInfo}">${ownerInfo}</span>` : `<span class="font-medium">${ownerInfo}</span>`;
-
+                
                 const localsOnPlot = allLocals.filter(l => l.plotName === plot.name);
                 let localsHTML = '';
                 if (localsOnPlot.length > 0) {
@@ -1004,11 +948,13 @@
                 }
                 return `
                     <div><h3 class="text-2xl font-bold ${isOwned ? 'text-red-400' : 'text-green-400'}">${plot.name}</h3><p class="text-gray-400">${plot.district || 'Brak dzielnicy'}</p></div>
-                    <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                        <span class="text-gray-400">Właściciel:</span>${ownerHTML}
-                        <span class="text-gray-400">Typ:</span><span class="font-medium">${plot.type || 'Brak'}</span>
-                        <span class="text-gray-400">Wartość:</span><span class="font-medium flex items-center">${plot.value || '0'} <img src="minecoin.png" class="inline w-4 h-4 ml-1" alt="MC"></span>
-                        <span class="text-gray-400">Powierzchnia:</span><span class="font-medium">${plot.area || 'Brak'} m²</span>
+                    <div class="space-y-3">
+                        ${createOwnerCardHTML(ownerInfo)}
+                        <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm pt-3 border-t border-gray-700">
+                            <span class="text-gray-400">Typ:</span><span class="font-medium">${plot.type || 'Brak'}</span>
+                            <span class="text-gray-400">Wartość:</span><span class="font-medium flex items-center">${plot.value || '0'} <img src="minecoin.webp" class="inline w-4 h-4 ml-1" alt="MC"></span>
+                            <span class="text-gray-400">Powierzchnia:</span><span class="font-medium">${plot.area || 'Brak'} m²</span>
+                        </div>
                     </div>
                     ${localsHTML}`;
             }
@@ -1036,53 +982,77 @@
             function renderLocalContent(local) {
                 const plot = allPlots.find(p => p.name === local.plotName);
                 const owner = plot ? plot.owner : 'Nieznany';
-                const isOwnerClickable = owner && owner.toLowerCase() !== 'skarb miasta';
-                const ownerHTML = isOwnerClickable ? `<span class="font-medium clickable-name" data-owner-name="${owner}">${owner}</span>` : `<span class="font-medium">${owner}</span>`;
                 const tenant = local.tenant || 'Brak';
-                const isTenantClickable = tenant && tenant.toLowerCase() !== 'brak' && tenant.toLowerCase() !== 'skarb miasta';
-                const tenantHTML = isTenantClickable ? `<span class="font-medium clickable-name" data-owner-name="${tenant}">${tenant}</span>` : `<span class="font-medium">${tenant}</span>`;
 
                 return `
                     <div><h3 class="text-2xl font-bold text-cyan-400">Lokal #${local.localNum}</h3><p class="text-gray-400">${local.street}, ${local.building}</p></div>
-                     <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                        <span class="text-gray-400">Najemca:</span>${tenantHTML}
-                        <span class="text-gray-400">Właściciel:</span>${ownerHTML}
-                        <span class="text-gray-400">Powierzchnia:</span><span class="font-medium">${local.area} m²</span>
-                        <span class="text-gray-400">Piętro:</span><span class="font-medium">${local.floor}</span>
-                        <span class="text-gray-400">Miejsca pracy:</span><span class="font-medium">${local.workplaces}</span>
-                        <span class="text-gray-400">Ilość łóżek:</span><span class="font-medium">${local.beds}</span>
+                     <div class="space-y-3">
+                        <div>
+                           <span class="text-gray-400 text-sm">Najemca:</span>
+                           ${createOwnerCardHTML(tenant)}
+                        </div>
+                         <div>
+                           <span class="text-gray-400 text-sm">Właściciel budynku:</span>
+                           ${createOwnerCardHTML(owner)}
+                        </div>
+                        <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm pt-3 border-t border-gray-700">
+                            <span class="text-gray-400">Powierzchnia:</span><span class="font-medium">${local.area} m²</span>
+                            <span class="text-gray-400">Piętro:</span><span class="font-medium">${local.floor}</span>
+                            <span class="text-gray-400">Miejsca pracy:</span><span class="font-medium">${local.workplaces}</span>
+                            <span class="text-gray-400">Ilość łóżek:</span><span class="font-medium">${local.beds}</span>
+                        </div>
                     </div>`;
             }
 
             function renderOwnerContent(ownerName) {
+                const owner = allOwners.find(o => o.name === ownerName);
                 const ownedPlots = allPlots.filter(p => p.owner === ownerName);
                 const rentedLocals = allLocals.filter(l => l.tenant === ownerName);
                 const totalPlotArea = ownedPlots.reduce((sum, p) => sum + (parseInt(p.area) || 0), 0);
                 const totalPlotValue = ownedPlots.reduce((sum, p) => sum + (parseInt(p.value) || 0), 0);
                 const ownedPlotsHTML = ownedPlots.map(p => createPlotListItemHTML(p)).join('');
                 
+                let ownerDetailsHTML = '';
+                if(owner) {
+                    ownerDetailsHTML += `<div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm"><span class="text-gray-400">NIO:</span><span>${owner.nio || 'Brak'}</span>`;
+                    if(owner.type === 'fizyczna') {
+                        ownerDetailsHTML += `<span class="text-gray-400">Wiek:</span><span>${owner.age || 'Brak'}</span>`;
+                        ownerDetailsHTML += `<span class="text-gray-400">Zawód:</span><span>${owner.profession || 'Brak'}</span>`;
+                    } else if(owner.type === 'prawna') {
+                        ownerDetailsHTML += `<span class="text-gray-400">Forma Prawna:</span><span>${owner.legalForm || 'Brak'}</span>`;
+                    }
+                    ownerDetailsHTML += '</div>';
+                }
+
                 const rentedLocalsHTML = rentedLocals.map(l => {
                     const plot = allPlots.find(p => p.name === l.plotName);
-                    const landlord = plot ? plot.owner : 'Nieznany';
-                    const isLandlordClickable = landlord && landlord.toLowerCase() !== 'skarb miasta';
-                    const landlordHTML = isLandlordClickable ? `<span class="font-medium clickable-name" data-owner-name="${landlord}">${landlord}</span>` : `<span class="font-medium">${landlord}</span>`;
-                    return `<li class="ml-4">Lokal #${l.localNum} w <span class="font-medium">${l.plotName}</span> od ${landlordHTML}</li>`
+                    return `
+                        <div class="bg-gray-700 p-2 rounded-md">
+                            <div data-local-id="${l.id}" class="cursor-pointer">
+                                <div class="font-semibold text-purple-400">Lokal #${l.localNum} w ${l.plotName}</div>
+                                <div class="text-xs text-gray-400">Powierzchnia: ${l.area} m²</div>
+                            </div>
+                            <div class="mt-2 text-xs text-gray-400">Wynajmowane od:</div>
+                            ${createOwnerCardHTML(plot?.owner)}
+                        </div>`;
                 }).join('');
 
                 return `
-                    <div><h3 class="text-2xl font-bold text-green-400">${ownerName}</h3></div>
                     <div class="space-y-4">
+                        ${createOwnerCardHTML(ownerName)}
+                        ${ownerDetailsHTML ? `<div class="pt-3 border-t border-gray-700">${ownerDetailsHTML}</div>` : ''}
+
                         <div>
                             <h4 class="font-semibold text-md mb-2">Posiadane Działki (${ownedPlots.length})</h4>
                             <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                                 <span class="text-gray-400">Łączna pow.:</span><span>${totalPlotArea.toLocaleString()} m²</span>
-                                <span class="text-gray-400">Łączna wartość:</span><span class="flex items-center">${totalPlotValue.toLocaleString()} <img src="minecoin.png" class="inline w-4 h-4 ml-1" alt="MC"></span>
+                                <span class="text-gray-400">Łączna wartość:</span><span class="flex items-center">${totalPlotValue.toLocaleString()} <img src="minecoin.webp" class="inline w-4 h-4 ml-1" alt="MC"></span>
                             </div>
                             ${ownedPlots.length > 0 ? `<div class="space-y-2 mt-2">${ownedPlotsHTML}</div>` : ''}
                         </div>
                          <div class="border-t border-gray-700 pt-3">
                             <h4 class="font-semibold text-md mb-1">Wynajmowane Lokale (${rentedLocals.length})</h4>
-                             ${rentedLocals.length > 0 ? `<ul class="list-disc list-inside mt-2 text-sm">${rentedLocalsHTML}</ul>` : '<p class="text-gray-500 text-sm">Brak</p>'}
+                             ${rentedLocals.length > 0 ? `<div class="space-y-2 mt-2">${rentedLocalsHTML}</div>` : '<p class="text-gray-500 text-sm">Brak</p>'}
                         </div>
                     </div>`;
             }
@@ -1091,7 +1061,6 @@
                 const plotTypes = {};
                 const occupancy = { Zajęte: 0, Wolne: 0 };
                 let totalArea = 0;
-
                 plotsInDistrict.forEach(p => {
                     const type = p.type || 'Inne';
                     plotTypes[type] = (plotTypes[type] || 0) + 1;
@@ -1099,9 +1068,7 @@
                     if (isOwned) { occupancy.Zajęte++; } else { occupancy.Wolne++; }
                     totalArea += parseInt(p.area) || 0;
                 });
-
                 const plotListHTML = plotsInDistrict.map(p => createPlotListItemHTML(p)).join('');
-
                 const html = `
                     <div><h3 class="text-2xl font-bold text-purple-400">${districtName}</h3></div>
                     <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm border-b border-gray-700 pb-3 mb-3">
@@ -1114,7 +1081,6 @@
                         <div class="chart-container"><canvas id="plot-type-chart"></canvas></div>
                         <div class="chart-container"><canvas id="occupancy-chart"></canvas></div>
                     </div>`;
-                
                 setTimeout(() => {
                     destroyActiveCharts();
                     const typeLabels = Object.keys(plotTypes);
@@ -1123,19 +1089,16 @@
                     const occupancyLabels = Object.keys(occupancy);
                     createChart('occupancy-chart', 'doughnut', { labels: occupancyLabels, data: Object.values(occupancy), colors: ['rgba(239, 68, 68, 0.8)', 'rgba(34, 197, 94, 0.8)'] }, 'Zajętość');
                 }, 100);
-
                 return html;
             }
 
             function createChart(canvasId, type, chartData, label) {
                 const ctx = document.getElementById(canvasId);
                 if (!ctx) return;
-
                 if (chartData.data.length === 0) {
                     ctx.parentElement.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500">Brak danych</div>`;
                     return;
                 }
-
                 const chart = new Chart(ctx, {
                     type: type,
                     data: {
@@ -1148,10 +1111,7 @@
                             borderWidth: 1
                         }]
                     },
-                    options: {
-                        responsive: true, maintainAspectRatio: false, plugins: { legend: { position: type === 'bar' ? 'top' : 'right', labels: { color: '#d1d5db' } } },
-                        scales: type === 'bar' ? { y: { beginAtZero: true, ticks: { color: '#9ca3af', stepSize: 1 } }, x: { ticks: { color: '#9ca3af' } } } : {}
-                    }
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: type === 'bar' ? 'top' : 'right', labels: { color: '#d1d5db' } } } }
                 });
                 activeCharts.push(chart);
             }
@@ -1168,34 +1128,44 @@
                 if (y + tooltip.offsetHeight > window.innerHeight) y = e.clientY - tooltip.offsetHeight - PADDING;
                 tooltip.style.left = `${x}px`; tooltip.style.top = `${y}px`;
             }
-
-            function findPlotAndCenter(query) {
-                if (!query) return;
-                const searchTerm = query.trim().toLowerCase();
-                const searchNumber = parseInt(searchTerm.replace(/.*\//, ''), 10);
-
-                const foundPlot = allPlots.find(p => {
-                    const plotName = p.name ? p.name.toLowerCase() : '';
-                    const plotId = parseInt(p.id, 10);
-                    return plotName === searchTerm || plotId === searchNumber;
-                });
-
-                if (foundPlot) {
-                    const newW = 300;
-                    const newH = (newW / initialViewBox.w) * initialViewBox.h;
-                    const newX = foundPlot.x1 + foundPlot.width / 2 - newW / 2;
-                    const newY = foundPlot.z1 + foundPlot.height / 2 - newH / 2;
-                    setViewBox(newX, newY, newW, newH);
-                    highlightPlot(foundPlot.id);
-                    openNewModal({type: 'plot', data: foundPlot});
-                    searchInput.value = '';
-                } else {
-                    searchInput.classList.add('ring-red-500');
-                    setTimeout(() => searchInput.classList.remove('ring-red-500'), 2000);
-                }
-            }
-            function highlightPlot(plotId) {
+            
+            function findAndCenter(item) {
                 clearHighlight();
+                let targetPlots = [];
+
+                if (item.type === 'plot') {
+                    const plot = allPlots.find(p => p.name === item.value);
+                    if (plot) targetPlots.push(plot);
+                    openNewModal({type: 'plot', data: plot});
+                } else if (item.type === 'owner') {
+                    targetPlots = allPlots.filter(p => p.owner === item.value);
+                    openNewModal({type: 'owner', data: item.value});
+                } else if (item.type === 'street') {
+                    targetPlots = allPlots.filter(p => p.street === item.value);
+                } else if (item.type === 'address') {
+                    const [street, number] = item.value.split(' ');
+                    targetPlots = allPlots.filter(p => p.street === street && p.buildingNumber === number);
+                }
+
+                if(targetPlots.length > 0) {
+                    const minX = Math.min(...targetPlots.map(p => p.x1));
+                    const maxX = Math.max(...targetPlots.map(p => p.x2));
+                    const minZ = Math.min(...targetPlots.map(p => p.z1));
+                    const maxZ = Math.max(...targetPlots.map(p => p.z2));
+
+                    const centerX = minX + (maxX - minX) / 2;
+                    const centerZ = minZ + (maxZ - minZ) / 2;
+                    const contentWidth = Math.max(300, (maxX - minX) * 1.5);
+                    const newH = (contentWidth / initialViewBox.w) * initialViewBox.h;
+                    
+                    setViewBox(centerX - contentWidth / 2, centerZ - newH / 2, contentWidth, newH);
+                    targetPlots.forEach(plot => highlightPlot(plot.id));
+                }
+                searchInput.value = '';
+                searchSuggestions.classList.add('hidden');
+            }
+
+            function highlightPlot(plotId) {
                 const plotElement = svg.querySelector(`g[data-plot-id='${plotId}'] .plot-rect`);
                 if (plotElement) plotElement.classList.add('highlighted');
             }
@@ -1225,10 +1195,74 @@
                     }
                 }));
             }
+            
+            searchInput.addEventListener('input', () => {
+                const query = searchInput.value.trim().toLowerCase();
+                searchSuggestions.innerHTML = '';
+                if (!query) {
+                    searchSuggestions.classList.add('hidden');
+                    return;
+                }
 
-            searchButton.addEventListener('click', () => findPlotAndCenter(searchInput.value));
-            searchInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') findPlotAndCenter(searchInput.value); });
+                const suggestions = [];
+                // Plots
+                allPlots.filter(p => p.name.toLowerCase().includes(query) || p.id.includes(query))
+                    .slice(0, 3)
+                    .forEach(p => suggestions.push({ type: 'plot', label: `Działka: ${p.name}`, value: p.name }));
+                // Owners
+                [...new Set(allPlots.map(p => p.owner))].filter(o => o && o.toLowerCase().includes(query))
+                    .slice(0, 3)
+                    .forEach(o => suggestions.push({ type: 'owner', label: `Właściciel: ${o}`, value: o }));
+                // Streets
+                [...new Set(allPlots.map(p => p.street))].filter(s => s && s.toLowerCase().includes(query))
+                    .slice(0, 3)
+                    .forEach(s => suggestions.push({ type: 'street', label: `Ulica: ${s}`, value: s }));
+                // Addresses
+                allPlots.filter(p => p.street && p.buildingNumber && `${p.street.toLowerCase()} ${p.buildingNumber}`.includes(query))
+                    .slice(0, 3)
+                    .forEach(p => suggestions.push({ type: 'address', label: `Adres: ${p.street} ${p.buildingNumber}`, value: `${p.street} ${p.buildingNumber}`}));
+                
+                if (suggestions.length > 0) {
+                    suggestions.forEach(s => {
+                        const div = document.createElement('div');
+                        div.className = 'p-2 hover:bg-purple-600 cursor-pointer';
+                        div.textContent = s.label;
+                        div.addEventListener('click', () => findAndCenter({ type: s.type, value: s.value }));
+                        searchSuggestions.appendChild(div);
+                    });
+                    searchSuggestions.classList.remove('hidden');
+                } else {
+                    searchSuggestions.classList.add('hidden');
+                }
+            });
 
+            document.addEventListener('click', (e) => {
+                if (!searchInput.contains(e.target)) {
+                    searchSuggestions.classList.add('hidden');
+                }
+            });
+
+            searchButton.addEventListener('click', () => {
+                const firstSuggestion = searchSuggestions.querySelector('div');
+                if (firstSuggestion) firstSuggestion.click();
+            });
+            searchInput.addEventListener('keyup', (e) => {
+                if (e.key === 'Enter') {
+                    const firstSuggestion = searchSuggestions.querySelector('div');
+                    if (firstSuggestion) firstSuggestion.click();
+                }
+            });
+
+            // Pozostałe listenery
+            mapContainer.addEventListener('mousedown', (e) => { if (e.button === 0) { isPanning = true; mapContainer.classList.add('grabbing'); startPoint = { x: e.x, y: e.y }; } });
+            document.addEventListener('mouseup', () => { isPanning = false; mapContainer.classList.remove('grabbing'); });
+            mapContainer.addEventListener('mousemove', (e) => {
+                if (!isPanning) return;
+                const dx = (startPoint.x - e.x) * (viewBox.w / mapContainer.clientWidth);
+                const dy = (startPoint.y - e.y) * (viewBox.h / mapContainer.clientHeight);
+                setViewBox(viewBox.x + dx, viewBox.y + dy, viewBox.w, viewBox.h);
+                startPoint = { x: e.x, y: e.y };
+            });
             mapContainer.addEventListener('wheel', (e) => {
                 e.preventDefault();
                 const w = viewBox.w; const h = viewBox.h; const mx = e.offsetX; const my = e.offsetY;
@@ -1237,64 +1271,12 @@
                 setViewBox(viewBox.x + dx, viewBox.y + dy, viewBox.w - dw, viewBox.h - dh);
             }, { passive: false });
 
-            mapContainer.addEventListener('mousedown', (e) => { if (e.button === 0) { isPanning = true; mapContainer.classList.add('grabbing'); startPoint = { x: e.x, y: e.y }; } });
-            mapContainer.addEventListener('mousemove', (e) => {
-                if (!isPanning) return;
-                const dx = (startPoint.x - e.x) * (viewBox.w / mapContainer.clientWidth);
-                const dy = (startPoint.y - e.y) * (viewBox.h / mapContainer.clientHeight);
-                setViewBox(viewBox.x + dx, viewBox.y + dy, viewBox.w, viewBox.h);
-                startPoint = { x: e.x, y: e.y };
-            });
-            document.addEventListener('mouseup', () => { isPanning = false; mapContainer.classList.remove('grabbing'); });
-
-            let touchPanning = false; let pinchZooming = false;
-            mapContainer.addEventListener('touchstart', (e) => {
-                if (e.touches.length === 1) {
-                    touchPanning = true;
-                    touchStartInfo = { time: Date.now(), x: e.touches[0].clientX, y: e.touches[0].clientY };
-                    startPoint = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-                } else if (e.touches.length >= 2) {
-                    pinchZooming = true; touchPanning = false;
-                    lastTouchDistance = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-                }
-            }, { passive: true });
-            mapContainer.addEventListener('touchmove', (e) => {
-                touchStartInfo.time = 0;
-                if (touchPanning && e.touches.length === 1) {
-                    const dx = (startPoint.x - e.touches[0].clientX) * (viewBox.w / mapContainer.clientWidth);
-                    const dy = (startPoint.y - e.touches[0].clientY) * (viewBox.h / mapContainer.clientHeight);
-                    setViewBox(viewBox.x + dx, viewBox.y + dy, viewBox.w, viewBox.h);
-                    startPoint = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-                } else if (pinchZooming && e.touches.length >= 2) {
-                    const newDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-                    const scale = lastTouchDistance / newDist;
-                    const w = viewBox.w * scale; const h = viewBox.h * scale;
-                    const { left, top } = mapContainer.getBoundingClientRect();
-                    const mx = ((e.touches[0].clientX + e.touches[1].clientX) / 2) - left;
-                    const my = ((e.touches[0].clientY + e.touches[1].clientY) / 2) - top;
-                    const dx = (viewBox.w - w) * (mx / mapContainer.clientWidth);
-                    const dy = (viewBox.h - h) * (my / mapContainer.clientHeight);
-                    setViewBox(viewBox.x + dx, viewBox.y + dy, w, h);
-                    lastTouchDistance = newDist;
-                }
-            }, { passive: true });
-            mapContainer.addEventListener('touchend', (e) => {
-                touchPanning = false; pinchZooming = false;
-                if (e.touches.length === 0) touchStartInfo.time = 0;
-            });
-            
             closeModalBtn.addEventListener('click', closeModal);
             document.getElementById('back-modal').addEventListener('click', goBackModal);
-            mapContainer.addEventListener('click', (e) => {
-                if (e.target === mapContainer || e.target === svg || e.target.id === 'map-svg') {
-                    closeModal();
-                }
-            });
-
+            mapContainer.addEventListener('click', (e) => { if (e.target === mapContainer || e.target === svg || e.target.id === 'map-svg') closeModal(); });
             document.getElementById('zoom-in').addEventListener('click', () => { const dw = viewBox.w * -0.2; setViewBox(viewBox.x - dw / 2, viewBox.y - (dw / initialViewBox.w * initialViewBox.h) / 2, viewBox.w + dw, viewBox.h + (dw / initialViewBox.w * initialViewBox.h)); });
             document.getElementById('zoom-out').addEventListener('click', () => { const dw = viewBox.w * 0.2; setViewBox(viewBox.x - dw / 2, viewBox.y - (dw / initialViewBox.w * initialViewBox.h) / 2, viewBox.w + dw, viewBox.h + (dw / initialViewBox.w * initialViewBox.h)); });
             document.getElementById('reset-view').addEventListener('click', () => { setViewBox(initialViewBox.x, initialViewBox.y, initialViewBox.w, initialViewBox.h); });
-
             document.getElementById('toggle-plots').addEventListener('click', () => toggleLayer('plots'));
             document.getElementById('toggle-streets').addEventListener('click', () => toggleLayer('streets'));
             document.getElementById('toggle-districts').addEventListener('click', () => toggleLayer('districts'));
