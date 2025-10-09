@@ -741,6 +741,95 @@
             }
 
             function createDistrictOutline(plots) {
+    if (plots.length === 0) return '';
+
+    const segments = new Map();
+
+    // Helper do dodawania segmentów do mapy w sposób kanoniczny,
+    // aby zapewnić, że krawędź (A -> B) jest taka sama jak (B -> A).
+    const addSegment = (x1, z1, x2, z2) => {
+        // Sortujemy punkty, aby klucz był zawsze taki sam niezależnie od kierunku
+        const key = (x1 < x2) ? `${x1},${z1},${x2},${z2}` :
+                  (x2 < x1) ? `${x2},${z2},${x1},${z1}` :
+                  (z1 < z2) ? `${x1},${z1},${x2},${z2}` :
+                              `${x2},${z2},${x1},${z1}`;
+        segments.set(key, (segments.get(key) || 0) + 1);
+    };
+
+    // 1. Zbierz wszystkie krawędzie ze wszystkich działek
+    plots.forEach(plot => {
+        const x_min = Math.min(plot.x1, plot.x2);
+        const x_max = Math.max(plot.x1, plot.x2);
+        const z_min = Math.min(plot.z1, plot.z2);
+        const z_max = Math.max(plot.z1, plot.z2);
+
+        addSegment(x_min, z_min, x_max, z_min); // Górna
+        addSegment(x_min, z_max, x_max, z_max); // Dolna
+        addSegment(x_min, z_min, x_min, z_max); // Lewa
+        addSegment(x_max, z_min, x_max, z_max); // Prawa
+    });
+
+    // 2. Filtruj segmenty, które nie są współdzielone (występują tylko raz)
+    let outsideSegments = [];
+    for (const [key, count] of segments.entries()) {
+        if (count === 1) {
+            outsideSegments.push(key.split(',').map(Number));
+        }
+    }
+
+    if (outsideSegments.length === 0) return '';
+
+    // 3. Połącz segmenty w jeden lub więcej zamkniętych wielokątów
+    const polygons = [];
+    while (outsideSegments.length > 0) {
+        const currentPolygonPoints = [];
+        // Zaczynamy od ostatniego segmentu na liście
+        let [startX, startZ, endX, endZ] = outsideSegments.pop();
+        currentPolygonPoints.push([startX, startZ], [endX, endZ]);
+
+        let searching = true;
+        while (searching) {
+            let foundNext = false;
+            for (let i = 0; i < outsideSegments.length; i++) {
+                let [nextStartX, nextStartZ, nextEndX, nextEndZ] = outsideSegments[i];
+
+                if (endX === nextStartX && endZ === nextStartZ) { // Następny segment łączy się z końcem
+                    currentPolygonPoints.push([nextEndX, nextEndZ]);
+                    [endX, endZ] = [nextEndX, nextEndZ]; // Aktualizuj koniec ścieżki
+                    outsideSegments.splice(i, 1); // Usuń zużyty segment
+                    foundNext = true;
+                    break;
+                } else if (endX === nextEndX && endZ === nextEndZ) { // Następny segment łączy się z końcem (odwrócony)
+                    currentPolygonPoints.push([nextStartX, nextStartZ]);
+                    [endX, endZ] = [nextStartX, nextStartZ];
+                    outsideSegments.splice(i, 1);
+                    foundNext = true;
+                    break;
+                }
+            }
+            
+            // Jeśli ścieżka się zamknęła lub nie ma więcej pasujących segmentów
+            if ((endX === startX && endZ === startZ) || !foundNext) {
+                searching = false;
+            }
+        }
+        polygons.push(currentPolygonPoints);
+    }
+
+    // 4. Wygeneruj ścieżkę SVG
+    let svgPath = '';
+    polygons.forEach(polygon => {
+        if (polygon.length > 1) {
+            svgPath += `M ${polygon[0].join(' ')} `;
+            for (let i = 1; i < polygon.length; i++) {
+                svgPath += `L ${polygon[i].join(' ')} `;
+            }
+            svgPath += 'Z '; // Zamknij ścieżkę
+        }
+    });
+    
+    return svgPath.trim();
+}
                 if (plots.length === 0) return '';
                 const borders = { top: [], right: [], bottom: [], left: [] };
 
