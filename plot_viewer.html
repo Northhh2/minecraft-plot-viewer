@@ -743,7 +743,7 @@
             function createDistrictOutline(plots) {
                 if (plots.length === 0) return '';
 
-                // --- Krok 1 i 2: Znajdowanie zewnętrznych krawędzi (bez zmian) ---
+                // --- Krok 1 i 2: Znajdowanie zewnętrznych krawędzi (ta część działa poprawnie) ---
                 const borders = { top: [], right: [], bottom: [], left: [] };
                 let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
 
@@ -768,16 +768,13 @@
                     const externalBorders = [];
                     let uncoveredSpan = [span];
                     a_borders.sort((a, b) => sortAsc ? a.fcrd - b.fcrd : b.fcrd - a.fcrd);
-
                     for (const border of a_borders) {
                         if (uncoveredSpan.length === 0) break;
                         const [border_start, border_end] = border.scrd;
                         const nextUncovered = [];
-
                         for (const [span_start, span_end] of uncoveredSpan) {
                             const overlap_start = Math.max(border_start, span_start);
                             const overlap_end = Math.min(border_end, span_end);
-
                             if (overlap_end > overlap_start) {
                                 externalBorders.push({ ...border, scrd: [overlap_start, overlap_end] });
                                 if (span_start < overlap_start) nextUncovered.push([span_start, overlap_start]);
@@ -801,28 +798,67 @@
                     ...bottomExt.map(s => [[s.scrd[0], s.fcrd], [s.scrd[1], s.fcrd]]),
                     ...leftExt.map(s => [[s.fcrd, s.scrd[0]], [s.fcrd, s.scrd[1]]]),
                     ...rightExt.map(s => [[s.fcrd, s.scrd[0]], [s.fcrd, s.scrd[1]]]),
-                ];
+                ].filter(s => s[0][0] !== s[1][0] || s[0][1] !== s[1][1]);
 
-                // --- Krok 3: WIZUALIZACJA PUNKTÓW KOŃCOWYCH ---
-                // Zamiast łączyć linie, rysujemy krzyżyki w punktach, gdzie
-                // linie powinny się zaczynać i kończyć.
-                let debugPath = '';
-                const markerSize = 2; // Wielkość krzyżyka
 
-                allSegments.forEach(segment => {
-                    const p1 = segment[0]; // Punkt [x, z]
-                    const p2 = segment[1]; // Punkt [x, z]
+                // --- Krok 3: Finalna, niezawodna logika łączenia punktów ---
 
-                    // Rysuj krzyżyk w punkcie p1
-                    debugPath += ` M ${p1[0] - markerSize} ${p1[1] - markerSize} L ${p1[0] + markerSize} ${p1[1] + markerSize}`;
-                    debugPath += ` M ${p1[0] - markerSize} ${p1[1] + markerSize} L ${p1[0] + markerSize} ${p1[1] - markerSize}`;
+                // 3a. Stwórz graf połączeń (mapę sąsiedztwa) z punktów końcowych.
+                const points = new Map();
+                allSegments.forEach(seg => {
+                    const p1_key = seg[0].join(',');
+                    const p2_key = seg[1].join(',');
 
-                    // Rysuj krzyżyk w punkcie p2
-                    debugPath += ` M ${p2[0] - markerSize} ${p2[1] - markerSize} L ${p2[0] + markerSize} ${p2[1] + markerSize}`;
-                    debugPath += ` M ${p2[0] - markerSize} ${p2[1] + markerSize} L ${p2[0] + markerSize} ${p2[1] - markerSize}`;
+                    if (!points.has(p1_key)) points.set(p1_key, []);
+                    if (!points.has(p2_key)) points.set(p2_key, []);
+                    points.get(p1_key).push(p2_key);
+                    points.get(p2_key).push(p1_key);
                 });
 
-                return debugPath;
+                // 3b. Przejdź po grafie, aby znaleźć wszystkie ciągłe ścieżki.
+                let svgPath = '';
+                const visited = new Set(); // Przechowuje punkty, które już są częścią jakiejś ścieżki
+
+                for (const startNode of points.keys()) {
+                    if (visited.has(startNode)) {
+                        continue; // Pomiń ten punkt, jeśli już go użyliśmy
+                    }
+
+                    // Rozpocznij nową ścieżkę od nieodwiedzonego jeszcze punktu
+                    const path = [startNode];
+                    visited.add(startNode);
+                    let currentNode = startNode;
+
+                    while (true) {
+                        const neighbors = points.get(currentNode);
+                        const nextNode = neighbors.find(n => !visited.has(n));
+
+                        if (!nextNode) {
+                            break; // Koniec ścieżki, brak dalszych nieodwiedzonych połączeń
+                        }
+
+                        visited.add(nextNode);
+                        path.push(nextNode);
+                        currentNode = nextNode;
+                    }
+
+                    // 3c. Zbuduj atrybut 'd' dla znalezionej ścieżki
+                    if (path.length > 1) {
+                        svgPath += `M ${path[0].replace(',', ' ')} `;
+                        for (let i = 1; i < path.length; i++) {
+                            svgPath += `L ${path[i].replace(',', ' ')} `;
+                        }
+
+                        // Sprawdź, czy ścieżka powinna być zamknięta, łącząc koniec z początkiem
+                        const lastNode = path[path.length - 1];
+                        const lastNodeNeighbors = points.get(lastNode);
+                        if (lastNodeNeighbors && lastNodeNeighbors.includes(startNode)) {
+                            svgPath += 'Z ';
+                        }
+                    }
+                }
+
+                return svgPath.trim();
             }
 
             function filterBorders(group) {
