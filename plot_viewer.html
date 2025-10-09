@@ -743,7 +743,7 @@
             function createDistrictOutline(plots) {
                 if (plots.length === 0) return '';
 
-                // --- Krok 1: Przygotowanie danych ---
+                // --- Krok 1: Przygotowanie danych (bez zmian) ---
                 const borders = { top: [], right: [], bottom: [], left: [] };
                 let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
 
@@ -764,23 +764,13 @@
                     borders.right.push({ fcrd: x_max, scrd: [z_min, z_max] });
                 });
 
-                /**
-                 * Główna logika algorytmu "formy" / "skanera".
-                 * @param {Array} a_borders - Krawędzie do sprawdzenia (np. wszystkie górne).
-                 * @param {Array} span - Zakres skanowania (np. [minX, maxX] dla skanera góra-dół).
-                 * @param {boolean} sortAsc - Kierunek sortowania (true dla góra->dół i lewo->prawo).
-                 * @returns {Array} - Znalezione zewnętrzne segmenty granic.
-                 */
                 const sweepAndFindBorders = (a_borders, span, sortAsc) => {
                     const externalBorders = [];
-                    let uncoveredSpan = [span]; // Początkowo cała przestrzeń jest "odkryta"
-
-                    // Sortujemy krawędzie, aby skaner przesuwał się w odpowiedniej kolejności
+                    let uncoveredSpan = [span];
                     a_borders.sort((a, b) => sortAsc ? a.fcrd - b.fcrd : b.fcrd - a.fcrd);
 
                     for (const border of a_borders) {
-                        if (uncoveredSpan.length === 0) break; // Jeśli nic już nie jest odkryte, kończymy
-
+                        if (uncoveredSpan.length === 0) break;
                         const [border_start, border_end] = border.scrd;
                         const nextUncovered = [];
 
@@ -788,20 +778,11 @@
                             const overlap_start = Math.max(border_start, span_start);
                             const overlap_end = Math.min(border_end, span_end);
 
-                            // Czy ta krawędź znajduje się w "odkrytym" jeszcze obszarze?
                             if (overlap_end > overlap_start) {
-                                // Tak - znaleziony fragment jest granicą zewnętrzną
                                 externalBorders.push({ ...border, scrd: [overlap_start, overlap_end] });
-
-                                // Zaktualizuj "odkryty" obszar, usuwając z niego znaleziony fragment
-                                if (span_start < overlap_start) {
-                                    nextUncovered.push([span_start, overlap_start]);
-                                }
-                                if (span_end > overlap_end) {
-                                    nextUncovered.push([overlap_end, span_end]);
-                                }
+                                if (span_start < overlap_start) nextUncovered.push([span_start, overlap_start]);
+                                if (span_end > overlap_end) nextUncovered.push([overlap_end, span_end]);
                             } else {
-                                // Nie - ten fragment odkrytego obszaru pozostaje bez zmian
                                 nextUncovered.push([span_start, span_end]);
                             }
                         }
@@ -810,83 +791,81 @@
                     return externalBorders;
                 };
 
-                // --- Krok 2: Uruchomienie "skanerów" dla każdej ze stron ---
+                // --- Krok 2: Znajdź zewnętrzne segmenty (bez zmian) ---
                 const topExt = sweepAndFindBorders(borders.top, [minX, maxX], true);
                 const bottomExt = sweepAndFindBorders(borders.bottom, [minX, maxX], false);
                 const leftExt = sweepAndFindBorders(borders.left, [minZ, maxZ], true);
                 const rightExt = sweepAndFindBorders(borders.right, [minZ, maxZ], false);
 
-                const allExternalSegments = [...topExt, ...bottomExt, ...leftExt, ...rightExt];
+                const allSegmentsRaw = [
+                    ...topExt.map(s => [[s.scrd[0], s.fcrd], [s.scrd[1], s.fcrd]]),
+                    ...bottomExt.map(s => [[s.scrd[0], s.fcrd], [s.scrd[1], s.fcrd]]),
+                    ...leftExt.map(s => [[s.fcrd, s.scrd[0]], [s.fcrd, s.scrd[1]]]),
+                    ...rightExt.map(s => [[s.fcrd, s.scrd[0]], [s.fcrd, s.scrd[1]]]),
+                ];
+                let segments = allSegmentsRaw.filter(s => s[0][0] !== s[1][0] || s[0][1] !== s[1][1]);
 
-                const points = new Map();
+                // --- Krok 3: NOWA, UPROSZCZONA LOGIKA ŁĄCZENIA ŚCIEŻEK ---
+                if (segments.length === 0) return '';
 
-                /** Funkcja pomocnicza do dodawania połączonych punktów do mapy */
-                const addConnection = (p1_key, p2_key) => {
-                    if (p1_key === p2_key) return;
-                    if (!points.has(p1_key)) points.set(p1_key, []);
-                    if (!points.has(p2_key)) points.set(p2_key, []);
-                    points.get(p1_key).push(p2_key);
-                    points.get(p2_key).push(p1_key);
-                };
-
-                // Osobno przetwarzamy krawędzie POZIOME (górne i dolne)
-                [...topExt, ...bottomExt].forEach(seg => {
-                    const p1_key = `${seg.scrd[0]},${seg.fcrd}`;
-                    const p2_key = `${seg.scrd[1]},${seg.fcrd}`;
-                    addConnection(p1_key, p2_key);
-                });
-
-                // Osobno przetwarzamy krawędzie PIONOWE (lewe i prawe)
-                [...leftExt, ...rightExt].forEach(seg => {
-                    const p1_key = `${seg.fcrd},${seg.scrd[0]}`;
-                    const p2_key = `${seg.fcrd},${seg.scrd[1]}`;
-                    addConnection(p1_key, p2_key);
-                });
-
-
-                // OSTATECZNA, POPRAWIONA LOGIKA ŁĄCZENIA PUNKTÓW
                 let svgPath = '';
-                const visited = new Set(); // Zbiór odwiedzonych już punktów
+                while (segments.length > 0) {
+                    // Zacznij nową ścieżkę od pierwszego dostępnego segmentu
+                    let currentPath = segments.shift();
+                    let head = currentPath[0];
+                    let tail = currentPath[currentPath.length - 1];
 
-                for (const startKey of points.keys()) {
-                    // Jeśli ten punkt był już częścią innej, narysowanej ścieżki - pomiń go
-                    if (visited.has(startKey)) {
-                        continue;
+                    let foundConnection = true;
+                    while (foundConnection) {
+                        foundConnection = false;
+                        for (let i = 0; i < segments.length; i++) {
+                            const nextSegment = segments[i];
+                            const nextHead = nextSegment[0];
+                            const nextTail = nextSegment[1];
+
+                            // Sprawdź, czy następny segment łączy się z końcem naszej ścieżki
+                            if (tail[0] === nextHead[0] && tail[1] === nextHead[1]) {
+                                currentPath.push(nextTail);
+                                tail = nextTail;
+                                segments.splice(i, 1);
+                                foundConnection = true;
+                                break;
+                            }
+                            // Sprawdź, czy łączy się z końcem (ale w odwrotnej kolejności)
+                            if (tail[0] === nextTail[0] && tail[1] === nextTail[1]) {
+                                currentPath.push(nextHead);
+                                tail = nextHead;
+                                segments.splice(i, 1);
+                                foundConnection = true;
+                                break;
+                            }
+                            // Sprawdź, czy łączy się z początkiem naszej ścieżki
+                            if (head[0] === nextTail[0] && head[1] === nextTail[1]) {
+                                currentPath.unshift(nextHead);
+                                head = nextHead;
+                                segments.splice(i, 1);
+                                foundConnection = true;
+                                break;
+                            }
+                            // Sprawdź, czy łączy się z początkiem (ale w odwrotnej kolejności)
+                            if (head[0] === nextHead[0] && head[1] === nextHead[1]) {
+                                currentPath.unshift(nextTail);
+                                head = nextTail;
+                                segments.splice(i, 1);
+                                foundConnection = true;
+                                break;
+                            }
+                        }
                     }
 
-                    // Rozpocznij budowanie nowej ścieżki (nowego wielokąta)
-                    const path = [startKey];
-                    visited.add(startKey);
-                    let currentKey = startKey;
-
-                    while (true) {
-                        // Znajdź sąsiada, który nie był jeszcze odwiedzony
-                        const connections = points.get(currentKey) || [];
-                        const nextKey = connections.find(neighbor => !visited.has(neighbor));
-
-                        // Jeśli nie ma nieodwiedzonego sąsiada, to koniec tej ścieżki
-                        if (!nextKey) {
-                            break;
-                        }
-
-                        // Przejdź do następnego punktu
-                        visited.add(nextKey);
-                        path.push(nextKey);
-                        currentKey = nextKey;
+                    // Zbuduj ścieżkę SVG z połączonych punktów
+                    svgPath += `M ${currentPath[0][0]} ${currentPath[0][1]} `;
+                    for (let i = 1; i < currentPath.length; i++) {
+                        svgPath += `L ${currentPath[i][0]} ${currentPath[i][1]} `;
                     }
-
-                    // Przekonwertuj znalezioną ścieżkę na format SVG
-                    if (path.length > 1) {
-                        svgPath += `M ${path[0].replace(',', ' ')} `;
-                        for (let i = 1; i < path.length; i++) {
-                            svgPath += `L ${path[i].replace(',', ' ')} `;
-                        }
-
-                        // Sprawdź, czy ścieżka jest zamknięta (czy ostatni punkt łączy się z pierwszym)
-                        const endConnections = points.get(path[path.length - 1]) || [];
-                        if (endConnections.includes(startKey)) {
-                            svgPath += 'Z ';
-                        }
+                    // Jeśli ścieżka jest zamknięta, dodaj 'Z'
+                    if (head[0] === tail[0] && head[1] === tail[1]) {
+                        svgPath += 'Z ';
                     }
                 }
 
