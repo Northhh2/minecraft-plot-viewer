@@ -331,7 +331,7 @@
             const LOCALS_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${LOCALS_GID}`;
             const OWNERS_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${OWNERS_GID}`;
 
-            const MAP_IMAGE_URL = 'map.webp';
+            const MAP_IMAGE_URL = 'map.png';
             const MAP_WIDTH = 4296;
             const MAP_HEIGHT = 2360;
 
@@ -631,6 +631,22 @@
                     rect.addEventListener('mouseleave', hideTooltip);
                     rect.addEventListener('mousemove', moveTooltip);
                     rect.addEventListener('click', (e) => { e.stopPropagation(); openNewModal({type: 'merged', data: merged}); });
+
+                    let mergedTouchStartInfo = {};
+                    rect.addEventListener('touchstart', (e) => {
+                        if (e.touches.length === 1) mergedTouchStartInfo = { time: Date.now(), x: e.touches[0].clientX, y: e.touches[0].clientY };
+                    }, { passive: true });
+
+                    rect.addEventListener('touchend', (e) => {
+                        if (mergedTouchStartInfo.time) {
+                            const timeDiff = Date.now() - mergedTouchStartInfo.time;
+                            const dist = Math.hypot(e.changedTouches[0].clientX - mergedTouchStartInfo.x, e.changedTouches[0].clientY - mergedTouchStartInfo.y);
+                            if (timeDiff < 250 && dist < 10) { e.preventDefault(); openNewModal({type: 'merged', data: merged}); }
+                            mergedTouchStartInfo = {};
+                        }
+                    });
+
+                    layers.merged.appendChild(rect);
                 });
             }
 
@@ -657,6 +673,16 @@
                     g.addEventListener('mouseleave', () => { hideTooltip(); clearHighlight(); });
                     g.addEventListener('mousemove', moveTooltip);
                     g.addEventListener('click', (e) => { e.stopPropagation(); openNewModal({type: 'plot', data: plot}); });
+
+                    g.addEventListener('touchend', (e) => {
+                        if (touchStartInfo.time) {
+                            const timeDiff = Date.now() - touchStartInfo.time;
+                            const dist = Math.hypot(e.changedTouches[0].clientX - touchStartInfo.x, e.changedTouches[0].clientY - touchStartInfo.y);
+                            if (timeDiff < 250 && dist < 10) { e.preventDefault(); openNewModal({type: 'plot', data: plot}); }
+                        }
+                    });
+
+                    layers.plots.appendChild(g);
                 });
             }
 
@@ -952,7 +978,7 @@
                         ${createOwnerCardHTML(ownerInfo)}
                         <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm pt-3 border-t border-gray-700">
                             <span class="text-gray-400">Typ:</span><span class="font-medium">${plot.type || 'Brak'}</span>
-                            <span class="text-gray-400">Wartość:</span><span class="font-medium flex items-center">${plot.value || '0'} <img src="minecoin.webp" class="inline w-4 h-4 ml-1" alt="MC"></span>
+                            <span class="text-gray-400">Wartość:</span><span class="font-medium flex items-center">${plot.value || '0'} <img src="minecoin.png" class="inline w-4 h-4 ml-1" alt="MC"></span>
                             <span class="text-gray-400">Powierzchnia:</span><span class="font-medium">${plot.area || 'Brak'} m²</span>
                         </div>
                     </div>
@@ -1046,7 +1072,7 @@
                             <h4 class="font-semibold text-md mb-2">Posiadane Działki (${ownedPlots.length})</h4>
                             <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                                 <span class="text-gray-400">Łączna pow.:</span><span>${totalPlotArea.toLocaleString()} m²</span>
-                                <span class="text-gray-400">Łączna wartość:</span><span class="flex items-center">${totalPlotValue.toLocaleString()} <img src="minecoin.webp" class="inline w-4 h-4 ml-1" alt="MC"></span>
+                                <span class="text-gray-400">Łączna wartość:</span><span class="flex items-center">${totalPlotValue.toLocaleString()} <img src="minecoin.png" class="inline w-4 h-4 ml-1" alt="MC"></span>
                             </div>
                             ${ownedPlots.length > 0 ? `<div class="space-y-2 mt-2">${ownedPlotsHTML}</div>` : ''}
                         </div>
@@ -1288,4 +1314,5 @@
 </body>
 
 </html>
+
 
