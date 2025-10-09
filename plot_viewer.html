@@ -849,55 +849,52 @@
                 });
 
                 // Poprawiona i stabilna logika do łączenia punktów w ścieżkę SVG
+                // Poprawiona i stabilna logika do łączenia punktów w ścieżkę SVG
                 let svgPath = '';
                 while (points.size > 0) {
-                    const [startKey, startConnections] = points.entries().next().value;
+                    let [currentKey] = points.keys(); // Pobieramy dowolny punkt startowy
+                    const startKey = currentKey;
 
-                    // Jeśli punkt nie ma połączeń, usuń go i kontynuuj
-                    if (!startConnections || startConnections.length === 0) {
-                        points.delete(startKey);
-                        continue;
-                    }
+                    let path = `M ${startKey.replace(',', ' ')} `;
+                    let pathLength = 1;
 
-                    let currentKey = startKey;
-                    svgPath += `M ${startKey.replace(',', ' ')} `;
-
-                    // Pętla do śledzenia ścieżki od punktu do punktu
-                    while (currentKey) {
+                    while (true) {
                         const connections = points.get(currentKey);
+
+                        // Jeśli punkt nie ma już połączeń, ścieżka się kończy
                         if (!connections || connections.length === 0) {
-                            points.delete(currentKey); // Usuń punkt, jeśli wyczerpano połączenia
+                            points.delete(currentKey);
                             break;
                         }
 
-                        const nextKey = connections.shift(); // Pobierz następny punkt w ścieżce
+                        const nextKey = connections.shift(); // Bierzemy następny punkt
 
-                        // Usuń połączenie zwrotne, aby nie wracać tą samą drogą
+                        // Usuwamy połączenie zwrotne z listy następnego punktu
                         const nextConnections = points.get(nextKey);
                         if (nextConnections) {
                             const index = nextConnections.indexOf(currentKey);
                             if (index > -1) nextConnections.splice(index, 1);
                         }
 
-                        svgPath += `L ${nextKey.replace(',', ' ')} `;
-
-                        // Jeśli punkt startowy nie ma już więcej połączeń, usuń go
-                        if (points.get(currentKey)?.length === 0) {
-                            points.delete(currentKey);
-                        }
-
+                        path += `L ${nextKey.replace(',', ' ')} `;
+                        pathLength++;
                         currentKey = nextKey;
 
-                        // Jeśli wróciliśmy do punktu startowego, zamknij ścieżkę
+                        // Jeśli pętla się zamknęła, kończymy
                         if (currentKey === startKey) {
-                            svgPath += 'Z ';
-                            // Upewnij się, że punkt startowy jest usunięty, jeśli to konieczne
-                            if (points.get(currentKey)?.length === 0) {
-                                points.delete(currentKey);
-                            }
+                            path += 'Z ';
+                            points.delete(startKey); // Usuwamy startowy, bo pętla zamknięta
                             break;
                         }
                     }
+
+                    // Dodaj zbudowaną ścieżkę do wyniku tylko, jeśli ma więcej niż 1 punkt
+                    if (pathLength > 1) {
+                        svgPath += path;
+                    }
+
+                    // Upewnijmy się, że wszystkie punkty ze ścieżki są usunięte
+                    path.match(/(\d+,\d+)/g)?.forEach(p => points.delete(p));
                 }
 
                 return svgPath.trim();
