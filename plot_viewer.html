@@ -739,11 +739,10 @@
                 });
                 return clusters;
             }
-
             function createDistrictOutline(plots) {
                 if (plots.length === 0) return '';
 
-                // Krok 1 i 2: Znajdowanie zewnętrznych krawędzi - ta część jest w 100% poprawna i pozostaje bez zmian.
+                // Krok 1 i 2: Znajdowanie zewnętrznych krawędzi (potwierdziliśmy, że działa poprawnie)
                 const borders = { top: [], right: [], bottom: [], left: [] };
                 let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
                 plots.forEach(plot => {
@@ -778,47 +777,76 @@
                 const bottomExt = sweepAndFindBorders(borders.bottom, [minX, maxX], false);
                 const leftExt = sweepAndFindBorders(borders.left, [minZ, maxZ], true);
                 const rightExt = sweepAndFindBorders(borders.right, [minZ, maxZ], false);
-                const allSegments = [
+                const allSegmentsRaw = [
                     ...topExt.map(s => [[s.scrd[0], s.fcrd], [s.scrd[1], s.fcrd]]),
                     ...bottomExt.map(s => [[s.scrd[0], s.fcrd], [s.scrd[1], s.fcrd]]),
                     ...leftExt.map(s => [[s.fcrd, s.scrd[0]], [s.fcrd, s.scrd[1]]]),
                     ...rightExt.map(s => [[s.fcrd, s.scrd[0]], [s.fcrd, s.scrd[1]]]),
-                ].filter(s => s[0][0] !== s[1][0] || s[0][1] !== s[1][1]);
+                ];
 
-                // --- Krok 3: OSTATECZNA i UPROSZCZONA logika łączenia ---
+                // --- NOWY KROK: Filtrowanie segmentów krótszych niż 8 kratek ---
+                const minLength = 8;
+                const allSegments = allSegmentsRaw.filter(seg => {
+                    const p1 = seg[0];
+                    const p2 = seg[1];
+                    // Używamy prostszej i szybszej odległości Manhattan, która dla linii prostych jest tym samym co Euklidesowa
+                    const length = Math.abs(p2[0] - p1[0]) + Math.abs(p2[1] - p1[1]);
+                    return length >= minLength;
+                });
+
                 if (allSegments.length === 0) return '';
 
-                // Tworzymy mapę połączeń w formacie: "x1,y1" -> "x2,y2"
-                const connections = new Map();
+                // --- Krok 3: OSTATECZNA, POPRAWIONA logika łączenia ---
+
+                // 3a. Stwórz PRAWIDŁOWY graf połączeń (mapę sąsiedztwa z LISTĄ połączeń)
+                const points = new Map();
                 allSegments.forEach(seg => {
                     const p1_key = seg[0].join(',');
                     const p2_key = seg[1].join(',');
-                    connections.set(p1_key, p2_key);
-                    connections.set(p2_key, p1_key);
+
+                    if (!points.has(p1_key)) points.set(p1_key, []);
+                    if (!points.has(p2_key)) points.set(p2_key, []);
+                    // Dodajemy połączenia - teraz punkt może mieć wielu sąsiadów
+                    points.get(p1_key).push(p2_key);
+                    points.get(p2_key).push(p1_key);
                 });
 
+                // 3b. Przejdź po grafie, aby znaleźć wszystkie ciągłe ścieżki
                 let svgPath = '';
-                while (connections.size > 0) {
-                    const [startKey] = connections.keys(); // Bierzemy dowolny punkt startowy
-                    let currentKey = startKey;
+                const visited = new Set(); // Przechowuje punkty, które już są częścią jakiejś ścieżki
 
-                    svgPath += `M ${startKey.replace(',', ' ')} `;
+                for (const startNode of points.keys()) {
+                    if (visited.has(startNode)) {
+                        continue; // Pomiń ten punkt, jeśli już go użyliśmy
+                    }
 
-                    // Pętla podąża za ścieżką, dopóki nie skończą się połączenia
-                    while (connections.has(currentKey)) {
-                        const nextKey = connections.get(currentKey);
+                    const path = [startNode];
+                    visited.add(startNode);
+                    let currentNode = startNode;
 
-                        // Usuwamy zużyte połączenia (w obie strony)
-                        connections.delete(currentKey);
-                        connections.delete(nextKey);
+                    while (true) {
+                        const neighbors = points.get(currentNode);
+                        const nextNode = neighbors.find(n => !visited.has(n));
 
-                        svgPath += `L ${nextKey.replace(',', ' ')} `;
-                        currentKey = nextKey;
+                        if (!nextNode) {
+                            break; // Koniec ścieżki, brak dalszych nieodwiedzonych połączeń
+                        }
 
-                        // Jeśli wróciliśmy do początku, zamknij pętlę
-                        if (currentKey === startKey) {
-                            svgPath = svgPath.trimEnd() + ' Z ';
-                            break;
+                        visited.add(nextNode);
+                        path.push(nextNode);
+                        currentNode = nextNode;
+                    }
+
+                    // 3c. Zbuduj atrybut 'd' dla znalezionej ścieżki
+                    if (path.length > 1) {
+                        svgPath += `M ${path[0].replace(',', ' ')} `;
+                        for (let i = 1; i < path.length; i++) {
+                            svgPath += `L ${path[i].replace(',', ' ')} `;
+                        }
+                        const lastNode = path[path.length - 1];
+                        const lastNodeNeighbors = points.get(lastNode);
+                        if (lastNodeNeighbors && lastNodeNeighbors.includes(startNode)) {
+                            svgPath += 'Z ';
                         }
                     }
                 }
