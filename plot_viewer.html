@@ -524,7 +524,7 @@
                 const maxX = Math.max(...allPlots.map(p => p.x2));
                 const minZ = Math.min(...allPlots.map(p => p.z1));
                 const maxZ = Math.max(...allPlots.map(p => p.z2));
-                
+
                 const mapContentWidth = maxX - minX + 2 * padding;
                 const mapContentHeight = maxZ - minZ + 2 * padding;
                 const clientRatio = mapContainer.clientWidth / mapContainer.clientHeight;
@@ -543,7 +543,7 @@
                 initialViewBox.y = minZ - (h - mapContentHeight + 2 * padding) / 2;
                 initialViewBox.w = w;
                 initialViewBox.h = h;
-                
+
                 setViewBox(initialViewBox.x, initialViewBox.y, initialViewBox.w, initialViewBox.h);
             }
 
@@ -749,7 +749,7 @@
                     const x_max = Math.max(plot.x1, plot.x2);
                     const z_min = Math.min(plot.z1, plot.z2);
                     const z_max = Math.max(plot.z1, plot.z2);
-                    
+
                     borders.top.push({ name: plot.name, fcrd: z_min, scrd: [x_min, x_max] });
                     borders.bottom.push({ name: plot.name, fcrd: z_max, scrd: [x_min, x_max] });
                     borders.left.push({ name: plot.name, fcrd: x_min, scrd: [z_min, z_max] });
@@ -772,7 +772,7 @@
                 console.log(outsideBorders);
 
                 const allPoints = [];
-                
+
                 // Top borders: left to right (sort by X start, then add points left-to-right)
                 const topBorders = outsideBorders.top.sort((a, b) => a.scrd[0] - b.scrd[0]);
                 topBorders.forEach(b => {
@@ -816,7 +816,7 @@
                         allPoints.push([b.fcrd, b.scrd[0]]);
                     }
                 });
-                
+
                 if (allPoints.length < 2) return '';
 
                 const pathPoints = allPoints.filter((point, i, arr) => {
@@ -840,7 +840,7 @@
                     svgPath += ' L ' + pathPoints[i].join(' ');
                 }
                 svgPath += ' Z';
-                
+
                 return svgPath;
             }
 
@@ -856,27 +856,34 @@
                             const endInside = border.scrd[1] >= outBorder.scrd[0] && border.scrd[1] <= outBorder.scrd[1];
                             return startInside && endInside;
                         });
-                        
+
                         if (!isCovered) {
                             outsideBorders.push(border);
                         }
                     }
                 });
-                
+
                 return outsideBorders;
             }
 
             function extendBorders(borders) {
                 borders = borders.reverse();
-                let extendedBorders = [];
 
-                borders.forEach(currentBorder => {
+                // Initialize extendedBorders with copies of all borders
+                let extendedBorders = borders.map(b => ({
+                    name: b.name,
+                    fcrd: b.fcrd,
+                    scrd: [b.scrd[0], b.scrd[1]]
+                }));
+
+                extendedBorders.forEach((currentBorder, index) => {
                     const currentXMin = currentBorder.scrd[0];
                     const currentXMax = currentBorder.scrd[1];
 
+                    // Extend left edge (min) to the closest HIGHER value (using current state)
                     let newXMin = currentXMin;
-                    const closestHigherForMin = borders
-                        .filter(item => item.scrd[0] > currentXMin)
+                    const closestHigherForMin = extendedBorders
+                        .filter((item, i) => i !== index && item.scrd[0] > currentXMin)
                         .sort((a, b) => a.scrd[0] - b.scrd[0])
                     [0];
 
@@ -884,9 +891,10 @@
                         newXMin = closestHigherForMin.scrd[0];
                     }
 
+                    // Extend right edge (max) to the closest LOWER value (using current state)
                     let newXMax = currentXMax;
-                    const closestLowerForMax = borders
-                        .filter(item => item.scrd[1] < currentXMax)
+                    const closestLowerForMax = extendedBorders
+                        .filter((item, i) => i !== index && item.scrd[1] < currentXMax)
                         .sort((a, b) => b.scrd[1] - a.scrd[1])
                     [0];
 
@@ -894,11 +902,9 @@
                         newXMax = closestLowerForMax.scrd[1];
                     }
 
-                    extendedBorders.push({
-                        name: currentBorder.name,
-                        fcrd: currentBorder.fcrd,
-                        scrd: [newXMin, newXMax]
-                    });
+                    // Update the current border in place
+                    currentBorder.scrd[0] = newXMin;
+                    currentBorder.scrd[1] = newXMax;
                 });
 
                 return extendedBorders.reverse();
