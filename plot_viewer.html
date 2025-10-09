@@ -805,43 +805,64 @@
 
                 if (allSegments.length === 0) return '';
 
-                const points = new Map();
+                // Build adjacency map: each point maps to its connected points
+                const adjMap = new Map();
+
                 allSegments.forEach(seg => {
-                    const p1_key = seg[0].join(',');
-                    const p2_key = seg[1].join(',');
-                    if (!points.has(p1_key)) points.set(p1_key, []);
-                    if (!points.has(p2_key)) points.set(p2_key, []);
-                    points.get(p1_key).push(p2_key);
-                    points.get(p2_key).push(p1_key);
+                    const [p1, p2] = seg;
+                    const key1 = `${p1[0]},${p1[1]}`;
+                    const key2 = `${p2[0]},${p2[1]}`;
+
+                    if (!adjMap.has(key1)) adjMap.set(key1, []);
+                    if (!adjMap.has(key2)) adjMap.set(key2, []);
+
+                    adjMap.get(key1).push(key2);
+                    adjMap.get(key2).push(key1);
                 });
 
-                let svgPath = '';
+                // Find contours by traversing the graph
                 const visited = new Set();
-                for (const startNode of points.keys()) {
-                    if (visited.has(startNode)) continue;
-                    const path = [startNode];
-                    visited.add(startNode);
-                    let currentNode = startNode;
+                const contours = [];
+
+                for (const startKey of adjMap.keys()) {
+                    if (visited.has(startKey)) continue;
+
+                    const contour = [startKey];
+                    visited.add(startKey);
+                    let current = startKey;
+
+                    // Follow the path
                     while (true) {
-                        const neighbors = points.get(currentNode);
-                        const nextNode = neighbors.find(n => !visited.has(n));
-                        if (!nextNode) break;
-                        visited.add(nextNode);
-                        path.push(nextNode);
-                        currentNode = nextNode;
-                    }
-                    if (path.length > 1) {
-                        svgPath += `M ${path[0].replace(',', ' ')} `;
-                        for (let i = 1; i < path.length; i++) {
-                            svgPath += `L ${path[i].replace(',', ' ')} `;
+                        const neighbors = adjMap.get(current) || [];
+                        const next = neighbors.find(n => !visited.has(n));
+
+                        if (!next) {
+                            // Check if we can close the loop
+                            const lastNeighbors = adjMap.get(current) || [];
+                            if (lastNeighbors.includes(startKey) && contour.length > 2) {
+                                contours.push(contour);
+                            }
+                            break;
                         }
-                        const lastNode = path[path.length - 1];
-                        const lastNodeNeighbors = points.get(lastNode);
-                        if (lastNodeNeighbors && lastNodeNeighbors.includes(startNode)) {
-                            svgPath += 'Z ';
-                        }
+
+                        visited.add(next);
+                        contour.push(next);
+                        current = next;
                     }
                 }
+
+                // Build SVG path from contours
+                let svgPath = '';
+                contours.forEach(contour => {
+                    if (contour.length < 3) return;
+
+                    svgPath += `M ${contour[0].replace(',', ' ')} `;
+                    for (let i = 1; i < contour.length; i++) {
+                        svgPath += `L ${contour[i].replace(',', ' ')} `;
+                    }
+                    svgPath += 'Z ';
+                });
+
                 return svgPath.trim();
             }
 
@@ -1174,39 +1195,39 @@
             }
 
             function addModalEventListeners() {
-    modalContent.querySelectorAll('[data-plot-name]').forEach(el => el.addEventListener('click', e => { 
-        e.preventDefault(); 
-        const plot = allPlots.find(p => p.name === e.currentTarget.dataset.plotName);
-        if(plot) navigateToModal({type: 'plot', data: plot});
-    }));
-    modalContent.querySelectorAll('[data-local-id]').forEach(el => el.addEventListener('click', e => { 
-        e.preventDefault(); 
-        const local = allLocals.find(l => l.id === e.currentTarget.dataset.localId);
-        if(local) navigateToModal({type: 'local', data: local});
-    }));
-    modalContent.querySelectorAll('[data-owner-name]').forEach(el => el.addEventListener('click', e => { 
-        e.preventDefault(); 
-        const ownerName = e.currentTarget.dataset.ownerName;
-        if (ownerName && ownerName.toLowerCase() !== 'skarb miasta' && ownerName.toLowerCase() !== 'brak') {
-            navigateToModal({type: 'owner', data: ownerName});
-        }
-    }));
-    modalContent.querySelectorAll('[data-district-name]').forEach(el => el.addEventListener('click', e => {
-        e.preventDefault();
-        const districtName = e.currentTarget.dataset.districtName;
-        if (!districtName) return;
-        const plotsInDistrict = allPlots.filter(p => p.district === districtName);
-        if(plotsInDistrict.length > 0) navigateToModal({type: 'district', data: {name: districtName, plots: plotsInDistrict}});
-    }));
-     modalContent.querySelectorAll('[data-street-name]').forEach(el => el.addEventListener('click', e => {
-        e.preventDefault();
-        navigateToModal({type: 'street', data: e.currentTarget.dataset.streetName});
-    }));
-    modalContent.querySelectorAll('[data-plot-type]').forEach(el => el.addEventListener('click', e => {
-        e.preventDefault();
-        navigateToModal({type: 'plotType', data: e.currentTarget.dataset.plotType});
-    }));
-}
+                modalContent.querySelectorAll('[data-plot-name]').forEach(el => el.addEventListener('click', e => {
+                    e.preventDefault();
+                    const plot = allPlots.find(p => p.name === e.currentTarget.dataset.plotName);
+                    if (plot) navigateToModal({ type: 'plot', data: plot });
+                }));
+                modalContent.querySelectorAll('[data-local-id]').forEach(el => el.addEventListener('click', e => {
+                    e.preventDefault();
+                    const local = allLocals.find(l => l.id === e.currentTarget.dataset.localId);
+                    if (local) navigateToModal({ type: 'local', data: local });
+                }));
+                modalContent.querySelectorAll('[data-owner-name]').forEach(el => el.addEventListener('click', e => {
+                    e.preventDefault();
+                    const ownerName = e.currentTarget.dataset.ownerName;
+                    if (ownerName && ownerName.toLowerCase() !== 'skarb miasta' && ownerName.toLowerCase() !== 'brak') {
+                        navigateToModal({ type: 'owner', data: ownerName });
+                    }
+                }));
+                modalContent.querySelectorAll('[data-district-name]').forEach(el => el.addEventListener('click', e => {
+                    e.preventDefault();
+                    const districtName = e.currentTarget.dataset.districtName;
+                    if (!districtName) return;
+                    const plotsInDistrict = allPlots.filter(p => p.district === districtName);
+                    if (plotsInDistrict.length > 0) navigateToModal({ type: 'district', data: { name: districtName, plots: plotsInDistrict } });
+                }));
+                modalContent.querySelectorAll('[data-street-name]').forEach(el => el.addEventListener('click', e => {
+                    e.preventDefault();
+                    navigateToModal({ type: 'street', data: e.currentTarget.dataset.streetName });
+                }));
+                modalContent.querySelectorAll('[data-plot-type]').forEach(el => el.addEventListener('click', e => {
+                    e.preventDefault();
+                    navigateToModal({ type: 'plotType', data: e.currentTarget.dataset.plotType });
+                }));
+            }
 
             searchInput.addEventListener('input', () => {
                 const query = searchInput.value.trim().toLowerCase();
