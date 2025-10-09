@@ -332,6 +332,7 @@
             let layerVisibility = { plots: true, streets: true, districts: true, merged: true };
             let touchStartInfo = { time: 0, x: 0, y: 0 };
             let activeCharts = [];
+            let maxViewboxWidth = MAP_WIDTH; // Domyślna wartość
 
             let allPlots = [];
             let allLocals = [];
@@ -348,17 +349,28 @@
             function setViewBox(x, y, w, h) {
                 const isMobile = window.innerWidth <= 768;
                 const minZoom = isMobile ? 50 : 100;
-                const maxZoom = Math.max(MAP_WIDTH, MAP_HEIGHT) * 2;
 
-                w = Math.max(minZoom, Math.min(w, maxZoom));
+                // Ogranicz maksymalne przybliżenie (minimalna szerokość widoku)
+                w = Math.max(minZoom, w);
+
+                // Ogranicz maksymalne oddalenie (maksymalna szerokość widoku)
+                w = Math.min(w, maxViewboxWidth);
+
+                // Utrzymaj proporcje
                 if (initialViewBox.w) {
                     h = (w / initialViewBox.w) * initialViewBox.h;
                 }
 
-                if (x < mapBounds.minX) x = mapBounds.minX;
-                if (y < mapBounds.minY) y = mapBounds.minY;
-                if (x + w > mapBounds.maxX) x = mapBounds.maxX - w;
-                if (y + h > mapBounds.maxY) y = mapBounds.maxY - h;
+                // Nowa, ulepszona logika przesuwania, aby mapa nie "uciekała"
+                const minX_bound = -MAP_WIDTH / 2;
+                const minY_bound = -MAP_HEIGHT / 2;
+                const maxX_bound = MAP_WIDTH / 2;
+                const maxY_bound = MAP_HEIGHT / 2;
+
+                if (x < minX_bound) x = minX_bound;
+                if (y < minY_bound) y = minY_bound;
+                if (x + w > maxX_bound) x = maxX_bound - w;
+                if (y + h > maxY_bound) y = maxY_bound - h;
 
                 viewBox = { x, y, w, h };
                 svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
@@ -527,16 +539,15 @@
 
                 const mapContentWidth = maxX - minX + 2 * padding;
                 const mapContentHeight = maxZ - minZ + 2 * padding;
-                const clientRatio = mapContainer.clientWidth / mapContainer.clientHeight;
-                const contentRatio = mapContentWidth / mapContentHeight;
 
-                let w, h;
-                if (clientRatio > contentRatio) {
-                    h = mapContentHeight;
-                    w = h * clientRatio;
+                const clientRatio = mapContainer.clientWidth / mapContainer.clientHeight;
+                const mapRatio = MAP_WIDTH / MAP_HEIGHT;
+                if (clientRatio > mapRatio) {
+                    // Ekran jest szerszy niż mapa, ograniczeniem jest wysokość mapy
+                    maxViewboxWidth = MAP_HEIGHT * clientRatio;
                 } else {
-                    w = mapContentWidth;
-                    h = w / clientRatio;
+                    // Ekran jest wyższy niż mapa, ograniczeniem jest szerokość mapy
+                    maxViewboxWidth = MAP_WIDTH;
                 }
 
                 initialViewBox.x = minX - (w - mapContentWidth + 2 * padding) / 2;
@@ -951,32 +962,36 @@
                     const totalWorkplaces = localsOnPlot.reduce((sum, l) => sum + l.workplaces, 0);
                     const totalLocalArea = localsOnPlot.reduce((sum, l) => sum + l.area, 0);
 
-                    const localLinks = localsOnPlot.map(l =>
-                        `<li><a href="#" class="text-purple-400 hover:underline" data-local-id="${l.id}">Lokal #${l.localNum} (${l.area} m²)</a></li>`
-                    ).join('');
+                    // ZMODYFIKOWANA CZĘŚĆ - Tworzenie szczegółowej, klikalnej listy lokali
+                    const localDetailsList = localsOnPlot.map(l => `
+            <div data-local-id="${l.id}" class="bg-gray-700 p-2 rounded-md hover:bg-gray-600 cursor-pointer transition-colors">
+                <div class="font-semibold text-purple-400">Lokal #${l.localNum} (${l.area} m²)</div>
+                <div class="text-xs text-gray-400">Najemca: <span class="font-medium text-gray-200">${l.tenant || 'Brak'}</span></div>
+            </div>
+        `).join('');
 
                     localsHTML = `
-                        <div class="border-t border-gray-700 pt-3 mt-3">
-                             <h4 class="text-md font-semibold mb-2">Lokale w budynku</h4>
-                             <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm mb-2">
-                                <span class="text-gray-400">Łączna pow. lokali:</span><span class="font-medium">${totalLocalArea} m²</span>
-                                <span class="text-gray-400">Miejsca pracy:</span><span class="font-medium">${totalWorkplaces}</span>
-                                <span class="text-gray-400">Ilość łóżek:</span><span class="font-medium">${totalBeds}</span>
-                             </div>
-                             ${localsOnPlot.length > 1 ? `<ul class="list-disc list-inside text-sm">${localLinks}</ul>` : ''}
-                        </div>
-                    `;
+            <div class="border-t border-gray-700 pt-3 mt-3">
+                 <h4 class="text-md font-semibold mb-2">Lokale w budynku (${localsOnPlot.length})</h4>
+                 <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm mb-3">
+                    <span class="text-gray-400">Łączna pow. lokali:</span><span class="font-medium">${totalLocalArea} m²</span>
+                    <span class="text-gray-400">Miejsca pracy:</span><span class="font-medium">${totalWorkplaces}</span>
+                    <span class="text-gray-400">Ilość łóżek:</span><span class="font-medium">${totalBeds}</span>
+                 </div>
+                 <div class="space-y-2">${localDetailsList}</div>
+            </div>
+        `;
                 }
 
                 modalContent.innerHTML = `
-                    <div><h3 class="text-2xl font-bold ${isOwned ? 'text-red-400' : 'text-green-400'}">${plot.name || `Działka ${plot.id}`}</h3><p class="text-gray-400">${plot.district || 'Brak dzielnicy'}</p></div>
-                    <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                        <span class="text-gray-400">Właściciel:</span><span class="font-medium clickable-name" data-owner-name="${ownerInfo}">${ownerInfo}</span>
-                        <span class="text-gray-400">Typ:</span><span class="font-medium">${plot.type || 'Brak'}</span>
-                        <span class="text-gray-400">Wartość:</span><span class="font-medium flex items-center">${plot.value || '0'} <img src="minecoin.png" class="inline w-4 h-4 ml-1" alt="MC"></span>
-                        <span class="text-gray-400">Powierzchnia:</span><span class="font-medium">${plot.area || 'Brak'} m²</span>
-                    </div>
-                    ${localsHTML}`;
+        <div><h3 class="text-2xl font-bold ${isOwned ? 'text-red-400' : 'text-green-400'}">${plot.name || `Działka ${plot.id}`}</h3><p class="text-gray-400">${plot.district || 'Brak dzielnicy'}</p></div>
+        <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+            <span class="text-gray-400">Właściciel:</span><span class="font-medium clickable-name" data-owner-name="${ownerInfo}">${ownerInfo}</span>
+            <span class="text-gray-400">Typ:</span><span class="font-medium">${plot.type || 'Brak'}</span>
+            <span class="text-gray-400">Wartość:</span><span class="font-medium flex items-center">${plot.value || '0'} <img src="minecoin.png" class="inline w-4 h-4 ml-1" alt="MC"></span>
+            <span class="text-gray-400">Powierzchnia:</span><span class="font-medium">${plot.area || 'Brak'} m²</span>
+        </div>
+        ${localsHTML}`;
 
                 modal.classList.add('show');
                 addModalEventListeners();
@@ -985,25 +1000,29 @@
             function showMergedModal(mergedPlot) {
                 destroyActiveCharts();
                 modalTitle.textContent = 'Szczegóły połączenia';
+
+                // ZMODYFIKOWANA CZĘŚĆ - Dodanie klikalnych linków do działek
                 const constituentPlotsDetails = mergedPlot.plots.map(plotName => {
                     const plotData = allPlots.find(p => p.name === plotName);
-                    return `<div class="pl-2">- <strong>${plotName}</strong> (${plotData ? plotData.area + ' m²' : 'Brak danych'})</div>`;
+                    return `<div class="pl-2">- <a href="#" data-plot-name="${plotName}" class="text-purple-400 hover:underline">${plotName}</a> (${plotData ? plotData.area + ' m²' : 'Brak danych'})</div>`;
                 }).join('');
 
                 modalContent.innerHTML = `
-                    <div><h3 class="text-2xl font-bold text-amber-400">Połączone Działki</h3><p class="text-gray-400">Grupa ${mergedPlot.plots.length} działek</p></div>
-                    <div class="space-y-3 text-sm">
-                        <div>
-                            <span class="text-gray-400 block">Działki wchodzące w skład:</span>
-                            <div class="font-medium space-y-1 mt-1">${constituentPlotsDetails}</div>
-                        </div>
-                        <div class="grid grid-cols-2 gap-x-4 gap-y-2 pt-2 border-t border-gray-700">
-                            <span class="text-gray-400">Pow. oryginalna:</span><span class="font-medium">${mergedPlot.originalArea} m²</span>
-                            <span class="text-gray-400">Pow. połączona:</span><span class="font-medium">${mergedPlot.mergedArea} m²</span>
-                            <span class="text-gray-400">Różnica:</span><span class="font-medium">${mergedPlot.mergedArea - mergedPlot.originalArea} m²</span>
-                        </div>
-                    </div>`;
+        <div><h3 class="text-2xl font-bold text-amber-400">Połączone Działki</h3><p class="text-gray-400">Grupa ${mergedPlot.plots.length} działek</p></div>
+        <div class="space-y-3 text-sm">
+            <div>
+                <span class="text-gray-400 block">Działki wchodzące w skład:</span>
+                <div class="font-medium space-y-1 mt-1">${constituentPlotsDetails}</div>
+            </div>
+            <div class="grid grid-cols-2 gap-x-4 gap-y-2 pt-2 border-t border-gray-700">
+                <span class="text-gray-400">Pow. oryginalna:</span><span class="font-medium">${mergedPlot.originalArea} m²</span>
+                <span class="text-gray-400">Pow. połączona:</span><span class="font-medium">${mergedPlot.mergedArea} m²</span>
+                <span class="text-gray-400">Różnica:</span><span class="font-medium">${mergedPlot.mergedArea - mergedPlot.originalArea} m²</span>
+            </div>
+        </div>`;
                 modal.classList.add('show');
+                // Dodajemy event listenery dla nowo utworzonych linków
+                addModalEventListeners();
             }
 
             function showLocalModal(localId) {
@@ -1237,7 +1256,7 @@
             mapContainer.addEventListener('wheel', (e) => {
                 e.preventDefault();
                 const w = viewBox.w; const h = viewBox.h; const mx = e.offsetX; const my = e.offsetY;
-                const dw = w * Math.sign(e.deltaY) * 0.1; const dh = h * Math.sign(e.deltaY) * 0.1;
+                const dw = w * -Math.sign(e.deltaY) * 0.1; const dh = h * -Math.sign(e.deltaY) * 0.1;
                 const dx = dw * mx / mapContainer.clientWidth; const dy = dh * my / mapContainer.clientHeight;
                 setViewBox(viewBox.x + dx, viewBox.y + dy, viewBox.w - dw, viewBox.h - dh);
             }, { passive: false });
