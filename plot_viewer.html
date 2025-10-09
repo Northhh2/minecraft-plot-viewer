@@ -743,56 +743,41 @@
             function createDistrictOutline(plots) {
                 if (plots.length === 0) return '';
 
-                // --- Krok 1 i 2: Znajdowanie zewnętrznych krawędzi (ta część działa poprawnie) ---
+                // Krok 1 i 2: Znajdowanie zewnętrznych krawędzi - ta część jest w 100% poprawna i pozostaje bez zmian.
                 const borders = { top: [], right: [], bottom: [], left: [] };
                 let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-
                 plots.forEach(plot => {
-                    const x_min = Math.min(plot.x1, plot.x2);
-                    const x_max = Math.max(plot.x1, plot.x2);
-                    const z_min = Math.min(plot.z1, plot.z2);
-                    const z_max = Math.max(plot.z1, plot.z2);
-
-                    minX = Math.min(minX, x_min);
-                    maxX = Math.max(maxX, x_max);
-                    minZ = Math.min(minZ, z_min);
-                    maxZ = Math.max(maxZ, z_max);
-
+                    const x_min = Math.min(plot.x1, plot.x2), x_max = Math.max(plot.x1, plot.x2);
+                    const z_min = Math.min(plot.z1, plot.z2), z_max = Math.max(plot.z1, plot.z2);
+                    minX = Math.min(minX, x_min); maxX = Math.max(maxX, x_max);
+                    minZ = Math.min(minZ, z_min); maxZ = Math.max(maxZ, z_max);
                     borders.top.push({ fcrd: z_min, scrd: [x_min, x_max] });
                     borders.bottom.push({ fcrd: z_max, scrd: [x_min, x_max] });
                     borders.left.push({ fcrd: x_min, scrd: [z_min, z_max] });
                     borders.right.push({ fcrd: x_max, scrd: [z_min, z_max] });
                 });
-
                 const sweepAndFindBorders = (a_borders, span, sortAsc) => {
-                    const externalBorders = [];
-                    let uncoveredSpan = [span];
+                    const externalBorders = []; let uncoveredSpan = [span];
                     a_borders.sort((a, b) => sortAsc ? a.fcrd - b.fcrd : b.fcrd - a.fcrd);
                     for (const border of a_borders) {
                         if (uncoveredSpan.length === 0) break;
-                        const [border_start, border_end] = border.scrd;
-                        const nextUncovered = [];
+                        const [border_start, border_end] = border.scrd; const nextUncovered = [];
                         for (const [span_start, span_end] of uncoveredSpan) {
-                            const overlap_start = Math.max(border_start, span_start);
-                            const overlap_end = Math.min(border_end, span_end);
+                            const overlap_start = Math.max(border_start, span_start), overlap_end = Math.min(border_end, span_end);
                             if (overlap_end > overlap_start) {
                                 externalBorders.push({ ...border, scrd: [overlap_start, overlap_end] });
                                 if (span_start < overlap_start) nextUncovered.push([span_start, overlap_start]);
                                 if (span_end > overlap_end) nextUncovered.push([overlap_end, span_end]);
-                            } else {
-                                nextUncovered.push([span_start, span_end]);
-                            }
+                            } else { nextUncovered.push([span_start, span_end]); }
                         }
                         uncoveredSpan = nextUncovered;
                     }
                     return externalBorders;
                 };
-
                 const topExt = sweepAndFindBorders(borders.top, [minX, maxX], true);
                 const bottomExt = sweepAndFindBorders(borders.bottom, [minX, maxX], false);
                 const leftExt = sweepAndFindBorders(borders.left, [minZ, maxZ], true);
                 const rightExt = sweepAndFindBorders(borders.right, [minZ, maxZ], false);
-
                 const allSegments = [
                     ...topExt.map(s => [[s.scrd[0], s.fcrd], [s.scrd[1], s.fcrd]]),
                     ...bottomExt.map(s => [[s.scrd[0], s.fcrd], [s.scrd[1], s.fcrd]]),
@@ -800,60 +785,40 @@
                     ...rightExt.map(s => [[s.fcrd, s.scrd[0]], [s.fcrd, s.scrd[1]]]),
                 ].filter(s => s[0][0] !== s[1][0] || s[0][1] !== s[1][1]);
 
+                // --- Krok 3: OSTATECZNA i UPROSZCZONA logika łączenia ---
+                if (allSegments.length === 0) return '';
 
-                // --- Krok 3: Finalna, niezawodna logika łączenia punktów ---
-
-                // 3a. Stwórz graf połączeń (mapę sąsiedztwa) z punktów końcowych.
-                const points = new Map();
+                // Tworzymy mapę połączeń w formacie: "x1,y1" -> "x2,y2"
+                const connections = new Map();
                 allSegments.forEach(seg => {
                     const p1_key = seg[0].join(',');
                     const p2_key = seg[1].join(',');
-
-                    if (!points.has(p1_key)) points.set(p1_key, []);
-                    if (!points.has(p2_key)) points.set(p2_key, []);
-                    points.get(p1_key).push(p2_key);
-                    points.get(p2_key).push(p1_key);
+                    connections.set(p1_key, p2_key);
+                    connections.set(p2_key, p1_key);
                 });
 
-                // 3b. Przejdź po grafie, aby znaleźć wszystkie ciągłe ścieżki.
                 let svgPath = '';
-                const visited = new Set(); // Przechowuje punkty, które już są częścią jakiejś ścieżki
+                while (connections.size > 0) {
+                    const [startKey] = connections.keys(); // Bierzemy dowolny punkt startowy
+                    let currentKey = startKey;
 
-                for (const startNode of points.keys()) {
-                    if (visited.has(startNode)) {
-                        continue; // Pomiń ten punkt, jeśli już go użyliśmy
-                    }
+                    svgPath += `M ${startKey.replace(',', ' ')} `;
 
-                    // Rozpocznij nową ścieżkę od nieodwiedzonego jeszcze punktu
-                    const path = [startNode];
-                    visited.add(startNode);
-                    let currentNode = startNode;
+                    // Pętla podąża za ścieżką, dopóki nie skończą się połączenia
+                    while (connections.has(currentKey)) {
+                        const nextKey = connections.get(currentKey);
 
-                    while (true) {
-                        const neighbors = points.get(currentNode);
-                        const nextNode = neighbors.find(n => !visited.has(n));
+                        // Usuwamy zużyte połączenia (w obie strony)
+                        connections.delete(currentKey);
+                        connections.delete(nextKey);
 
-                        if (!nextNode) {
-                            break; // Koniec ścieżki, brak dalszych nieodwiedzonych połączeń
-                        }
+                        svgPath += `L ${nextKey.replace(',', ' ')} `;
+                        currentKey = nextKey;
 
-                        visited.add(nextNode);
-                        path.push(nextNode);
-                        currentNode = nextNode;
-                    }
-
-                    // 3c. Zbuduj atrybut 'd' dla znalezionej ścieżki
-                    if (path.length > 1) {
-                        svgPath += `M ${path[0].replace(',', ' ')} `;
-                        for (let i = 1; i < path.length; i++) {
-                            svgPath += `L ${path[i].replace(',', ' ')} `;
-                        }
-
-                        // Sprawdź, czy ścieżka powinna być zamknięta, łącząc koniec z początkiem
-                        const lastNode = path[path.length - 1];
-                        const lastNodeNeighbors = points.get(lastNode);
-                        if (lastNodeNeighbors && lastNodeNeighbors.includes(startNode)) {
-                            svgPath += 'Z ';
+                        // Jeśli wróciliśmy do początku, zamknij pętlę
+                        if (currentKey === startKey) {
+                            svgPath = svgPath.trimEnd() + ' Z ';
+                            break;
                         }
                     }
                 }
