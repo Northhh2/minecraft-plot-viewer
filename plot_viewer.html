@@ -978,7 +978,7 @@
                         ${createOwnerCardHTML(ownerInfo)}
                         <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm pt-3 border-t border-gray-700">
                             <span class="text-gray-400">Typ:</span><span class="font-medium">${plot.type || 'Brak'}</span>
-                            <span class="text-gray-400">Wartość:</span><span class="font-medium flex items-center">${plot.value || '0'} <img src="minecoin.png" class="inline w-4 h-4 ml-1" alt="MC"></span>
+                            <span class="text-gray-400">Wartość:</span><span class="font-medium flex items-center">${plot.value || '0'} <img src="minecoin.webp" class="inline w-4 h-4 ml-1" alt="MC"></span>
                             <span class="text-gray-400">Powierzchnia:</span><span class="font-medium">${plot.area || 'Brak'} m²</span>
                         </div>
                     </div>
@@ -1072,7 +1072,7 @@
                             <h4 class="font-semibold text-md mb-2">Posiadane Działki (${ownedPlots.length})</h4>
                             <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                                 <span class="text-gray-400">Łączna pow.:</span><span>${totalPlotArea.toLocaleString()} m²</span>
-                                <span class="text-gray-400">Łączna wartość:</span><span class="flex items-center">${totalPlotValue.toLocaleString()} <img src="minecoin.png" class="inline w-4 h-4 ml-1" alt="MC"></span>
+                                <span class="text-gray-400">Łączna wartość:</span><span class="flex items-center">${totalPlotValue.toLocaleString()} <img src="minecoin.webp" class="inline w-4 h-4 ml-1" alt="MC"></span>
                             </div>
                             ${ownedPlots.length > 0 ? `<div class="space-y-2 mt-2">${ownedPlotsHTML}</div>` : ''}
                         </div>
