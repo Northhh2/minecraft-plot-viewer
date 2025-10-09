@@ -739,99 +739,120 @@
                 });
                 return clusters;
             }
-
             function createDistrictOutline(plots) {
-    if (plots.length === 0) return '';
-    
-    // --- Krok 1: Znajdź wszystkie krawędzie, stosując "przyciąganie do siatki" z tolerancją ---
-    const segments = new Map();
-    const SNAP_GRID_SIZE = 5; // Tolerancja w kratkach. Krawędzie w tej odległości będą uznawane za te same.
-    const snap = (coord) => Math.round(coord / SNAP_GRID_SIZE) * SNAP_GRID_SIZE;
+                if (plots.length === 0) return '';
 
-    plots.forEach(plot => {
-        const x_min = Math.min(plot.x1, plot.x2);
-        const x_max = Math.max(plot.x1, plot.x2);
-        const z_min = Math.min(plot.z1, plot.z2);
-        const z_max = Math.max(plot.z1, plot.z2);
-        
-        // Funkcja pomocnicza do dodawania segmentów.
-        // Używa "przyciągniętych" współrzędnych jako klucza, ale przechowuje oryginalne.
-        const addSegment = (x1, z1, x2, z2) => {
-            const sx1 = snap(x1), sz1 = snap(z1), sx2 = snap(x2), sz2 = snap(z2);
-            const key = (sx1 < sx2 || (sx1 === sx2 && sz1 < sz2)) 
-                ? `${sx1},${sz1},${sx2},${sz2}` : `${sx2},${sz2},${sx1},${sz1}`;
-            
-            if (!segments.has(key)) segments.set(key, []);
-            segments.get(key).push([[x1, z1], [x2, z2]]); // Zapisujemy ORYGINALNE współrzędne
-        };
+                // Krok 1 i 2: Znajdowanie zewnętrznych krawędzi (potwierdziliśmy, że działa poprawnie)
+                const borders = { top: [], right: [], bottom: [], left: [] };
+                let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+                plots.forEach(plot => {
+                    const x_min = Math.min(plot.x1, plot.x2), x_max = Math.max(plot.x1, plot.x2);
+                    const z_min = Math.min(plot.z1, plot.z2), z_max = Math.max(plot.z1, plot.z2);
+                    minX = Math.min(minX, x_min); maxX = Math.max(maxX, x_max);
+                    minZ = Math.min(minZ, z_min); maxZ = Math.max(maxZ, z_max);
+                    borders.top.push({ fcrd: z_min, scrd: [x_min, x_max] });
+                    borders.bottom.push({ fcrd: z_max, scrd: [x_min, x_max] });
+                    borders.left.push({ fcrd: x_min, scrd: [z_min, z_max] });
+                    borders.right.push({ fcrd: x_max, scrd: [z_min, z_max] });
+                });
+                const sweepAndFindBorders = (a_borders, span, sortAsc) => {
+                    const externalBorders = []; let uncoveredSpan = [span];
+                    a_borders.sort((a, b) => sortAsc ? a.fcrd - b.fcrd : b.fcrd - a.fcrd);
+                    for (const border of a_borders) {
+                        if (uncoveredSpan.length === 0) break;
+                        const [border_start, border_end] = border.scrd; const nextUncovered = [];
+                        for (const [span_start, span_end] of uncoveredSpan) {
+                            const overlap_start = Math.max(border_start, span_start), overlap_end = Math.min(border_end, span_end);
+                            if (overlap_end > overlap_start) {
+                                externalBorders.push({ ...border, scrd: [overlap_start, overlap_end] });
+                                if (span_start < overlap_start) nextUncovered.push([span_start, overlap_start]);
+                                if (span_end > overlap_end) nextUncovered.push([overlap_end, span_end]);
+                            } else { nextUncovered.push([span_start, span_end]); }
+                        }
+                        uncoveredSpan = nextUncovered;
+                    }
+                    return externalBorders;
+                };
+                const topExt = sweepAndFindBorders(borders.top, [minX, maxX], true);
+                const bottomExt = sweepAndFindBorders(borders.bottom, [minX, maxX], false);
+                const leftExt = sweepAndFindBorders(borders.left, [minZ, maxZ], true);
+                const rightExt = sweepAndFindBorders(borders.right, [minZ, maxZ], false);
+                const allSegmentsRaw = [
+                    ...topExt.map(s => [[s.scrd[0], s.fcrd], [s.scrd[1], s.fcrd]]),
+                    ...bottomExt.map(s => [[s.scrd[0], s.fcrd], [s.scrd[1], s.fcrd]]),
+                    ...leftExt.map(s => [[s.fcrd, s.scrd[0]], [s.fcrd, s.scrd[1]]]),
+                    ...rightExt.map(s => [[s.fcrd, s.scrd[0]], [s.fcrd, s.scrd[1]]]),
+                ];
 
-        addSegment(x_min, z_min, x_max, z_min); // Górna
-        addSegment(x_min, z_max, x_max, z_max); // Dolna
-        addSegment(x_min, z_min, x_min, z_max); // Lewa
-        addSegment(x_max, z_min, x_max, z_max); // Prawa
-    });
+                // --- NOWY KROK: Filtrowanie segmentów krótszych niż 8 kratek ---
+                const minLength = 8;
+                const allSegments = allSegmentsRaw.filter(seg => {
+                    const p1 = seg[0];
+                    const p2 = seg[1];
+                    // Używamy prostszej i szybszej odległości Manhattan, która dla linii prostych jest tym samym co Euklidesowa
+                    const length = Math.abs(p2[0] - p1[0]) + Math.abs(p2[1] - p1[1]);
+                    return length >= minLength;
+                });
 
-    // --- Krok 2: Wybierz tylko zewnętrzne krawędzie (te, które nie zostały anulowane) i odfiltruj za krótkie ---
-    const minLength = 8;
-    const externalSegments = [];
-    for (const [key, segs] of segments.entries()) {
-        // Jeśli do danego "przyciągniętego" klucza przypisany jest tylko jeden segment, jest on zewnętrzny
-        if (segs.length === 1) {
-            const segment = segs[0];
-            const [p1, p2] = segment;
-            const length = Math.abs(p2[0] - p1[0]) + Math.abs(p2[1] - p1[1]);
-            if (length >= minLength) {
-                externalSegments.push(segment);
+                if (allSegments.length === 0) return '';
+
+                // --- Krok 3: OSTATECZNA, POPRAWIONA logika łączenia ---
+
+                // 3a. Stwórz PRAWIDŁOWY graf połączeń (mapę sąsiedztwa z LISTĄ połączeń)
+                const points = new Map();
+                allSegments.forEach(seg => {
+                    const p1_key = seg[0].join(',');
+                    const p2_key = seg[1].join(',');
+
+                    if (!points.has(p1_key)) points.set(p1_key, []);
+                    if (!points.has(p2_key)) points.set(p2_key, []);
+                    // Dodajemy połączenia - teraz punkt może mieć wielu sąsiadów
+                    points.get(p1_key).push(p2_key);
+                    points.get(p2_key).push(p1_key);
+                });
+
+                // 3b. Przejdź po grafie, aby znaleźć wszystkie ciągłe ścieżki
+                let svgPath = '';
+                const visited = new Set(); // Przechowuje punkty, które już są częścią jakiejś ścieżki
+
+                for (const startNode of points.keys()) {
+                    if (visited.has(startNode)) {
+                        continue; // Pomiń ten punkt, jeśli już go użyliśmy
+                    }
+
+                    const path = [startNode];
+                    visited.add(startNode);
+                    let currentNode = startNode;
+
+                    while (true) {
+                        const neighbors = points.get(currentNode);
+                        const nextNode = neighbors.find(n => !visited.has(n));
+
+                        if (!nextNode) {
+                            break; // Koniec ścieżki, brak dalszych nieodwiedzonych połączeń
+                        }
+
+                        visited.add(nextNode);
+                        path.push(nextNode);
+                        currentNode = nextNode;
+                    }
+
+                    // 3c. Zbuduj atrybut 'd' dla znalezionej ścieżki
+                    if (path.length > 1) {
+                        svgPath += `M ${path[0].replace(',', ' ')} `;
+                        for (let i = 1; i < path.length; i++) {
+                            svgPath += `L ${path[i].replace(',', ' ')} `;
+                        }
+                        const lastNode = path[path.length - 1];
+                        const lastNodeNeighbors = points.get(lastNode);
+                        if (lastNodeNeighbors && lastNodeNeighbors.includes(startNode)) {
+                            svgPath += 'Z ';
+                        }
+                    }
+                }
+
+                return svgPath.trim();
             }
-        }
-    }
-
-    if (externalSegments.length === 0) return '';
-
-    // --- Krok 3: Połącz zewnętrzne krawędzie w ciągłe ścieżki (sprawdzona logika) ---
-    const points = new Map();
-    externalSegments.forEach(seg => {
-        const p1_key = seg[0].join(',');
-        const p2_key = seg[1].join(',');
-        if (!points.has(p1_key)) points.set(p1_key, []);
-        if (!points.has(p2_key)) points.set(p2_key, []);
-        points.get(p1_key).push(p2_key);
-        points.get(p2_key).push(p1_key);
-    });
-
-    let svgPath = '';
-    const visited = new Set();
-    for (const startNode of points.keys()) {
-        if (visited.has(startNode)) continue;
-        
-        const path = [startNode];
-        visited.add(startNode);
-        let currentNode = startNode;
-        
-        while (true) {
-            const neighbors = points.get(currentNode) || [];
-            const nextNode = neighbors.find(n => !visited.has(n));
-            if (!nextNode) break;
-            visited.add(nextNode);
-            path.push(nextNode);
-            currentNode = nextNode;
-        }
-
-        if (path.length > 1) {
-            svgPath += `M ${path[0].replace(',', ' ')} `;
-            for (let i = 1; i < path.length; i++) {
-                svgPath += `L ${path[i].replace(',', ' ')} `;
-            }
-            const lastNode = path[path.length - 1];
-            const lastNodeNeighbors = points.get(lastNode) || [];
-            if (lastNodeNeighbors.includes(startNode)) {
-                svgPath += 'Z ';
-            }
-        }
-    }
-    
-    return svgPath.trim();
-}
 
             function filterBorders(group) {
                 let outsideBorders = [];
