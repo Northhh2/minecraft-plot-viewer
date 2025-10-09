@@ -793,6 +793,7 @@
                         allPoints.push([b.scrd[1], b.fcrd]);
                     }
                 });
+                console.log(topBorders);
 
                 const rightBorders = outsideBorders.right.sort((a, b) => a.scrd[0] - b.scrd[0]);
                 rightBorders.forEach(b => {
@@ -803,6 +804,7 @@
                         allPoints.push([b.fcrd, b.scrd[1]]);
                     }
                 });
+                console.log(rightBorders);
 
                 const bottomBorders = outsideBorders.bottom.sort((a, b) => b.scrd[1] - a.scrd[1]);
                 bottomBorders.forEach(b => {
@@ -813,6 +815,7 @@
                         allPoints.push([b.scrd[0], b.fcrd]);
                     }
                 });
+                console.log(bottomBorders);
 
                 const leftBorders = outsideBorders.left.sort((a, b) => b.scrd[1] - a.scrd[1]);
                 leftBorders.forEach(b => {
@@ -823,6 +826,7 @@
                         allPoints.push([b.fcrd, b.scrd[0]]);
                     }
                 });
+                console.log(leftBorders);
                 
                 if (allPoints.length < 2) return '';
 
@@ -858,7 +862,6 @@
                 group.forEach((border, index) => {
                     if (outsideBorders.length <= 0) {
                         outsideBorders.push(border);
-                        console.log(border);
                     } else {
                         if (!outsideBorders.some(outBorder => {
                             return (border.scrd[0] > outBorder.scrd[0] && border.scrd[0] < outBorder.scrd[1]) || (border.scrd[1] > outBorder.scrd[0] && border.scrd[1] < outBorder.scrd[1]);
