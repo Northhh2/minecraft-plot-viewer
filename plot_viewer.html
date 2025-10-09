@@ -851,13 +851,11 @@
                     if (outsideBorders.length <= 0) {
                         outsideBorders.push(border);
                     } else {
-                        const isCovered = outsideBorders.some(outBorder => {
-                            const startInside = border.scrd[0] >= outBorder.scrd[0] && border.scrd[0] <= outBorder.scrd[1];
-                            const endInside = border.scrd[1] >= outBorder.scrd[0] && border.scrd[1] <= outBorder.scrd[1];
-                            return startInside && endInside;
+                        const hasOverlap = outsideBorders.some(outBorder => {
+                            return border.scrd[0] <= outBorder.scrd[1] && outBorder.scrd[0] <= border.scrd[1];
                         });
 
-                        if (!isCovered) {
+                        if (!hasOverlap) {
                             outsideBorders.push(border);
                         }
                     }
