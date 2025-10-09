@@ -211,8 +211,11 @@
         class="fixed top-0 right-0 w-full md:w-96 h-full bg-gray-800 border-l border-gray-600 shadow-2xl z-50 overflow-y-auto">
         <div class="p-6">
             <div class="flex justify-between items-center mb-4">
-                <h2 id="modal-title" class="text-xl font-bold">Szczegóły</h2><button id="close-modal"
-                    class="text-gray-400 hover:text-white text-2xl">&times;</button>
+                <div class="flex items-center space-x-3">
+                    <button id="back-modal" class="hidden text-gray-400 hover:text-white text-2xl font-bold transition-opacity" title="Wróć">&larr;</button>
+                    <h2 id="modal-title" class="text-xl font-bold">Szczegóły</h2>
+                </div>
+                <button id="close-modal" class="text-gray-400 hover:text-white text-2xl" title="Zamknij">&times;</button>
             </div>
             <div id="modal-content" class="space-y-4"></div>
         </div>
@@ -332,12 +335,14 @@
             let layerVisibility = { plots: true, streets: true, districts: true, merged: true };
             let touchStartInfo = { time: 0, x: 0, y: 0 };
             let activeCharts = [];
-            let maxViewboxWidth = MAP_WIDTH; // Domyślna wartość
+            let maxViewboxWidth = MAP_WIDTH;
 
             let allPlots = [];
             let allLocals = [];
             let mergedPlots = [];
             let streets = [];
+            
+            let modalHistory = [];
 
             const layers = {
                 districts: document.createElementNS('http://www.w3.org/2000/svg', 'g'),
@@ -352,10 +357,10 @@
 
                 // Ogranicz maksymalne przybliżenie (minimalna szerokość widoku)
                 w = Math.max(minZoom, w);
-
+                
                 // Ogranicz maksymalne oddalenie (maksymalna szerokość widoku)
                 w = Math.min(w, maxViewboxWidth);
-
+                
                 // Utrzymaj proporcje
                 if (initialViewBox.w) {
                     h = (w / initialViewBox.w) * initialViewBox.h;
@@ -391,6 +396,30 @@
                     default: return `rgba(255, 255, 255, 0.1)`;
                 }
             }
+            
+            // --- NOWE FUNKCJE DO ZARZĄDZANIA MODALAMI ---
+            // Otwiera nowy modal i dodaje go do historii
+            function openModal(state) {
+                modalHistory.push(state);
+                renderCurrentModal();
+            }
+
+            // Wraca do poprzedniego modalu w historii
+            function goBackModal() {
+                if (modalHistory.length > 1) {
+                    destroyActiveCharts();
+                    modalHistory.pop();
+                    renderCurrentModal();
+                }
+            }
+
+            // Zamyka modal i czyści całą historię
+            function closeModal() {
+                destroyActiveCharts();
+                modalHistory = [];
+                modal.classList.remove('show');
+            }
+
 
             async function fetchAllData() {
                 try {
@@ -558,10 +587,8 @@
 
                 const mapRatio = MAP_WIDTH / MAP_HEIGHT;
                 if (clientRatio > mapRatio) {
-                    // Ekran jest szerszy niż mapa, ograniczeniem jest wysokość mapy
                     maxViewboxWidth = MAP_HEIGHT * clientRatio;
                 } else {
-                    // Ekran jest wyższy niż mapa, ograniczeniem jest szerokość mapy
                     maxViewboxWidth = MAP_WIDTH;
                 }
 
@@ -611,8 +638,7 @@
                     });
                     rect.addEventListener('mouseleave', hideTooltip);
                     rect.addEventListener('mousemove', moveTooltip);
-
-                    rect.addEventListener('click', (e) => { e.stopPropagation(); showMergedModal(merged); });
+                    rect.addEventListener('click', (e) => { e.stopPropagation(); openModal({type: 'merged', data: merged}); });
 
                     let mergedTouchStartInfo = {};
                     rect.addEventListener('touchstart', (e) => {
@@ -623,11 +649,10 @@
                         if (mergedTouchStartInfo.time) {
                             const timeDiff = Date.now() - mergedTouchStartInfo.time;
                             const dist = Math.hypot(e.changedTouches[0].clientX - mergedTouchStartInfo.x, e.changedTouches[0].clientY - mergedTouchStartInfo.y);
-                            if (timeDiff < 250 && dist < 10) { e.preventDefault(); showMergedModal(merged); }
+                            if (timeDiff < 250 && dist < 10) { e.preventDefault(); openModal({type: 'merged', data: merged}); }
                             mergedTouchStartInfo = {};
                         }
                     });
-
                     layers.merged.appendChild(rect);
                 });
             }
@@ -658,13 +683,13 @@
                     g.addEventListener('mouseenter', (e) => { showSimpleTooltip(e, plot); if (plot.district) highlightDistrict(plot.district); });
                     g.addEventListener('mouseleave', () => { hideTooltip(); clearHighlight(); });
                     g.addEventListener('mousemove', moveTooltip);
-                    g.addEventListener('click', (e) => { e.stopPropagation(); showModal(plot); });
+                    g.addEventListener('click', (e) => { e.stopPropagation(); openModal({type: 'plot', data: plot}); });
 
                     g.addEventListener('touchend', (e) => {
                         if (touchStartInfo.time) {
                             const timeDiff = Date.now() - touchStartInfo.time;
                             const dist = Math.hypot(e.changedTouches[0].clientX - touchStartInfo.x, e.changedTouches[0].clientY - touchStartInfo.y);
-                            if (timeDiff < 250 && dist < 10) { e.preventDefault(); showModal(plot); }
+                            if (timeDiff < 250 && dist < 10) { e.preventDefault(); openModal({type: 'plot', data: plot}); }
                         }
                     });
 
@@ -696,8 +721,7 @@
 
                         path.addEventListener('mouseenter', () => highlightDistrict(districtName));
                         path.addEventListener('mouseleave', () => clearHighlight());
-
-                        path.addEventListener('click', (e) => { e.stopPropagation(); showDistrictModal(districtName, cluster); });
+                        path.addEventListener('click', (e) => { e.stopPropagation(); openModal({type: 'district', data: {name: districtName, plots: cluster}}); });
 
                         let districtTouchStartInfo = {};
                         path.addEventListener('touchstart', (e) => {
@@ -708,7 +732,7 @@
                             if (districtTouchStartInfo.time) {
                                 const timeDiff = Date.now() - districtTouchStartInfo.time;
                                 const dist = Math.hypot(e.changedTouches[0].clientX - districtTouchStartInfo.x, e.changedTouches[0].clientY - districtTouchStartInfo.y);
-                                if (timeDiff < 250 && dist < 10) { e.preventDefault(); showDistrictModal(districtName, cluster); }
+                                if (timeDiff < 250 && dist < 10) { e.preventDefault(); openModal({type: 'district', data: {name: districtName, plots: cluster}}); }
                                 districtTouchStartInfo = {};
                             }
                         });
@@ -760,6 +784,7 @@
                 });
                 return clusters;
             }
+
             function createDistrictOutline(plots) {
                 if (plots.length === 0) return '';
 
@@ -810,7 +835,6 @@
                 const allSegments = allSegmentsRaw.filter(seg => {
                     const p1 = seg[0];
                     const p2 = seg[1];
-                    // Używamy prostszej i szybszej odległości Manhattan, która dla linii prostych jest tym samym co Euklidesowa
                     const length = Math.abs(p2[0] - p1[0]) + Math.abs(p2[1] - p1[1]);
                     return length >= minLength;
                 });
@@ -818,47 +842,35 @@
                 if (allSegments.length === 0) return '';
 
                 // --- Krok 3: OSTATECZNA, POPRAWIONA logika łączenia ---
-
-                // 3a. Stwórz PRAWIDŁOWY graf połączeń (mapę sąsiedztwa z LISTĄ połączeń)
                 const points = new Map();
                 allSegments.forEach(seg => {
                     const p1_key = seg[0].join(',');
                     const p2_key = seg[1].join(',');
-
                     if (!points.has(p1_key)) points.set(p1_key, []);
                     if (!points.has(p2_key)) points.set(p2_key, []);
-                    // Dodajemy połączenia - teraz punkt może mieć wielu sąsiadów
                     points.get(p1_key).push(p2_key);
                     points.get(p2_key).push(p1_key);
                 });
 
-                // 3b. Przejdź po grafie, aby znaleźć wszystkie ciągłe ścieżki
                 let svgPath = '';
-                const visited = new Set(); // Przechowuje punkty, które już są częścią jakiejś ścieżki
-
+                const visited = new Set(); 
                 for (const startNode of points.keys()) {
                     if (visited.has(startNode)) {
-                        continue; // Pomiń ten punkt, jeśli już go użyliśmy
+                        continue; 
                     }
-
                     const path = [startNode];
                     visited.add(startNode);
                     let currentNode = startNode;
-
                     while (true) {
                         const neighbors = points.get(currentNode);
                         const nextNode = neighbors.find(n => !visited.has(n));
-
                         if (!nextNode) {
-                            break; // Koniec ścieżki, brak dalszych nieodwiedzonych połączeń
+                            break; 
                         }
-
                         visited.add(nextNode);
                         path.push(nextNode);
                         currentNode = nextNode;
                     }
-
-                    // 3c. Zbuduj atrybut 'd' dla znalezionej ścieżki
                     if (path.length > 1) {
                         svgPath += `M ${path[0].replace(',', ' ')} `;
                         for (let i = 1; i < path.length; i++) {
@@ -871,73 +883,9 @@
                         }
                     }
                 }
-
                 return svgPath.trim();
             }
 
-            function filterBorders(group) {
-                let outsideBorders = [];
-
-                group.forEach((border) => {
-                    if (outsideBorders.length <= 0) {
-                        outsideBorders.push(border);
-                    } else {
-                        const hasOverlap = outsideBorders.some(outBorder => {
-                            return border.scrd[0] <= outBorder.scrd[1] && outBorder.scrd[0] <= border.scrd[1];
-                        });
-
-                        if (!hasOverlap) {
-                            outsideBorders.push(border);
-                        }
-                    }
-                });
-
-                return outsideBorders;
-            }
-
-            function extendBorders(borders) {
-                borders = borders.reverse();
-
-                // Initialize extendedBorders with copies of all borders
-                let extendedBorders = borders.map(b => ({
-                    name: b.name,
-                    fcrd: b.fcrd,
-                    scrd: [b.scrd[0], b.scrd[1]]
-                }));
-
-                extendedBorders.forEach((currentBorder, index) => {
-                    const currentXMin = currentBorder.scrd[0];
-                    const currentXMax = currentBorder.scrd[1];
-
-                    // Extend left edge (min) to the closest HIGHER value (using current state)
-                    let newXMin = currentXMin;
-                    const closestHigherForMin = extendedBorders
-                        .filter((item, i) => i !== index && item.scrd[0] > currentXMin)
-                        .sort((a, b) => a.scrd[0] - b.scrd[0])
-                    [0];
-
-                    if (closestHigherForMin) {
-                        newXMin = closestHigherForMin.scrd[0];
-                    }
-
-                    // Extend right edge (max) to the closest LOWER value (using current state)
-                    let newXMax = currentXMax;
-                    const closestLowerForMax = extendedBorders
-                        .filter((item, i) => i !== index && item.scrd[1] < currentXMax)
-                        .sort((a, b) => b.scrd[1] - a.scrd[1])
-                    [0];
-
-                    if (closestLowerForMax) {
-                        newXMax = closestLowerForMax.scrd[1];
-                    }
-
-                    // Update the current border in place
-                    currentBorder.scrd[0] = newXMin;
-                    currentBorder.scrd[1] = newXMax;
-                });
-
-                return extendedBorders.reverse();
-            }
 
             function highlightDistrict(districtName) {
                 svg.querySelectorAll('.plot-rect').forEach(rect => {
@@ -958,93 +906,113 @@
                 tooltip.classList.remove('hidden');
                 moveTooltip(e);
             }
+            
+             // --- NOWA GŁÓWNA FUNKCJA DO WYŚWIETLANIA MODALI ---
+            function renderCurrentModal() {
+                if (modalHistory.length === 0) {
+                    closeModal();
+                    return;
+                }
 
-            function showModal(plot) {
-                destroyActiveCharts();
-                modalTitle.textContent = 'Szczegóły działki';
+                const backButton = document.getElementById('back-modal');
+                const currentState = modalHistory[modalHistory.length - 1];
+                const { type, data } = currentState;
+
+                let contentHTML = '';
+                let title = '';
+
+                switch (type) {
+                    case 'plot':
+                        title = `Działka: ${data.name}`;
+                        contentHTML = renderPlotContent(data);
+                        break;
+                    case 'merged':
+                        title = 'Połączone działki';
+                        contentHTML = renderMergedContent(data);
+                        break;
+                    case 'local':
+                        title = `Lokal #${data.localNum}`;
+                        contentHTML = renderLocalContent(data);
+                        break;
+                    case 'owner':
+                        title = `Aktywa: ${data}`;
+                        contentHTML = renderOwnerContent(data);
+                        break;
+                    case 'district':
+                        title = `Dzielnica: ${data.name}`;
+                        contentHTML = renderDistrictContent(data.name, data.plots);
+                        break;
+                }
+
+                modalTitle.textContent = title;
+                modalContent.innerHTML = contentHTML;
+                addModalEventListeners(); // Ponowne podpięcie eventów do nowej treści
+
+                backButton.classList.toggle('hidden', modalHistory.length <= 1);
+                modal.classList.add('show');
+            }
+
+
+            // --- ZMODYFIKOWANE FUNKCJE GENERUJĄCE TREŚĆ ---
+            function renderPlotContent(plot) {
                 const isOwned = plot.owner && plot.owner.trim() !== '' && plot.owner.toLowerCase().trim() !== 'skarb miasta';
                 const ownerInfo = isOwned ? plot.owner : 'Skarb Miasta';
-
                 const localsOnPlot = allLocals.filter(l => l.plotName === plot.name);
                 let localsHTML = '';
                 if (localsOnPlot.length > 0) {
                     const totalBeds = localsOnPlot.reduce((sum, l) => sum + l.beds, 0);
                     const totalWorkplaces = localsOnPlot.reduce((sum, l) => sum + l.workplaces, 0);
                     const totalLocalArea = localsOnPlot.reduce((sum, l) => sum + l.area, 0);
-
-                    // ZMODYFIKOWANA CZĘŚĆ - Tworzenie szczegółowej, klikalnej listy lokali
                     const localDetailsList = localsOnPlot.map(l => `
-            <div data-local-id="${l.id}" class="bg-gray-700 p-2 rounded-md hover:bg-gray-600 cursor-pointer transition-colors">
-                <div class="font-semibold text-purple-400">Lokal #${l.localNum} (${l.area} m²)</div>
-                <div class="text-xs text-gray-400">Najemca: <span class="font-medium text-gray-200">${l.tenant || 'Brak'}</span></div>
-            </div>
-        `).join('');
-
-                    localsHTML = `
-            <div class="border-t border-gray-700 pt-3 mt-3">
-                 <h4 class="text-md font-semibold mb-2">Lokale w budynku (${localsOnPlot.length})</h4>
-                 <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm mb-3">
-                    <span class="text-gray-400">Łączna pow. lokali:</span><span class="font-medium">${totalLocalArea} m²</span>
-                    <span class="text-gray-400">Miejsca pracy:</span><span class="font-medium">${totalWorkplaces}</span>
-                    <span class="text-gray-400">Ilość łóżek:</span><span class="font-medium">${totalBeds}</span>
-                 </div>
-                 <div class="space-y-2">${localDetailsList}</div>
-            </div>
-        `;
+                        <div data-local-id="${l.id}" class="bg-gray-700 p-2 rounded-md hover:bg-gray-600 cursor-pointer transition-colors">
+                            <div class="font-semibold text-purple-400">Lokal #${l.localNum} (${l.area} m²)</div>
+                            <div class="text-xs text-gray-400">Najemca: <span class="font-medium text-gray-200">${l.tenant || 'Brak'}</span></div>
+                        </div>
+                    `).join('');
+                    localsHTML = `<div class="border-t border-gray-700 pt-3 mt-3">
+                         <h4 class="text-md font-semibold mb-2">Lokale w budynku (${localsOnPlot.length})</h4>
+                         <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm mb-3">
+                            <span class="text-gray-400">Łączna pow. lokali:</span><span class="font-medium">${totalLocalArea} m²</span>
+                            <span class="text-gray-400">Miejsca pracy:</span><span class="font-medium">${totalWorkplaces}</span>
+                            <span class="text-gray-400">Ilość łóżek:</span><span class="font-medium">${totalBeds}</span>
+                         </div>
+                         <div class="space-y-2">${localDetailsList}</div>
+                    </div>`;
                 }
-
-                modalContent.innerHTML = `
-        <div><h3 class="text-2xl font-bold ${isOwned ? 'text-red-400' : 'text-green-400'}">${plot.name || `Działka ${plot.id}`}</h3><p class="text-gray-400">${plot.district || 'Brak dzielnicy'}</p></div>
-        <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-            <span class="text-gray-400">Właściciel:</span><span class="font-medium clickable-name" data-owner-name="${ownerInfo}">${ownerInfo}</span>
-            <span class="text-gray-400">Typ:</span><span class="font-medium">${plot.type || 'Brak'}</span>
-            <span class="text-gray-400">Wartość:</span><span class="font-medium flex items-center">${plot.value || '0'} <img src="minecoin.png" class="inline w-4 h-4 ml-1" alt="MC"></span>
-            <span class="text-gray-400">Powierzchnia:</span><span class="font-medium">${plot.area || 'Brak'} m²</span>
-        </div>
-        ${localsHTML}`;
-
-                modal.classList.add('show');
-                addModalEventListeners();
+                return `
+                    <div><h3 class="text-2xl font-bold ${isOwned ? 'text-red-400' : 'text-green-400'}">${plot.name}</h3><p class="text-gray-400">${plot.district || 'Brak dzielnicy'}</p></div>
+                    <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                        <span class="text-gray-400">Właściciel:</span><span class="font-medium clickable-name" data-owner-name="${ownerInfo}">${ownerInfo}</span>
+                        <span class="text-gray-400">Typ:</span><span class="font-medium">${plot.type || 'Brak'}</span>
+                        <span class="text-gray-400">Wartość:</span><span class="font-medium flex items-center">${plot.value || '0'} <img src="minecoin.png" class="inline w-4 h-4 ml-1" alt="MC"></span>
+                        <span class="text-gray-400">Powierzchnia:</span><span class="font-medium">${plot.area || 'Brak'} m²</span>
+                    </div>
+                    ${localsHTML}`;
             }
 
-            function showMergedModal(mergedPlot) {
-                destroyActiveCharts();
-                modalTitle.textContent = 'Szczegóły połączenia';
-
-                // ZMODYFIKOWANA CZĘŚĆ - Dodanie klikalnych linków do działek
+            function renderMergedContent(mergedPlot) {
                 const constituentPlotsDetails = mergedPlot.plots.map(plotName => {
                     const plotData = allPlots.find(p => p.name === plotName);
                     return `<div class="pl-2">- <a href="#" data-plot-name="${plotName}" class="text-purple-400 hover:underline">${plotName}</a> (${plotData ? plotData.area + ' m²' : 'Brak danych'})</div>`;
                 }).join('');
-
-                modalContent.innerHTML = `
-        <div><h3 class="text-2xl font-bold text-amber-400">Połączone Działki</h3><p class="text-gray-400">Grupa ${mergedPlot.plots.length} działek</p></div>
-        <div class="space-y-3 text-sm">
-            <div>
-                <span class="text-gray-400 block">Działki wchodzące w skład:</span>
-                <div class="font-medium space-y-1 mt-1">${constituentPlotsDetails}</div>
-            </div>
-            <div class="grid grid-cols-2 gap-x-4 gap-y-2 pt-2 border-t border-gray-700">
-                <span class="text-gray-400">Pow. oryginalna:</span><span class="font-medium">${mergedPlot.originalArea} m²</span>
-                <span class="text-gray-400">Pow. połączona:</span><span class="font-medium">${mergedPlot.mergedArea} m²</span>
-                <span class="text-gray-400">Różnica:</span><span class="font-medium">${mergedPlot.mergedArea - mergedPlot.originalArea} m²</span>
-            </div>
-        </div>`;
-                modal.classList.add('show');
-                // Dodajemy event listenery dla nowo utworzonych linków
-                addModalEventListeners();
+                return `
+                    <div><h3 class="text-2xl font-bold text-amber-400">Połączone Działki</h3><p class="text-gray-400">Grupa ${mergedPlot.plots.length} działek</p></div>
+                    <div class="space-y-3 text-sm">
+                        <div>
+                            <span class="text-gray-400 block">Działki wchodzące w skład:</span>
+                            <div class="font-medium space-y-1 mt-1">${constituentPlotsDetails}</div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-x-4 gap-y-2 pt-2 border-t border-gray-700">
+                            <span class="text-gray-400">Pow. oryginalna:</span><span class="font-medium">${mergedPlot.originalArea} m²</span>
+                            <span class="text-gray-400">Pow. połączona:</span><span class="font-medium">${mergedPlot.mergedArea} m²</span>
+                        </div>
+                    </div>`;
             }
 
-            function showLocalModal(localId) {
-                destroyActiveCharts();
-                const local = allLocals.find(l => l.id === localId);
-                if (!local) return;
-
+            function renderLocalContent(local) {
                 const plot = allPlots.find(p => p.name === local.plotName);
                 const owner = plot ? plot.owner : 'Nieznany';
-
-                modalTitle.textContent = `Lokal #${local.localNum}`;
-                modalContent.innerHTML = `
+                return `
                     <div><h3 class="text-2xl font-bold text-cyan-400">Lokal #${local.localNum}</h3><p class="text-gray-400">${local.street}, ${local.building}</p></div>
                      <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                         <span class="text-gray-400">Najemca:</span><span class="font-medium clickable-name" data-owner-name="${local.tenant || 'Brak'}">${local.tenant || 'Brak'}</span>
@@ -1054,37 +1022,19 @@
                         <span class="text-gray-400">Miejsca pracy:</span><span class="font-medium">${local.workplaces}</span>
                         <span class="text-gray-400">Ilość łóżek:</span><span class="font-medium">${local.beds}</span>
                     </div>`;
-                modal.classList.add('show');
-                addModalEventListeners();
             }
 
-            function showOwnerModal(ownerName) {
-                destroyActiveCharts();
-                if (!ownerName || ownerName.toLowerCase() === 'skarb miasta' || ownerName.toLowerCase() === 'brak') return;
-
-                modalTitle.textContent = `Aktywa: ${ownerName}`;
-
+            function renderOwnerContent(ownerName) {
                 const ownedPlots = allPlots.filter(p => p.owner === ownerName);
                 const rentedLocals = allLocals.filter(l => l.tenant === ownerName);
-                const ownedLocals = allLocals.filter(l => {
-                    const plot = allPlots.find(p => p.name === l.plotName);
-                    return plot && plot.owner === ownerName;
-                });
-
                 const totalPlotArea = ownedPlots.reduce((sum, p) => sum + (parseInt(p.area) || 0), 0);
                 const totalPlotValue = ownedPlots.reduce((sum, p) => sum + (parseInt(p.value) || 0), 0);
-
-                const totalOwnedLocalArea = ownedLocals.reduce((sum, l) => sum + l.area, 0);
-                const totalOwnedBeds = ownedLocals.reduce((sum, l) => sum + l.beds, 0);
-                const totalOwnedWorkplaces = ownedLocals.reduce((sum, l) => sum + l.workplaces, 0);
-
                 const ownedPlotsHTML = ownedPlots.map(p => `<li><a href="#" data-plot-name="${p.name}" class="text-purple-400 hover:underline">${p.name}</a> (${p.area} m²)</li>`).join('');
                 const rentedLocalsHTML = rentedLocals.map(l => {
                     const plot = allPlots.find(p => p.name === l.plotName);
                     return `<li>Lokal #${l.localNum} od <span class="font-medium clickable-name" data-owner-name="${plot.owner}">${plot.owner}</span></li>`
                 }).join('');
-
-                modalContent.innerHTML = `
+                return `
                     <div><h3 class="text-2xl font-bold text-green-400">${ownerName}</h3></div>
                     <div class="space-y-4 text-sm">
                         <div>
@@ -1095,80 +1045,61 @@
                             </div>
                             ${ownedPlots.length > 0 ? `<ul class="list-disc list-inside mt-2">${ownedPlotsHTML}</ul>` : ''}
                         </div>
-                        <div class="border-t border-gray-700 pt-3">
-                            <h4 class="font-semibold text-md mb-1">Posiadane Lokale (${ownedLocals.length})</h4>
-                            <div class="grid grid-cols-2 gap-x-4 gap-y-1">
-                                <span class="text-gray-400">Łączna pow.:</span><span>${totalOwnedLocalArea.toLocaleString()} m²</span>
-                                <span class="text-gray-400">Miejsca pracy:</span><span>${totalOwnedWorkplaces}</span>
-                                <span class="text-gray-400">Łóżka:</span><span>${totalOwnedBeds}</span>
-                            </div>
-                        </div>
                          <div class="border-t border-gray-700 pt-3">
                             <h4 class="font-semibold text-md mb-1">Wynajmowane Lokale (${rentedLocals.length})</h4>
                              ${rentedLocals.length > 0 ? `<ul class="list-disc list-inside mt-2">${rentedLocalsHTML}</ul>` : '<p class="text-gray-500">Brak</p>'}
                         </div>
-                    </div>
-                `;
-                modal.classList.add('show');
-                addModalEventListeners();
+                    </div>`;
             }
 
-            function showDistrictModal(districtName, plotsInDistrict) {
-                destroyActiveCharts();
-                modalTitle.textContent = `Dzielnica: ${districtName}`;
-
+            function renderDistrictContent(districtName, plotsInDistrict) {
                 const plotTypes = {};
                 const occupancy = { Zajęte: 0, Wolne: 0 };
-                const owners = {};
                 let totalArea = 0;
-                let totalValue = 0;
 
                 plotsInDistrict.forEach(p => {
                     const type = p.type || 'Inne';
                     plotTypes[type] = (plotTypes[type] || 0) + 1;
                     const isOwned = p.owner && p.owner.trim() !== '' && p.owner.toLowerCase().trim() !== 'skarb miasta';
-                    if (isOwned) {
-                        occupancy.Zajęte++;
-                        const owner = p.owner.trim();
-                        owners[owner] = (owners[owner] || 0) + 1;
-                    } else {
-                        occupancy.Wolne++;
-                    }
+                    if (isOwned) { occupancy.Zajęte++; } else { occupancy.Wolne++; }
                     totalArea += parseInt(p.area) || 0;
-                    totalValue += parseInt(p.value) || 0;
                 });
 
-                const plotLinks = plotsInDistrict.map(p => `<a href="#" class="text-purple-400 hover:underline" data-plot-name="${p.name}">${p.name}</a>`).join(', ');
+                const plotListHTML = plotsInDistrict.map(p => {
+                    const isOwned = p.owner && p.owner.trim() !== '' && p.owner.toLowerCase().trim() !== 'skarb miasta';
+                    const statusText = isOwned ? 'Zajęta' : 'Wolna';
+                    const statusColor = isOwned ? 'text-red-400' : 'text-green-400';
+                    return `
+                    <div data-plot-name="${p.name}" class="bg-gray-700 p-2 rounded-md hover:bg-gray-600 cursor-pointer transition-colors">
+                        <div class="font-semibold text-purple-400">${p.name} (${p.area} m²)</div>
+                        <div class="text-xs text-gray-400">Właściciel: <span class="font-medium text-gray-200">${p.owner || 'Brak'}</span></div>
+                        <div class="text-xs ${statusColor}">${statusText}</div>
+                    </div>`
+                }).join('');
 
-                modalContent.innerHTML = `
+                const html = `
                     <div><h3 class="text-2xl font-bold text-purple-400">${districtName}</h3></div>
-                    <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm border-b border-gray-700 pb-3">
+                    <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm border-b border-gray-700 pb-3 mb-3">
                         <span>Liczba działek:</span><span class="font-medium">${plotsInDistrict.length}</span>
                         <span>Łączna powierzchnia:</span><span class="font-medium">${totalArea.toLocaleString()} m²</span>
-                        <span>Łączna wartość:</span><span class="font-medium flex items-center">${totalValue.toLocaleString()} <img src="minecoin.png" class="inline w-4 h-4 ml-1" alt="MC"></span>
                     </div>
-                    <div class="text-sm"><span>Działki:</span> ${plotLinks}</div>
+                    <div class="space-y-2 mb-4">${plotListHTML}</div>
                     <div>
-                        <h4 class="text-md font-semibold mt-4 mb-2">Struktura działek</h4>
+                        <h4 class="text-md font-semibold mt-4 mb-2">Statystyki</h4>
                         <div class="chart-container"><canvas id="plot-type-chart"></canvas></div>
-                        <h4 class="text-md font-semibold mt-4 mb-2">Zajętość</h4>
                         <div class="chart-container"><canvas id="occupancy-chart"></canvas></div>
-                        <h4 class="text-md font-semibold mt-4 mb-2">Właściciele</h4>
-                        <div class="chart-container"><canvas id="owners-chart"></canvas></div>
                     </div>`;
+                
+                setTimeout(() => {
+                    destroyActiveCharts();
+                    const typeLabels = Object.keys(plotTypes);
+                    const typeColors = typeLabels.map(label => getColorForType(label, 1));
+                    createChart('plot-type-chart', 'pie', { labels: typeLabels, data: Object.values(plotTypes), colors: typeColors }, 'Typy działek');
+                    const occupancyLabels = Object.keys(occupancy);
+                    createChart('occupancy-chart', 'doughnut', { labels: occupancyLabels, data: Object.values(occupancy), colors: ['rgba(239, 68, 68, 0.8)', 'rgba(34, 197, 94, 0.8)'] }, 'Zajętość');
+                }, 100);
 
-                const typeLabels = Object.keys(plotTypes);
-                const typeColors = typeLabels.map(label => getColorForType(label, 1));
-                createChart('plot-type-chart', 'pie', { labels: typeLabels, data: Object.values(plotTypes), colors: typeColors }, 'Typy działek');
-
-                const occupancyLabels = Object.keys(occupancy);
-                createChart('occupancy-chart', 'doughnut', { labels: occupancyLabels, data: Object.values(occupancy), colors: ['rgba(239, 68, 68, 0.8)', 'rgba(34, 197, 94, 0.8)'] }, 'Zajętość');
-
-                const ownerLabels = Object.keys(owners);
-                createChart('owners-chart', 'bar', { labels: ownerLabels, data: Object.values(owners) }, 'Właściciele działek');
-
-                modal.classList.add('show');
-                addModalEventListeners();
+                return html;
             }
 
             function createChart(canvasId, type, chartData, label) {
@@ -1231,7 +1162,7 @@
                     const newY = foundPlot.z1 + foundPlot.height / 2 - newH / 2;
                     setViewBox(newX, newY, newW, newH);
                     highlightPlot(foundPlot.id);
-                    showModal(foundPlot);
+                    openModal({type: 'plot', data: foundPlot});
                     searchInput.value = '';
                 } else {
                     searchInput.classList.add('ring-red-500');
@@ -1251,22 +1182,25 @@
             }
 
             function addModalEventListeners() {
-                modalContent.querySelectorAll('a[data-plot-name]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); findPlotAndCenter(e.target.dataset.plotName); }));
-
-                // POPRAWIONA LINIA - teraz szuka dowolnego elementu z atrybutem 'data-local-id'
-                modalContent.querySelectorAll('[data-local-id]').forEach(el => el.addEventListener('click', e => {
-                    // e.currentTarget zapewnia, że pobieramy ID z elementu, na którym jest event, a nie np. z klikniętego tekstu wewnątrz
-                    e.preventDefault();
-                    showLocalModal(e.currentTarget.dataset.localId);
+                modalContent.querySelectorAll('[data-plot-name]').forEach(el => el.addEventListener('click', e => { 
+                    e.preventDefault(); 
+                    const plot = allPlots.find(p => p.name === e.currentTarget.dataset.plotName);
+                    if(plot) openModal({type: 'plot', data: plot});
                 }));
-
-                modalContent.querySelectorAll('.clickable-name[data-owner-name]').forEach(span => span.addEventListener('click', e => { e.preventDefault(); showOwnerModal(e.target.dataset.ownerName); }));
+                modalContent.querySelectorAll('[data-local-id]').forEach(el => el.addEventListener('click', e => { 
+                    e.preventDefault(); 
+                    const local = allLocals.find(l => l.id === e.currentTarget.dataset.localId);
+                    if(local) openModal({type: 'local', data: local});
+                }));
+                modalContent.querySelectorAll('.clickable-name[data-owner-name]').forEach(span => span.addEventListener('click', e => { 
+                    e.preventDefault(); 
+                    const ownerName = e.currentTarget.dataset.ownerName;
+                    if (ownerName && ownerName.toLowerCase() !== 'skarb miasta' && ownerName.toLowerCase() !== 'brak') {
+                        openModal({type: 'owner', data: ownerName});
+                    }
+                }));
             }
 
-            closeModalBtn.addEventListener('click', () => { modal.classList.remove('show'); destroyActiveCharts(); });
-            mapContainer.addEventListener('click', (e) => {
-                if (e.target === mapContainer || e.target === svg || e.target.id === 'map-svg') { modal.classList.remove('show'); destroyActiveCharts(); }
-            });
             searchButton.addEventListener('click', () => findPlotAndCenter(searchInput.value));
             searchInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') findPlotAndCenter(searchInput.value); });
 
@@ -1322,6 +1256,14 @@
             mapContainer.addEventListener('touchend', (e) => {
                 touchPanning = false; pinchZooming = false;
                 if (e.touches.length === 0) touchStartInfo.time = 0;
+            });
+            
+            closeModalBtn.addEventListener('click', closeModal);
+            document.getElementById('back-modal').addEventListener('click', goBackModal);
+            mapContainer.addEventListener('click', (e) => {
+                if (e.target === mapContainer || e.target === svg || e.target.id === 'map-svg') {
+                    closeModal();
+                }
             });
 
             document.getElementById('zoom-in').addEventListener('click', () => { const dw = viewBox.w * -0.2; setViewBox(viewBox.x - dw / 2, viewBox.y - (dw / initialViewBox.w * initialViewBox.h) / 2, viewBox.w + dw, viewBox.h + (dw / initialViewBox.w * initialViewBox.h)); });
