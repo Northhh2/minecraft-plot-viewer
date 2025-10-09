@@ -741,196 +741,94 @@
             }
 
             function createDistrictOutline(plots) {
-    if (plots.length === 0) return '';
-
-    const segments = new Map();
-
-    // Helper do dodawania segmentów do mapy w sposób kanoniczny,
-    // aby zapewnić, że krawędź (A -> B) jest taka sama jak (B -> A).
-    const addSegment = (x1, z1, x2, z2) => {
-        // Sortujemy punkty, aby klucz był zawsze taki sam niezależnie od kierunku
-        const key = (x1 < x2) ? `${x1},${z1},${x2},${z2}` :
-                  (x2 < x1) ? `${x2},${z2},${x1},${z1}` :
-                  (z1 < z2) ? `${x1},${z1},${x2},${z2}` :
-                              `${x2},${z2},${x1},${z1}`;
-        segments.set(key, (segments.get(key) || 0) + 1);
-    };
-
-    // 1. Zbierz wszystkie krawędzie ze wszystkich działek
-    plots.forEach(plot => {
-        const x_min = Math.min(plot.x1, plot.x2);
-        const x_max = Math.max(plot.x1, plot.x2);
-        const z_min = Math.min(plot.z1, plot.z2);
-        const z_max = Math.max(plot.z1, plot.z2);
-
-        addSegment(x_min, z_min, x_max, z_min); // Górna
-        addSegment(x_min, z_max, x_max, z_max); // Dolna
-        addSegment(x_min, z_min, x_min, z_max); // Lewa
-        addSegment(x_max, z_min, x_max, z_max); // Prawa
-    });
-
-    // 2. Filtruj segmenty, które nie są współdzielone (występują tylko raz)
-    let outsideSegments = [];
-    for (const [key, count] of segments.entries()) {
-        if (count === 1) {
-            outsideSegments.push(key.split(',').map(Number));
-        }
-    }
-
-    if (outsideSegments.length === 0) return '';
-
-    // 3. Połącz segmenty w jeden lub więcej zamkniętych wielokątów
-    const polygons = [];
-    while (outsideSegments.length > 0) {
-        const currentPolygonPoints = [];
-        // Zaczynamy od ostatniego segmentu na liście
-        let [startX, startZ, endX, endZ] = outsideSegments.pop();
-        currentPolygonPoints.push([startX, startZ], [endX, endZ]);
-
-        let searching = true;
-        while (searching) {
-            let foundNext = false;
-            for (let i = 0; i < outsideSegments.length; i++) {
-                let [nextStartX, nextStartZ, nextEndX, nextEndZ] = outsideSegments[i];
-
-                if (endX === nextStartX && endZ === nextStartZ) { // Następny segment łączy się z końcem
-                    currentPolygonPoints.push([nextEndX, nextEndZ]);
-                    [endX, endZ] = [nextEndX, nextEndZ]; // Aktualizuj koniec ścieżki
-                    outsideSegments.splice(i, 1); // Usuń zużyty segment
-                    foundNext = true;
-                    break;
-                } else if (endX === nextEndX && endZ === nextEndZ) { // Następny segment łączy się z końcem (odwrócony)
-                    currentPolygonPoints.push([nextStartX, nextStartZ]);
-                    [endX, endZ] = [nextStartX, nextStartZ];
-                    outsideSegments.splice(i, 1);
-                    foundNext = true;
-                    break;
-                }
-            }
-            
-            // Jeśli ścieżka się zamknęła lub nie ma więcej pasujących segmentów
-            if ((endX === startX && endZ === startZ) || !foundNext) {
-                searching = false;
-            }
-        }
-        polygons.push(currentPolygonPoints);
-    }
-
-    // 4. Wygeneruj ścieżkę SVG
-    let svgPath = '';
-    polygons.forEach(polygon => {
-        if (polygon.length > 1) {
-            svgPath += `M ${polygon[0].join(' ')} `;
-            for (let i = 1; i < polygon.length; i++) {
-                svgPath += `L ${polygon[i].join(' ')} `;
-            }
-            svgPath += 'Z '; // Zamknij ścieżkę
-        }
-    });
-    
-    return svgPath.trim();
-}
                 if (plots.length === 0) return '';
-                const borders = { top: [], right: [], bottom: [], left: [] };
 
+                const segments = new Map();
+
+                // Helper do dodawania segmentów do mapy w sposób kanoniczny,
+                // aby zapewnić, że krawędź (A -> B) jest taka sama jak (B -> A).
+                const addSegment = (x1, z1, x2, z2) => {
+                    // Sortujemy punkty, aby klucz był zawsze taki sam niezależnie od kierunku
+                    const key = (x1 < x2) ? `${x1},${z1},${x2},${z2}` :
+                        (x2 < x1) ? `${x2},${z2},${x1},${z1}` :
+                            (z1 < z2) ? `${x1},${z1},${x2},${z2}` :
+                                `${x2},${z2},${x1},${z1}`;
+                    segments.set(key, (segments.get(key) || 0) + 1);
+                };
+
+                // 1. Zbierz wszystkie krawędzie ze wszystkich działek
                 plots.forEach(plot => {
                     const x_min = Math.min(plot.x1, plot.x2);
                     const x_max = Math.max(plot.x1, plot.x2);
                     const z_min = Math.min(plot.z1, plot.z2);
                     const z_max = Math.max(plot.z1, plot.z2);
 
-                    borders.top.push({ name: plot.name, fcrd: z_min, scrd: [x_min, x_max] });
-                    borders.bottom.push({ name: plot.name, fcrd: z_max, scrd: [x_min, x_max] });
-                    borders.left.push({ name: plot.name, fcrd: x_min, scrd: [z_min, z_max] });
-                    borders.right.push({ name: plot.name, fcrd: x_max, scrd: [z_min, z_max] });
+                    addSegment(x_min, z_min, x_max, z_min); // Górna
+                    addSegment(x_min, z_max, x_max, z_max); // Dolna
+                    addSegment(x_min, z_min, x_min, z_max); // Lewa
+                    addSegment(x_max, z_min, x_max, z_max); // Prawa
                 });
 
-                borders.top.sort((a, b) => a.fcrd - b.fcrd);
-                borders.bottom.sort((a, b) => b.fcrd - a.fcrd);
-                borders.left.sort((a, b) => a.fcrd - b.fcrd);
-                borders.right.sort((a, b) => b.fcrd - a.fcrd);
-
-                let outsideBorders = {
-                    top: extendBorders(filterBorders(JSON.parse(JSON.stringify(borders.top)))),
-                    bottom: extendBorders(filterBorders(JSON.parse(JSON.stringify(borders.bottom)))),
-                    left: extendBorders(filterBorders(JSON.parse(JSON.stringify(borders.left)))),
-                    right: extendBorders(filterBorders(JSON.parse(JSON.stringify(borders.right)))),
-                };
-
-                console.log(borders);
-                console.log(outsideBorders);
-
-                const allPoints = [];
-
-                // Top borders: left to right (sort by X start, then add points left-to-right)
-                const topBorders = outsideBorders.top.sort((a, b) => a.scrd[0] - b.scrd[0]);
-                topBorders.forEach(b => {
-                    if (allPoints.length === 0 || allPoints[allPoints.length - 1][0] !== b.scrd[0]) {
-                        allPoints.push([b.scrd[0], b.fcrd]);
-                    }
-                    if (allPoints[allPoints.length - 1][0] !== b.scrd[1]) {
-                        allPoints.push([b.scrd[1], b.fcrd]);
-                    }
-                });
-
-                // Right borders: top to bottom (sort by Z start, then add points top-to-bottom)
-                const rightBorders = outsideBorders.right.sort((a, b) => a.scrd[0] - b.scrd[0]);
-                rightBorders.forEach(b => {
-                    if (allPoints.length === 0 || !(allPoints[allPoints.length - 1][0] === b.fcrd && allPoints[allPoints.length - 1][1] === b.scrd[0])) {
-                        allPoints.push([b.fcrd, b.scrd[0]]);
-                    }
-                    if (!(allPoints[allPoints.length - 1][0] === b.fcrd && allPoints[allPoints.length - 1][1] === b.scrd[1])) {
-                        allPoints.push([b.fcrd, b.scrd[1]]);
-                    }
-                });
-
-                // Bottom borders: right to left (sort by X end descending, then add points right-to-left)
-                const bottomBorders = outsideBorders.bottom.sort((a, b) => b.scrd[1] - a.scrd[1]);
-                bottomBorders.forEach(b => {
-                    if (allPoints.length === 0 || !(allPoints[allPoints.length - 1][0] === b.scrd[1] && allPoints[allPoints.length - 1][1] === b.fcrd)) {
-                        allPoints.push([b.scrd[1], b.fcrd]);
-                    }
-                    if (!(allPoints[allPoints.length - 1][0] === b.scrd[0] && allPoints[allPoints.length - 1][1] === b.fcrd)) {
-                        allPoints.push([b.scrd[0], b.fcrd]);
-                    }
-                });
-
-                // Left borders: bottom to top (sort by Z end descending, then add points bottom-to-top)
-                const leftBorders = outsideBorders.left.sort((a, b) => b.scrd[1] - a.scrd[1]);
-                leftBorders.forEach(b => {
-                    if (allPoints.length === 0 || !(allPoints[allPoints.length - 1][0] === b.fcrd && allPoints[allPoints.length - 1][1] === b.scrd[1])) {
-                        allPoints.push([b.fcrd, b.scrd[1]]);
-                    }
-                    if (!(allPoints[allPoints.length - 1][0] === b.fcrd && allPoints[allPoints.length - 1][1] === b.scrd[0])) {
-                        allPoints.push([b.fcrd, b.scrd[0]]);
-                    }
-                });
-
-                if (allPoints.length < 2) return '';
-
-                const pathPoints = allPoints.filter((point, i, arr) => {
-                    if (i === 0) return true;
-                    const prev = arr[i - 1];
-                    return point[0] !== prev[0] || point[1] !== prev[1];
-                });
-
-                if (pathPoints.length > 1) {
-                    const first = pathPoints[0];
-                    const last = pathPoints[pathPoints.length - 1];
-                    if (first[0] === last[0] && first[1] === last[1]) {
-                        pathPoints.pop();
+                // 2. Filtruj segmenty, które nie są współdzielone (występują tylko raz)
+                let outsideSegments = [];
+                for (const [key, count] of segments.entries()) {
+                    if (count === 1) {
+                        outsideSegments.push(key.split(',').map(Number));
                     }
                 }
 
-                if (pathPoints.length < 2) return '';
+                if (outsideSegments.length === 0) return '';
 
-                let svgPath = 'M ' + pathPoints[0].join(' ');
-                for (let i = 1; i < pathPoints.length; i++) {
-                    svgPath += ' L ' + pathPoints[i].join(' ');
+                // 3. Połącz segmenty w jeden lub więcej zamkniętych wielokątów
+                const polygons = [];
+                while (outsideSegments.length > 0) {
+                    const currentPolygonPoints = [];
+                    // Zaczynamy od ostatniego segmentu na liście
+                    let [startX, startZ, endX, endZ] = outsideSegments.pop();
+                    currentPolygonPoints.push([startX, startZ], [endX, endZ]);
+
+                    let searching = true;
+                    while (searching) {
+                        let foundNext = false;
+                        for (let i = 0; i < outsideSegments.length; i++) {
+                            let [nextStartX, nextStartZ, nextEndX, nextEndZ] = outsideSegments[i];
+
+                            if (endX === nextStartX && endZ === nextStartZ) { // Następny segment łączy się z końcem
+                                currentPolygonPoints.push([nextEndX, nextEndZ]);
+                                [endX, endZ] = [nextEndX, nextEndZ]; // Aktualizuj koniec ścieżki
+                                outsideSegments.splice(i, 1); // Usuń zużyty segment
+                                foundNext = true;
+                                break;
+                            } else if (endX === nextEndX && endZ === nextEndZ) { // Następny segment łączy się z końcem (odwrócony)
+                                currentPolygonPoints.push([nextStartX, nextStartZ]);
+                                [endX, endZ] = [nextStartX, nextStartZ];
+                                outsideSegments.splice(i, 1);
+                                foundNext = true;
+                                break;
+                            }
+                        }
+
+                        // Jeśli ścieżka się zamknęła lub nie ma więcej pasujących segmentów
+                        if ((endX === startX && endZ === startZ) || !foundNext) {
+                            searching = false;
+                        }
+                    }
+                    polygons.push(currentPolygonPoints);
                 }
-                svgPath += ' Z';
 
-                return svgPath;
+                // 4. Wygeneruj ścieżkę SVG
+                let svgPath = '';
+                polygons.forEach(polygon => {
+                    if (polygon.length > 1) {
+                        svgPath += `M ${polygon[0].join(' ')} `;
+                        for (let i = 1; i < polygon.length; i++) {
+                            svgPath += `L ${polygon[i].join(' ')} `;
+                        }
+                        svgPath += 'Z '; // Zamknij ścieżkę
+                    }
+                });
+
+                return svgPath.trim();
             }
 
             function filterBorders(group) {
