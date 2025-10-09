@@ -805,133 +805,44 @@
 
                 if (allSegments.length === 0) return '';
 
-                // Build adjacency map: each point maps to its connected points
-                const adjMap = new Map();
-
+                const points = new Map();
                 allSegments.forEach(seg => {
-                    const [p1, p2] = seg;
-                    const key1 = `${p1[0]},${p1[1]}`;
-                    const key2 = `${p2[0]},${p2[1]}`;
-
-                    if (!adjMap.has(key1)) adjMap.set(key1, []);
-                    if (!adjMap.has(key2)) adjMap.set(key2, []);
-
-                    adjMap.get(key1).push({ key: key2, point: p2 });
-                    adjMap.get(key2).push({ key: key1, point: p1 });
+                    const p1_key = seg[0].join(',');
+                    const p2_key = seg[1].join(',');
+                    if (!points.has(p1_key)) points.set(p1_key, []);
+                    if (!points.has(p2_key)) points.set(p2_key, []);
+                    points.get(p1_key).push(p2_key);
+                    points.get(p2_key).push(p1_key);
                 });
 
-                // Helper function to calculate angle from point A to point B
-                function getAngle(fromKey, toKey) {
-                    const [fx, fy] = fromKey.split(',').map(Number);
-                    const [tx, ty] = toKey.split(',').map(Number);
-                    return Math.atan2(ty - fy, tx - fx);
-                }
-
-                // Find the starting point (leftmost, then topmost)
-                let startKey = null;
-                minX = Infinity;
-                let minY = Infinity;
-                for (const key of adjMap.keys()) {
-                    const [x, y] = key.split(',').map(Number);
-                    if (x < minX || (x === minX && y < minY)) {
-                        minX = x;
-                        minY = y;
-                        startKey = key;
+                let svgPath = '';
+                const visited = new Set();
+                for (const startNode of points.keys()) {
+                    if (visited.has(startNode)) continue;
+                    const path = [startNode];
+                    visited.add(startNode);
+                    let currentNode = startNode;
+                    while (true) {
+                        const neighbors = points.get(currentNode);
+                        const nextNode = neighbors.find(n => !visited.has(n));
+                        if (!nextNode) break;
+                        visited.add(nextNode);
+                        path.push(nextNode);
+                        currentNode = nextNode;
                     }
-                }
-
-                if (!startKey) return '';
-
-                // Traverse the boundary clockwise
-                const contour = [startKey];
-                const usedEdges = new Set();
-                let current = startKey;
-                let prevKey = null;
-                let iterations = 0;
-                const maxIterations = adjMap.size * 4; // Safety limit
-
-                while (iterations++ < maxIterations) {
-                    const neighbors = adjMap.get(current) || [];
-
-                    if (neighbors.length === 0) break;
-
-                    let nextNeighbor = null;
-
-                    if (prevKey === null) {
-                        // First step: go downward (or rightward if no downward option exists)
-                        let bestAngle = -Infinity;
-                        for (const neighbor of neighbors) {
-                            const edgeKey = `${current}->${neighbor.key}`;
-                            if (usedEdges.has(edgeKey)) continue;
-
-                            const angle = getAngle(current, neighbor.key);
-                            // Prefer angles close to π/2 (downward) for starting
-                            const score = -Math.abs(angle - Math.PI / 2);
-                            if (score > bestAngle) {
-                                bestAngle = score;
-                                nextNeighbor = neighbor;
-                            }
+                    if (path.length > 1) {
+                        svgPath += `M ${path[0].replace(',', ' ')} `;
+                        for (let i = 1; i < path.length; i++) {
+                            svgPath += `L ${path[i].replace(',', ' ')} `;
                         }
-                    } else {
-                        // Choose the next neighbor by taking the rightmost turn (most negative relative angle)
-                        const incomingAngle = getAngle(prevKey, current);
-                        let bestRelativeAngle = -Infinity;
-
-                        for (const neighbor of neighbors) {
-                            if (neighbor.key === prevKey) continue; // Don't go back
-
-                            const edgeKey = `${current}->${neighbor.key}`;
-                            if (usedEdges.has(edgeKey)) continue;
-
-                            const outgoingAngle = getAngle(current, neighbor.key);
-                            let relativeAngle = outgoingAngle - incomingAngle;
-
-                            // Normalize to (-π, π]
-                            while (relativeAngle <= -Math.PI) relativeAngle += Math.PI * 2;
-                            while (relativeAngle > Math.PI) relativeAngle -= Math.PI * 2;
-
-                            // We want the most negative angle (sharpest right turn)
-                            // which means the smallest relativeAngle value
-                            if (relativeAngle > bestRelativeAngle) {
-                                bestRelativeAngle = relativeAngle;
-                                nextNeighbor = neighbor;
-                            }
+                        const lastNode = path[path.length - 1];
+                        const lastNodeNeighbors = points.get(lastNode);
+                        if (lastNodeNeighbors && lastNodeNeighbors.includes(startNode)) {
+                            svgPath += 'Z ';
                         }
                     }
-
-                    if (!nextNeighbor) {
-                        console.log('No next neighbor found at', current);
-                        break;
-                    }
-
-                    // Mark edge as used
-                    const edgeKey = `${current}->${nextNeighbor.key}`;
-                    usedEdges.add(edgeKey);
-
-                    // Check if we've completed the loop
-                    if (nextNeighbor.key === startKey && contour.length > 2) {
-                        console.log('Loop completed with', contour.length, 'points');
-                        break;
-                    }
-
-                    contour.push(nextNeighbor.key);
-                    prevKey = current;
-                    current = nextNeighbor.key;
                 }
-
-                console.log('Contour length:', contour.length);
-                console.log('Total segments:', allSegments.length);
-
-                // Build SVG path
-                if (contour.length < 3) return '';
-
-                let svgPath = `M ${contour[0].replace(',', ' ')} `;
-                for (let i = 1; i < contour.length; i++) {
-                    svgPath += `L ${contour[i].replace(',', ' ')} `;
-                }
-                svgPath += 'Z';
-
-                return svgPath;
+                return svgPath.trim();
             }
 
 
