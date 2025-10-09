@@ -539,8 +539,23 @@
 
                 const mapContentWidth = maxX - minX + 2 * padding;
                 const mapContentHeight = maxZ - minZ + 2 * padding;
-
                 const clientRatio = mapContainer.clientWidth / mapContainer.clientHeight;
+                const contentRatio = mapContentWidth / mapContentHeight;
+
+                let w, h;
+                if (clientRatio > contentRatio) {
+                    h = mapContentHeight;
+                    w = h * clientRatio;
+                } else {
+                    w = mapContentWidth;
+                    h = w / clientRatio;
+                }
+
+                initialViewBox.x = minX - (w - mapContentWidth + 2 * padding) / 2;
+                initialViewBox.y = minZ - (h - mapContentHeight + 2 * padding) / 2;
+                initialViewBox.w = w;
+                initialViewBox.h = h;
+
                 const mapRatio = MAP_WIDTH / MAP_HEIGHT;
                 if (clientRatio > mapRatio) {
                     // Ekran jest szerszy niż mapa, ograniczeniem jest wysokość mapy
@@ -549,11 +564,6 @@
                     // Ekran jest wyższy niż mapa, ograniczeniem jest szerokość mapy
                     maxViewboxWidth = MAP_WIDTH;
                 }
-
-                initialViewBox.x = minX - (w - mapContentWidth + 2 * padding) / 2;
-                initialViewBox.y = minZ - (h - mapContentHeight + 2 * padding) / 2;
-                initialViewBox.w = w;
-                initialViewBox.h = h;
 
                 setViewBox(initialViewBox.x, initialViewBox.y, initialViewBox.w, initialViewBox.h);
             }
