@@ -832,52 +832,71 @@
                     points.get(p2_key).push(p1_key);
                 };
 
+                // Osobno przetwarzamy krawędzie POZIOME (górne i dolne)
                 [...topExt, ...bottomExt].forEach(seg => {
+                    // Współrzędne to (X, Z), gdzie Z jest stałe (fcrd)
                     const p1_key = `${seg.scrd[0]},${seg.fcrd}`;
                     const p2_key = `${seg.scrd[1]},${seg.fcrd}`;
                     addConnection(p1_key, p2_key);
                 });
 
+                // Osobno przetwarzamy krawędzie PIONOWE (lewe i prawe)
                 [...leftExt, ...rightExt].forEach(seg => {
+                    // Współrzędne to (X, Z), gdzie X jest stałe (fcrd)
                     const p1_key = `${seg.fcrd},${seg.scrd[0]}`;
                     const p2_key = `${seg.fcrd},${seg.scrd[1]}`;
                     addConnection(p1_key, p2_key);
                 });
 
+                // Poprawiona i stabilna logika do łączenia punktów w ścieżkę SVG
                 let svgPath = '';
                 while (points.size > 0) {
-                    const [startKey] = points.keys();
-                    let pathPoints = [startKey];
-                    points.delete(startKey);
+                    const [startKey, startConnections] = points.entries().next().value;
+
+                    // Jeśli punkt nie ma połączeń, usuń go i kontynuuj
+                    if (!startConnections || startConnections.length === 0) {
+                        points.delete(startKey);
+                        continue;
+                    }
 
                     let currentKey = startKey;
-                    while (true) {
+                    svgPath += `M ${startKey.replace(',', ' ')} `;
+
+                    // Pętla do śledzenia ścieżki od punktu do punktu
+                    while (currentKey) {
                         const connections = points.get(currentKey);
-                        if (!connections || connections.length === 0) break;
+                        if (!connections || connections.length === 0) {
+                            points.delete(currentKey); // Usuń punkt, jeśli wyczerpano połączenia
+                            break;
+                        }
 
-                        const nextKey = connections.shift();
+                        const nextKey = connections.shift(); // Pobierz następny punkt w ścieżce
 
-                        // Usuń połączenie zwrotne z następnego punktu
+                        // Usuń połączenie zwrotne, aby nie wracać tą samą drogą
                         const nextConnections = points.get(nextKey);
                         if (nextConnections) {
                             const index = nextConnections.indexOf(currentKey);
                             if (index > -1) nextConnections.splice(index, 1);
-                            if (nextConnections.length === 0) points.delete(nextKey);
                         }
 
-                        pathPoints.push(nextKey);
+                        svgPath += `L ${nextKey.replace(',', ' ')} `;
+
+                        // Jeśli punkt startowy nie ma już więcej połączeń, usuń go
+                        if (points.get(currentKey)?.length === 0) {
+                            points.delete(currentKey);
+                        }
+
                         currentKey = nextKey;
 
-                        if (currentKey === startKey) break;
-                    }
-
-                    // Budowanie ścieżki SVG
-                    svgPath += `M ${pathPoints[0].replace(',', ' ')} `;
-                    for (let i = 1; i < pathPoints.length; i++) {
-                        svgPath += `L ${pathPoints[i].replace(',', ' ')} `;
-                    }
-                    if (pathPoints[pathPoints.length - 1] === startKey) {
-                        svgPath += 'Z ';
+                        // Jeśli wróciliśmy do punktu startowego, zamknij ścieżkę
+                        if (currentKey === startKey) {
+                            svgPath += 'Z ';
+                            // Upewnij się, że punkt startowy jest usunięty, jeśli to konieczne
+                            if (points.get(currentKey)?.length === 0) {
+                                points.delete(currentKey);
+                            }
+                            break;
+                        }
                     }
                 }
 
