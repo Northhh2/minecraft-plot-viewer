@@ -829,7 +829,8 @@
 
                 // Find the starting point (leftmost, then topmost)
                 let startKey = null;
-                let minX = Infinity, minY = Infinity;
+                let minY = Infinity;
+                minX = Infinity;
                 for (const key of adjMap.keys()) {
                     const [x, y] = key.split(',').map(Number);
                     if (x < minX || (x === minX && y < minY)) {
