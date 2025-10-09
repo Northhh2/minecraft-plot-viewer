@@ -818,14 +818,11 @@
 
                 const allExternalSegments = [...topExt, ...bottomExt, ...leftExt, ...rightExt];
 
-                // --- Krok 3: Konwersja znalezionych segmentów na ścieżkę SVG ---
-                // Ta część jest skomplikowana, ale konieczna do połączenia oddzielnych
-                // fragmentów w jeden lub więcej ciągłych obrysów.
-                // --- Krok 3: Konwersja znalezionych segmentów na ścieżkę SVG ---
                 const points = new Map();
 
                 /** Funkcja pomocnicza do dodawania połączonych punktów do mapy */
                 const addConnection = (p1_key, p2_key) => {
+                    if (p1_key === p2_key) return;
                     if (!points.has(p1_key)) points.set(p1_key, []);
                     if (!points.has(p2_key)) points.set(p2_key, []);
                     points.get(p1_key).push(p2_key);
@@ -834,7 +831,6 @@
 
                 // Osobno przetwarzamy krawędzie POZIOME (górne i dolne)
                 [...topExt, ...bottomExt].forEach(seg => {
-                    // Współrzędne to (X, Z), gdzie Z jest stałe (fcrd)
                     const p1_key = `${seg.scrd[0]},${seg.fcrd}`;
                     const p2_key = `${seg.scrd[1]},${seg.fcrd}`;
                     addConnection(p1_key, p2_key);
@@ -842,58 +838,56 @@
 
                 // Osobno przetwarzamy krawędzie PIONOWE (lewe i prawe)
                 [...leftExt, ...rightExt].forEach(seg => {
-                    // Współrzędne to (X, Z), gdzie X jest stałe (fcrd)
                     const p1_key = `${seg.fcrd},${seg.scrd[0]}`;
                     const p2_key = `${seg.fcrd},${seg.scrd[1]}`;
                     addConnection(p1_key, p2_key);
                 });
 
-                // Poprawiona i stabilna logika do łączenia punktów w ścieżkę SVG
-                let svgPath = '';
-                while (points.size > 0) {
-                    let [currentKey] = points.keys(); // Pobieramy dowolny punkt startowy
-                    const startKey = currentKey;
 
-                    let path = `M ${startKey.replace(',', ' ')} `;
-                    let pathLength = 1;
+                // OSTATECZNA, POPRAWIONA LOGIKA ŁĄCZENIA PUNKTÓW
+                let svgPath = '';
+                const visited = new Set(); // Zbiór odwiedzonych już punktów
+
+                for (const startKey of points.keys()) {
+                    // Jeśli ten punkt był już częścią innej, narysowanej ścieżki - pomiń go
+                    if (visited.has(startKey)) {
+                        continue;
+                    }
+
+                    // Rozpocznij budowanie nowej ścieżki (nowego wielokąta)
+                    const path = [startKey];
+                    visited.add(startKey);
+                    let currentKey = startKey;
 
                     while (true) {
-                        const connections = points.get(currentKey);
+                        // Znajdź sąsiada, który nie był jeszcze odwiedzony
+                        const connections = points.get(currentKey) || [];
+                        const nextKey = connections.find(neighbor => !visited.has(neighbor));
 
-                        // Jeśli punkt nie ma już połączeń, ścieżka się kończy
-                        if (!connections || connections.length === 0) {
-                            points.delete(currentKey);
+                        // Jeśli nie ma nieodwiedzonego sąsiada, to koniec tej ścieżki
+                        if (!nextKey) {
                             break;
                         }
 
-                        const nextKey = connections.shift(); // Bierzemy następny punkt
-
-                        // Usuwamy połączenie zwrotne z listy następnego punktu
-                        const nextConnections = points.get(nextKey);
-                        if (nextConnections) {
-                            const index = nextConnections.indexOf(currentKey);
-                            if (index > -1) nextConnections.splice(index, 1);
-                        }
-
-                        path += `L ${nextKey.replace(',', ' ')} `;
-                        pathLength++;
+                        // Przejdź do następnego punktu
+                        visited.add(nextKey);
+                        path.push(nextKey);
                         currentKey = nextKey;
+                    }
 
-                        // Jeśli pętla się zamknęła, kończymy
-                        if (currentKey === startKey) {
-                            path += 'Z ';
-                            points.delete(startKey); // Usuwamy startowy, bo pętla zamknięta
-                            break;
+                    // Przekonwertuj znalezioną ścieżkę na format SVG
+                    if (path.length > 1) {
+                        svgPath += `M ${path[0].replace(',', ' ')} `;
+                        for (let i = 1; i < path.length; i++) {
+                            svgPath += `L ${path[i].replace(',', ' ')} `;
+                        }
+
+                        // Sprawdź, czy ścieżka jest zamknięta (czy ostatni punkt łączy się z pierwszym)
+                        const endConnections = points.get(path[path.length - 1]) || [];
+                        if (endConnections.includes(startKey)) {
+                            svgPath += 'Z ';
                         }
                     }
-
-                    // Dodaj zbudowaną ścieżkę do wyniku tylko, jeśli ma więcej niż 1 punkt
-                    if (pathLength > 1) {
-                        svgPath += path;
-                    }
-
-                    // Upewnijmy się, że wszystkie punkty ze ścieżki są usunięte
-                    path.match(/(\d+,\d+)/g)?.forEach(p => points.delete(p));
                 }
 
                 return svgPath.trim();
