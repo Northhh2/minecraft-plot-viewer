@@ -829,8 +829,8 @@
 
                 // Find the starting point (leftmost, then topmost)
                 let startKey = null;
-                let minY = Infinity;
                 minX = Infinity;
+                let minY = Infinity;
                 for (const key of adjMap.keys()) {
                     const [x, y] = key.split(',').map(Number);
                     if (x < minX || (x === minX && y < minY)) {
@@ -844,8 +844,7 @@
 
                 // Traverse the boundary clockwise
                 const contour = [startKey];
-                const visited = new Set();
-                visited.add(startKey);
+                const usedEdges = new Set(); // Track used edges instead of visited points
                 let current = startKey;
                 let prevKey = null;
 
@@ -854,13 +853,16 @@
 
                     if (neighbors.length === 0) break;
 
-                    // Sort neighbors by angle (counterclockwise from previous direction)
+                    // Sort neighbors by angle
                     let nextNeighbor = null;
 
                     if (prevKey === null) {
                         // First step: go to the rightmost neighbor (smallest angle from positive x-axis)
                         let minAngle = Infinity;
                         for (const neighbor of neighbors) {
+                            const edgeKey = `${current}->${neighbor.key}`;
+                            if (usedEdges.has(edgeKey)) continue;
+
                             const angle = getAngle(current, neighbor.key);
                             if (angle < minAngle) {
                                 minAngle = angle;
@@ -873,16 +875,20 @@
                         let bestAngle = Infinity;
 
                         for (const neighbor of neighbors) {
-                            if (neighbor.key === prevKey) continue;
+                            const edgeKey = `${current}->${neighbor.key}`;
+                            if (usedEdges.has(edgeKey)) continue;
 
                             const angle = getAngle(current, neighbor.key);
                             let relativeAngle = angle - prevAngle;
 
-                            // Normalize to [0, 2π)
-                            while (relativeAngle < 0) relativeAngle += Math.PI * 2;
-                            while (relativeAngle >= Math.PI * 2) relativeAngle -= Math.PI * 2;
+                            // Normalize to [-π, π)
+                            while (relativeAngle < -Math.PI) relativeAngle += Math.PI * 2;
+                            while (relativeAngle >= Math.PI) relativeAngle -= Math.PI * 2;
 
                             // We want the smallest positive angle (rightmost turn)
+                            // If all angles are negative, take the largest (closest to 0)
+                            if (relativeAngle < 0) relativeAngle += Math.PI * 2;
+
                             if (relativeAngle < bestAngle) {
                                 bestAngle = relativeAngle;
                                 nextNeighbor = neighbor;
@@ -892,20 +898,22 @@
 
                     if (!nextNeighbor) break;
 
+                    // Mark edge as used
+                    const edgeKey = `${current}->${nextNeighbor.key}`;
+                    usedEdges.add(edgeKey);
+
                     // Check if we've completed the loop
                     if (nextNeighbor.key === startKey && contour.length > 2) {
                         break;
                     }
 
-                    if (visited.has(nextNeighbor.key)) break;
-
-                    visited.add(nextNeighbor.key);
                     contour.push(nextNeighbor.key);
                     prevKey = current;
                     current = nextNeighbor.key;
                 }
 
                 console.log('Contour length:', contour.length);
+                console.log('Contour points:', contour);
 
                 // Build SVG path
                 if (contour.length < 3) return '';
