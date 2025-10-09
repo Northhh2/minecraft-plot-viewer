@@ -862,53 +862,28 @@
             }
             
             function renderCurrentModal() {
-                if (modalHistory.length === 0) {
-                    closeModal();
-                    return;
-                }
-                if (isAnimatingModal) return;
+                if (modalHistory.length === 0 || isAnimatingModal) return;
                 isAnimatingModal = true;
-
-                const backButton = document.getElementById('back-modal');
                 const currentState = modalHistory[modalHistory.length - 1];
-                
                 modalContent.classList.add('fade-out');
 
                 setTimeout(() => {
                     destroyActiveCharts();
                     const { type, data } = currentState;
-
-                    let contentHTML = '';
-                    let title = '';
-
+                    let contentHTML = '', title = '';
                     switch (type) {
-                        case 'plot':
-                            title = `Działka: ${data.name}`;
-                            contentHTML = renderPlotContent(data);
-                            break;
-                        case 'merged':
-                            title = 'Połączone działki';
-                            contentHTML = renderMergedContent(data);
-                            break;
-                        case 'local':
-                            title = `Lokal #${data.localNum}`;
-                            contentHTML = renderLocalContent(data);
-                            break;
-                        case 'owner':
-                            title = `Aktywa: ${data}`;
-                            contentHTML = renderOwnerContent(data);
-                            break;
-                        case 'district':
-                            title = `Dzielnica: ${data.name}`;
-                            contentHTML = renderDistrictContent(data.name, data.plots);
-                            break;
+                        case 'plot': title = `Działka: ${data.name}`; contentHTML = renderPlotContent(data); break;
+                        case 'merged': title = 'Połączone działki'; contentHTML = renderMergedContent(data); break;
+                        case 'local': title = `Lokal #${data.localNum}`; contentHTML = renderLocalContent(data); break;
+                        case 'owner': title = `Aktywa: ${data}`; contentHTML = renderOwnerContent(data); break;
+                        case 'district': title = `Dzielnica: ${data.name}`; contentHTML = renderDistrictContent(data.name, data.plots); break;
+                        case 'street': title = `Ulica: ${data}`; contentHTML = renderStreetContent(data); break;
+                        case 'plotType': title = `Typ: ${data}`; contentHTML = renderPlotTypeContent(data); break;
                     }
-
                     modalTitle.textContent = title;
                     modalContent.innerHTML = contentHTML;
-                    addModalEventListeners(); 
-
-                    backButton.classList.toggle('hidden', modalHistory.length <= 1);
+                    addModalEventListeners();
+                    document.getElementById('back-modal').classList.toggle('hidden', modalHistory.length <= 1);
                     modal.classList.add('show');
                     modalContent.classList.remove('fade-out');
                     isAnimatingModal = false;
@@ -949,40 +924,24 @@
             function renderPlotContent(plot) {
                 const isOwned = plot.owner && plot.owner.trim() !== '' && plot.owner.toLowerCase().trim() !== 'skarb miasta';
                 const ownerInfo = isOwned ? plot.owner : 'Skarb Miasta';
-                
                 const localsOnPlot = allLocals.filter(l => l.plotName === plot.name);
                 let localsHTML = '';
                 if (localsOnPlot.length > 0) {
-                    const totalBeds = localsOnPlot.reduce((sum, l) => sum + l.beds, 0);
-                    const totalWorkplaces = localsOnPlot.reduce((sum, l) => sum + l.workplaces, 0);
-                    const totalLocalArea = localsOnPlot.reduce((sum, l) => sum + l.area, 0);
-                    const localDetailsList = localsOnPlot.map(l => `
-                        <div data-local-id="${l.id}" class="bg-gray-700 p-2 rounded-md hover:bg-gray-600 cursor-pointer transition-colors">
-                            <div class="font-semibold text-purple-400">Lokal #${l.localNum} (${l.area} m²)</div>
-                            <div class="text-xs text-gray-400">Najemca: <span class="font-medium text-gray-200">${l.tenant || 'Brak'}</span></div>
-                        </div>
-                    `).join('');
-                    localsHTML = `<div class="border-t border-gray-700 pt-3 mt-3">
-                         <h4 class="text-md font-semibold mb-2">Lokale w budynku (${localsOnPlot.length})</h4>
-                         <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm mb-3">
-                            <span class="text-gray-400">Łączna pow. lokali:</span><span class="font-medium">${totalLocalArea} m²</span>
-                            <span class="text-gray-400">Miejsca pracy:</span><span class="font-medium">${totalWorkplaces}</span>
-                            <span class="text-gray-400">Ilość łóżek:</span><span class="font-medium">${totalBeds}</span>
-                         </div>
-                         <div class="space-y-2">${localDetailsList}</div>
-                    </div>`;
+                    const localDetailsList = localsOnPlot.map(l => `<div data-local-id="${l.id}" class="bg-gray-700 p-2 rounded-md hover:bg-gray-600 cursor-pointer transition-colors">
+                        <div class="font-semibold text-purple-400">Lokal #${l.localNum} (${l.area} m²)</div>
+                        <div class="text-xs text-gray-400">Najemca: <span class="font-medium text-gray-200">${l.tenant || 'Brak'}</span></div></div>`).join('');
+                    localsHTML = `<div class="border-t border-gray-700 pt-3 mt-3"><h4 class="text-md font-semibold mb-3">Lokale w budynku (${localsOnPlot.length})</h4><div class="space-y-2">${localDetailsList}</div></div>`;
                 }
-                return `
-                    <div><h3 class="text-2xl font-bold ${isOwned ? 'text-red-400' : 'text-green-400'}">${plot.name}</h3><p class="text-gray-400">${plot.district || 'Brak dzielnicy'}</p></div>
+                const address = `<span data-street-name="${plot.street}" class="clickable">${plot.street}</span> ${plot.buildingNumber}, <span data-district-name="${plot.district}" class="clickable">${plot.district}</span>`;
+                const typeColorDot = `<span class="inline-block w-2.5 h-2.5 rounded-full mr-2" style="background-color: ${getColorForType(plot.type, 1)}"></span>`;
+                return `<div><h3 class="text-2xl font-bold ${isOwned ? 'text-red-400' : 'text-green-400'}">${plot.name}</h3><p class="text-gray-400 text-sm">${address}</p></div>
                     <div class="space-y-3">
                         ${createOwnerCardHTML(ownerInfo)}
                         <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm pt-3 border-t border-gray-700">
-                            <span class="text-gray-400">Typ:</span><span class="font-medium">${plot.type || 'Brak'}</span>
+                            <span class="text-gray-400">Typ:</span><span class="font-medium flex items-center clickable" data-plot-type="${plot.type}">${typeColorDot} ${plot.type || 'Brak'}</span>
                             <span class="text-gray-400">Wartość:</span><span class="font-medium flex items-center">${plot.value || '0'} <img src="minecoin.webp" class="inline w-4 h-4 ml-1" alt="MC"></span>
                             <span class="text-gray-400">Powierzchnia:</span><span class="font-medium">${plot.area || 'Brak'} m²</span>
-                        </div>
-                    </div>
-                    ${localsHTML}`;
+                        </div></div>${localsHTML}`;
             }
 
             function renderMergedContent(mergedPlot) {
@@ -1007,27 +966,17 @@
 
             function renderLocalContent(local) {
                 const plot = allPlots.find(p => p.name === local.plotName);
-                const owner = plot ? plot.owner : 'Nieznany';
-                const tenant = local.tenant || 'Brak';
-
-                return `
-                    <div><h3 class="text-2xl font-bold text-cyan-400">Lokal #${local.localNum}</h3><p class="text-gray-400">${local.street}, ${local.building}</p></div>
+                const address = `<span data-street-name="${local.street}" class="clickable">${local.street}</span> ${local.building}/${local.localNum}, <span data-district-name="${plot?.district}" class="clickable">${plot?.district}</span>`;
+                return `<div><h3 class="text-2xl font-bold text-cyan-400">Lokal #${local.localNum}</h3><p class="text-gray-400 text-sm">${address}</p></div>
                      <div class="space-y-3">
-                        <div>
-                           <span class="text-gray-400 text-sm">Najemca:</span>
-                           ${createOwnerCardHTML(tenant)}
-                        </div>
-                         <div>
-                           <span class="text-gray-400 text-sm">Właściciel budynku:</span>
-                           ${createOwnerCardHTML(owner)}
-                        </div>
+                        <div><span class="text-gray-400 text-sm">Najemca:</span>${createOwnerCardHTML(local.tenant || 'Brak')}</div>
+                        <div><span class="text-gray-400 text-sm">Właściciel budynku:</span>${createOwnerCardHTML(plot?.owner)}</div>
                         <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm pt-3 border-t border-gray-700">
                             <span class="text-gray-400">Powierzchnia:</span><span class="font-medium">${local.area} m²</span>
                             <span class="text-gray-400">Piętro:</span><span class="font-medium">${local.floor}</span>
                             <span class="text-gray-400">Miejsca pracy:</span><span class="font-medium">${local.workplaces}</span>
                             <span class="text-gray-400">Ilość łóżek:</span><span class="font-medium">${local.beds}</span>
-                        </div>
-                    </div>`;
+                        </div></div>`;
             }
 
             function renderOwnerContent(ownerName) {
@@ -1035,52 +984,23 @@
                 const ownedPlots = allPlots.filter(p => p.owner === ownerName);
                 const rentedLocals = allLocals.filter(l => l.tenant === ownerName);
                 const totalPlotArea = ownedPlots.reduce((sum, p) => sum + (parseInt(p.area) || 0), 0);
-                const totalPlotValue = ownedPlots.reduce((sum, p) => sum + (parseInt(p.value) || 0), 0);
-                const ownedPlotsHTML = ownedPlots.map(p => createPlotListItemHTML(p)).join('');
-                
                 let ownerDetailsHTML = '';
                 if(owner) {
                     ownerDetailsHTML += `<div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm"><span class="text-gray-400">NIO:</span><span>${owner.nio || 'Brak'}</span>`;
-                    if(owner.type === 'fizyczna') {
-                        ownerDetailsHTML += `<span class="text-gray-400">Wiek:</span><span>${owner.age || 'Brak'}</span>`;
-                        ownerDetailsHTML += `<span class="text-gray-400">Zawód:</span><span>${owner.profession || 'Brak'}</span>`;
-                    } else if(owner.type === 'prawna') {
-                        ownerDetailsHTML += `<span class="text-gray-400">Forma Prawna:</span><span>${owner.legalForm || 'Brak'}</span>`;
-                    }
+                    if(owner.type === 'fizyczna') ownerDetailsHTML += `<span class="text-gray-400">Wiek:</span><span>${owner.age || 'Brak'}</span><span class="text-gray-400">Zawód:</span><span>${owner.profession || 'Brak'}</span>`;
+                    else if(owner.type === 'prawna') ownerDetailsHTML += `<span class="text-gray-400">Forma Prawna:</span><span>${owner.legalForm || 'Brak'}</span>`;
                     ownerDetailsHTML += '</div>';
                 }
-
-                const rentedLocalsHTML = rentedLocals.map(l => {
-                    const plot = allPlots.find(p => p.name === l.plotName);
-                    return `
-                        <div class="bg-gray-700 p-2 rounded-md">
-                            <div data-local-id="${l.id}" class="cursor-pointer">
-                                <div class="font-semibold text-purple-400">Lokal #${l.localNum} w ${l.plotName}</div>
-                                <div class="text-xs text-gray-400">Powierzchnia: ${l.area} m²</div>
-                            </div>
-                            <div class="mt-2 text-xs text-gray-400">Wynajmowane od:</div>
-                            ${createOwnerCardHTML(plot?.owner)}
-                        </div>`;
-                }).join('');
-
-                return `
-                    <div class="space-y-4">
-                        ${createOwnerCardHTML(ownerName)}
-                        ${ownerDetailsHTML ? `<div class="pt-3 border-t border-gray-700">${ownerDetailsHTML}</div>` : ''}
-
-                        <div>
-                            <h4 class="font-semibold text-md mb-2">Posiadane Działki (${ownedPlots.length})</h4>
-                            <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                                <span class="text-gray-400">Łączna pow.:</span><span>${totalPlotArea.toLocaleString()} m²</span>
-                                <span class="text-gray-400">Łączna wartość:</span><span class="flex items-center">${totalPlotValue.toLocaleString()} <img src="minecoin.webp" class="inline w-4 h-4 ml-1" alt="MC"></span>
-                            </div>
-                            ${ownedPlots.length > 0 ? `<div class="space-y-2 mt-2">${ownedPlotsHTML}</div>` : ''}
-                        </div>
-                         <div class="border-t border-gray-700 pt-3">
-                            <h4 class="font-semibold text-md mb-1">Wynajmowane Lokale (${rentedLocals.length})</h4>
-                             ${rentedLocals.length > 0 ? `<div class="space-y-2 mt-2">${rentedLocalsHTML}</div>` : '<p class="text-gray-500 text-sm">Brak</p>'}
-                        </div>
-                    </div>`;
+                const rentedLocalsHTML = rentedLocals.map(l => `<div class="bg-gray-700 p-2 rounded-md"><div data-local-id="${l.id}" class="cursor-pointer">
+                    <div class="font-semibold text-purple-400">Lokal #${l.localNum} w ${l.plotName}</div><div class="text-xs text-gray-400">Powierzchnia: ${l.area} m²</div></div>
+                    <div class="mt-2 text-xs text-gray-400">Wynajmowane od:</div>${createOwnerCardHTML(allPlots.find(p=>p.name===l.plotName)?.owner)}</div>`).join('');
+                return `<div class="space-y-4">${createOwnerCardHTML(ownerName, true)}
+                    ${ownerDetailsHTML ? `<div class="pt-3 border-t border-gray-700">${ownerDetailsHTML}</div>` : ''}
+                    <div><h4 class="font-semibold text-md mb-2">Posiadane Działki (${ownedPlots.length})</h4>
+                        <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm"><span class="text-gray-400">Łączna pow.:</span><span>${totalPlotArea.toLocaleString()} m²</span></div>
+                        ${ownedPlots.length > 0 ? `<div class="space-y-2 mt-2">${ownedPlots.map(p => createPlotListItemHTML(p)).join('')}</div>` : ''}</div>
+                    <div class="border-t border-gray-700 pt-3"><h4 class="font-semibold text-md mb-1">Wynajmowane Lokale (${rentedLocals.length})</h4>
+                        ${rentedLocals.length > 0 ? `<div class="space-y-2 mt-2">${rentedLocalsHTML}</div>` : '<p class="text-gray-500 text-sm">Brak</p>'}</div></div>`;
             }
 
             function renderDistrictContent(districtName, plotsInDistrict) {
@@ -1116,6 +1036,39 @@
                     createChart('occupancy-chart', 'doughnut', { labels: occupancyLabels, data: Object.values(occupancy), colors: ['rgba(239, 68, 68, 0.8)', 'rgba(34, 197, 94, 0.8)'] }, 'Zajętość');
                 }, 100);
                 return html;
+            }
+
+            function renderStreetContent(streetName) {
+                const street = streets.find(s => s.name === streetName);
+                if (!street) return '<p>Nie znaleziono ulicy.</p>';
+                const plotsOnStreet = allPlots.filter(p => p.street === streetName);
+                const length = street.width > street.height ? street.width : street.height;
+                return `<div><h3 class="text-2xl font-bold text-blue-400">${streetName}</h3></div>
+                    <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm border-b border-gray-700 pb-3 mb-3">
+                        <span>Długość:</span><span class="font-medium">${length} m</span>
+                        <span>Liczba działek:</span><span class="font-medium">${plotsOnStreet.length}</span></div>
+                    <div class="space-y-2 mb-4">${plotsOnStreet.map(p => createPlotListItemHTML(p)).join('')}</div>`;
+            }
+
+            function renderPlotTypeContent(typeName) {
+                const plotsOfType = allPlots.filter(p => p.type === typeName);
+                const plotNames = new Set(plotsOfType.map(p => p.name));
+                const localsOnPlots = allLocals.filter(l => plotNames.has(l.plotName));
+                const totalArea = plotsOfType.reduce((s, p) => s + (parseInt(p.area) || 0), 0);
+                const totalLocals = localsOnPlots.length;
+                const totalWorkplaces = localsOnPlots.reduce((s, l) => s + l.workplaces, 0);
+                const totalBeds = localsOnPlots.reduce((s, l) => s + l.beds, 0);
+                const typeColorDot = `<span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: ${getColorForType(typeName, 1)}"></span>`;
+
+                return `<div><h3 class="text-2xl font-bold flex items-center">${typeColorDot} ${typeName}</h3></div>
+                    <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm border-b border-gray-700 pb-3 mb-3">
+                        <span>Liczba działek:</span><span class="font-medium">${plotsOfType.length}</span>
+                        <span>Łączna powierzchnia:</span><span class="font-medium">${totalArea.toLocaleString()} m²</span>
+                        <span>Liczba lokali:</span><span class="font-medium">${totalLocals}</span>
+                        <span>Miejsca pracy:</span><span class="font-medium">${totalWorkplaces}</span>
+                        <span>Ilość łóżek:</span><span class="font-medium">${totalBeds}</span>
+                    </div>
+                    <div class="space-y-2 mb-4">${plotsOfType.map(p => createPlotListItemHTML(p)).join('')}</div>`;
             }
 
             function createChart(canvasId, type, chartData, label) {
@@ -1158,32 +1111,38 @@
             function findAndCenter(item) {
                 clearHighlight();
                 let targetPlots = [];
-
                 if (item.type === 'plot') {
                     const plot = allPlots.find(p => p.name === item.value);
-                    if (plot) targetPlots.push(plot);
-                    openNewModal({type: 'plot', data: plot});
+                    if (plot) { targetPlots.push(plot); openNewModal({type: 'plot', data: plot}); }
                 } else if (item.type === 'owner') {
                     targetPlots = allPlots.filter(p => p.owner === item.value);
                     openNewModal({type: 'owner', data: item.value});
                 } else if (item.type === 'street') {
                     targetPlots = allPlots.filter(p => p.street === item.value);
-                } else if (item.type === 'address') {
-                    const [street, number] = item.value.split(' ');
-                    targetPlots = allPlots.filter(p => p.street === street && p.buildingNumber === number);
+                    openNewModal({type: 'street', data: item.value});
+                } else if (item.type === 'address' || item.type === 'local_address') {
+                    const [addressPart, localNum] = item.value.split('/');
+                    const [street, number] = addressPart.split(' ');
+                    const plot = allPlots.find(p => p.street === street && p.buildingNumber === number);
+                    if (plot) {
+                        targetPlots.push(plot);
+                        if(item.type === 'local_address') {
+                            const local = allLocals.find(l => l.plotName === plot.name && l.localNum === localNum);
+                            if(local) {
+                                openNewModal({type: 'plot', data: plot});
+                                navigateToModal({type: 'local', data: local});
+                            }
+                        } else {
+                            openNewModal({type: 'plot', data: plot});
+                        }
+                    }
                 }
 
                 if(targetPlots.length > 0) {
-                    const minX = Math.min(...targetPlots.map(p => p.x1));
-                    const maxX = Math.max(...targetPlots.map(p => p.x2));
-                    const minZ = Math.min(...targetPlots.map(p => p.z1));
-                    const maxZ = Math.max(...targetPlots.map(p => p.z2));
-
-                    const centerX = minX + (maxX - minX) / 2;
-                    const centerZ = minZ + (maxZ - minZ) / 2;
-                    const contentWidth = Math.max(300, (maxX - minX) * 1.5);
-                    const newH = (contentWidth / initialViewBox.w) * initialViewBox.h;
-                    
+                    const minX = Math.min(...targetPlots.map(p => p.x1)), maxX = Math.max(...targetPlots.map(p => p.x2));
+                    const minZ = Math.min(...targetPlots.map(p => p.z1)), maxZ = Math.max(...targetPlots.map(p => p.z2));
+                    const centerX = minX + (maxX - minX) / 2, centerZ = minZ + (maxZ - minZ) / 2;
+                    const contentWidth = Math.max(300, (maxX - minX) * 1.5), newH = (contentWidth / initialViewBox.w) * initialViewBox.h;
                     setViewBox(centerX - contentWidth / 2, centerZ - newH / 2, contentWidth, newH);
                     targetPlots.forEach(plot => highlightPlot(plot.id));
                 }
@@ -1213,39 +1172,45 @@
                     const local = allLocals.find(l => l.id === e.currentTarget.dataset.localId);
                     if(local) navigateToModal({type: 'local', data: local});
                 }));
-                modalContent.querySelectorAll('.clickable-name[data-owner-name]').forEach(span => span.addEventListener('click', e => { 
+                modalContent.querySelectorAll('[data-owner-name]').forEach(el => el.addEventListener('click', e => { 
                     e.preventDefault(); 
                     const ownerName = e.currentTarget.dataset.ownerName;
                     if (ownerName && ownerName.toLowerCase() !== 'skarb miasta' && ownerName.toLowerCase() !== 'brak') {
                         navigateToModal({type: 'owner', data: ownerName});
                     }
                 }));
+                modalContent.querySelectorAll('[data-district-name]').forEach(el => el.addEventListener('click', e => {
+                    e.preventDefault();
+                    const districtName = e.currentTarget.dataset.districtName;
+                    const plotsInDistrict = allPlots.filter(p => p.district === districtName);
+                    if(plotsInDistrict.length > 0) navigateToModal({type: 'district', data: {name: districtName, plots: plotsInDistrict}});
+                }));
+                 modalContent.querySelectorAll('[data-street-name]').forEach(el => el.addEventListener('click', e => {
+                    e.preventDefault();
+                    navigateToModal({type: 'street', data: e.currentTarget.dataset.streetName});
+                }));
+                modalContent.querySelectorAll('[data-plot-type]').forEach(el => el.addEventListener('click', e => {
+                    e.preventDefault();
+                    navigateToModal({type: 'plotType', data: e.currentTarget.dataset.plotType});
+                }));
             }
             
             searchInput.addEventListener('input', () => {
                 const query = searchInput.value.trim().toLowerCase();
                 searchSuggestions.innerHTML = '';
-                if (!query) {
-                    searchSuggestions.classList.add('hidden');
-                    return;
-                }
-
+                if (!query) { searchSuggestions.classList.add('hidden'); return; }
                 const suggestions = [];
-                // Plots
-                allPlots.filter(p => p.name.toLowerCase().includes(query) || p.id.includes(query))
-                    .slice(0, 3)
+                // Działki
+                allPlots.filter(p => p.name.toLowerCase().includes(query) || p.id.includes(query)).slice(0, 3)
                     .forEach(p => suggestions.push({ type: 'plot', label: `Działka: ${p.name}`, value: p.name }));
-                // Owners
-                [...new Set(allPlots.map(p => p.owner))].filter(o => o && o.toLowerCase().includes(query))
-                    .slice(0, 3)
+                // Właściciele
+                [...new Set(allPlots.map(p => p.owner))].filter(o => o && o.toLowerCase().includes(query)).slice(0, 2)
                     .forEach(o => suggestions.push({ type: 'owner', label: `Właściciel: ${o}`, value: o }));
-                // Streets
-                [...new Set(allPlots.map(p => p.street))].filter(s => s && s.toLowerCase().includes(query))
-                    .slice(0, 3)
-                    .forEach(s => suggestions.push({ type: 'street', label: `Ulica: ${s}`, value: s }));
-                // Addresses
-                allPlots.filter(p => p.street && p.buildingNumber && `${p.street.toLowerCase()} ${p.buildingNumber}`.includes(query))
-                    .slice(0, 3)
+                // Adresy Lokali
+                allLocals.filter(l => l.street && l.building && l.localNum && `${l.street.toLowerCase()} ${l.building}/${l.localNum}`.includes(query)).slice(0, 3)
+                    .forEach(l => suggestions.push({ type: 'local_address', label: `Lokal: ${l.street} ${l.building}/${l.localNum}`, value: `${l.street} ${l.building}/${l.localNum}`}));
+                // Adresy
+                allPlots.filter(p => p.street && p.buildingNumber && `${p.street.toLowerCase()} ${p.buildingNumber}`.includes(query)).slice(0, 3)
                     .forEach(p => suggestions.push({ type: 'address', label: `Adres: ${p.street} ${p.buildingNumber}`, value: `${p.street} ${p.buildingNumber}`}));
                 
                 if (suggestions.length > 0) {
@@ -1253,7 +1218,7 @@
                         const div = document.createElement('div');
                         div.className = 'p-2 hover:bg-purple-600 cursor-pointer';
                         div.textContent = s.label;
-                        div.addEventListener('click', () => findAndCenter({ type: s.type, value: s.value }));
+                        div.addEventListener('click', () => findAndCenter(s));
                         searchSuggestions.appendChild(div);
                     });
                     searchSuggestions.classList.remove('hidden');
