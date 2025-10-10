@@ -453,15 +453,15 @@
                             x2: parseInt(d['X (prawy dolny)'], 10), z2: parseInt(d['Z (prawy dolny)'], 10),
                             width: Math.abs(parseInt(d['Bok X'], 10)),
                             height: Math.abs(parseInt(d['Bok Z'], 10)),
-                            area: d['Powierzchnia'], value: d['Wartość'], owner: 'Skarb Miasta', // Domyślny właściciel
+                            area: d['Powierzchnia'], value: d['Wartość'], owner: 'Skarb Miasta',
                             district: d['Dzielnica'], street: d['Ulica'], buildingNumber: d['Numer budynku'],
-                            history: [] // Miejsce na historię transakcji
+                            history: []
                         }));
 
                     allLocals = results[3].data.filter(l => l['Numer porządkowy'] && l['Numer działki'])
                         .map(l => ({
                             id: l['Numer porządkowy'], plotName: l['Numer działki'], street: l['Ulica'],
-                            building: l['Numer budynku'], localNum: l['Numer lokalu'], floor: l['Piętro'],
+                            building: l['Numer budynku'], klatka: l['Klatka'], localNum: l['Numer lokalu'], floor: l['Piętro'],
                             area: parseInt(l['Powierzchnia']) || 0, beds: parseInt(l['Ilość łóżek']) || 0,
                             workplaces: parseInt(l['Ilość miejsc pracy']) || 0, tenant: l['Najemca']
                         }));
@@ -487,8 +487,8 @@
                     streets = results[2].data.filter(s => s['X (lewy górny)'])
                         .map(d => ({
                             name: d['Nazwa ulicy'], x1: parseInt(d['X (lewy górny)'], 10), z1: parseInt(d['Z (lewy górny)'], 10),
-                            width: Math.abs(parseInt(d['X (prawy dolny)'], 10) - parseInt(d['X (lewy górny)'], 10)) + 1,
-                            height: Math.abs(parseInt(d['Z (prawy dolny)'], 10) - parseInt(d['Z (lewy górny)'], 10)) + 1
+                            width: Math.abs(parseInt(d['X (prawy dolny)'], 10) - parseInt(d['X (lewy górny)'], 10)),
+                            height: Math.abs(parseInt(d['Z (prawy dolny)'], 10) - parseInt(d['Z (lewy górny)'], 10))
                         }));
 
                     drawMap();
@@ -629,31 +629,69 @@
             }
 
             function drawStreets() {
-                streets.forEach(street => {
-                    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-                    g.addEventListener('click', (e) => {
-                        if (isDragging) return; // Zapobiegaj kliknięciu po przeciągnięciu
-                        e.stopPropagation();
-                        openNewModal({ type: 'street', data: street.name });
+                const streetsByName = new Map();
+                streets.forEach(segment => {
+                    if (!segment.name || segment.name.trim() === '') return;
+                    if (!streetsByName.has(segment.name)) {
+                        streetsByName.set(segment.name, []);
+                    }
+                    streetsByName.get(segment.name).push(segment);
+                });
+
+                streetsByName.forEach((segments, streetName) => {
+                    const streetGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                    streetGroup.dataset.streetName = streetName;
+
+                    segments.forEach(segment => {
+                        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                        rect.setAttribute('x', segment.x1);
+                        rect.setAttribute('y', segment.z1);
+                        rect.setAttribute('width', segment.width);
+                        rect.setAttribute('height', segment.height);
+                        rect.setAttribute('class', 'street-rect');
+                        streetGroup.appendChild(rect);
                     });
-                    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-                    rect.setAttribute('x', street.x1); rect.setAttribute('y', street.z1);
-                    rect.setAttribute('width', street.width); rect.setAttribute('height', street.height);
-                    rect.setAttribute('class', 'street-rect');
+
+                    const longestSegment = segments.reduce((longest, current) => {
+                        const currentLength = Math.max(current.width, current.height);
+                        const longestLength = Math.max(longest.width, longest.height);
+                        return currentLength > longestLength ? current : longest;
+                    }, segments[0]);
+
                     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                    text.setAttribute('x', street.x1 + street.width / 2);
-                    text.setAttribute('y', street.z1 + street.height / 2);
-                    text.setAttribute('class', `street-text ${street.height > street.width ? 'street-vertical' : ''}`);
-                    text.textContent = street.name;
-                    g.appendChild(rect); g.appendChild(text);
-                    g.addEventListener('mouseenter', (e) => {
-                        tooltip.innerHTML = `<div class="font-semibold">${street.name}</div>`;
+                    text.setAttribute('x', longestSegment.x1 + longestSegment.width / 2);
+                    text.setAttribute('y', longestSegment.z1 + longestSegment.height / 2);
+                    text.setAttribute('class', `street-text ${longestSegment.height > longestSegment.width ? 'street-vertical' : ''}`);
+                    text.textContent = streetName;
+                    streetGroup.appendChild(text);
+
+                    streetGroup.addEventListener('click', (e) => {
+                        if (isDragging) return;
+                        e.stopPropagation();
+                        openNewModal({ type: 'street', data: streetName });
+                    });
+
+                    streetGroup.addEventListener('mouseenter', (e) => {
+                        tooltip.innerHTML = `<div class="font-semibold">${streetName}</div>`;
                         tooltip.classList.remove('hidden');
                         moveTooltip(e);
+                        streetGroup.querySelectorAll('.street-rect').forEach(r => {
+                            r.style.fillOpacity = '0.7';
+                            r.style.stroke = '#9ca3af';
+                        });
                     });
-                    g.addEventListener('mouseleave', hideTooltip);
-                    g.addEventListener('mousemove', moveTooltip);
-                    layers.streets.appendChild(g);
+
+                    streetGroup.addEventListener('mouseleave', () => {
+                        hideTooltip();
+                        streetGroup.querySelectorAll('.street-rect').forEach(r => {
+                            r.style.fillOpacity = '';
+                            r.style.stroke = '';
+                        });
+                    });
+
+                    streetGroup.addEventListener('mousemove', moveTooltip);
+
+                    layers.streets.appendChild(streetGroup);
                 });
             }
 
@@ -1061,7 +1099,8 @@
                 const plot = allPlots.find(p => p.name === local.plotName);
                 let address = '';
                 if (local.street && local.building) {
-                    address += `<span data-street-name="${local.street}" class="clickable">${local.street}</span> ${local.building}/${local.localNum}, `;
+                    const buildingPart = local.building + (local.klatka || '');
+                    address += `<span data-street-name="${local.street}" class="clickable">${local.street}</span> ${buildingPart}/${local.localNum}, `;
                 }
                 if (plot?.district) {
                     address += `<span data-district-name="${plot.district}" class="clickable">${plot.district}</span>`;
@@ -1222,17 +1261,26 @@
                     openNewModal({ type: 'street', data: item.value });
                 } else if (item.type === 'address' || item.type === 'local_address') {
                     const [addressPart, localNum] = item.value.split('/');
-                    const [street, number] = addressPart.split(' ');
-                    const plot = allPlots.find(p => p.street === street && p.buildingNumber === number);
-                    if (plot) {
-                        targetPlots.push(plot);
-                        if (item.type === 'local_address') {
-                            const local = allLocals.find(l => l.plotName === plot.name && l.localNum === localNum);
-                            if (local) {
+
+                    // Znajdź ostatnią spację, aby oddzielić nazwę ulicy od numeru budynku/klatki
+                    const lastSpaceIndex = addressPart.lastIndexOf(' ');
+                    const street = addressPart.substring(0, lastSpaceIndex);
+                    const buildingAndStaircase = addressPart.substring(lastSpaceIndex + 1);
+
+                    if (item.type === 'local_address') {
+                        const local = allLocals.find(l => l.street === street && (l.building + (l.klatka || '')) === buildingAndStaircase && l.localNum === localNum);
+                        if (local) {
+                            const plot = allPlots.find(p => p.name === local.plotName);
+                            if (plot) {
+                                targetPlots.push(plot);
                                 openNewModal({ type: 'plot', data: plot });
                                 navigateToModal({ type: 'local', data: local });
                             }
-                        } else {
+                        }
+                    } else { // address
+                        const plot = allPlots.find(p => p.street === street && p.buildingNumber === buildingAndStaircase);
+                        if (plot) {
+                            targetPlots.push(plot);
                             openNewModal({ type: 'plot', data: plot });
                         }
                     }
@@ -1301,18 +1349,31 @@
                 searchSuggestions.innerHTML = '';
                 if (!query) { searchSuggestions.classList.add('hidden'); return; }
                 const suggestions = [];
+
                 // Działki
                 allPlots.filter(p => p.name.toLowerCase().includes(query) || p.id.includes(query)).slice(0, 3)
                     .forEach(p => suggestions.push({ type: 'plot', label: `Działka: ${p.name}`, value: p.name }));
                 // Właściciele
                 [...new Set(allPlots.map(p => p.owner))].filter(o => o && o.toLowerCase().includes(query)).slice(0, 2)
                     .forEach(o => suggestions.push({ type: 'owner', label: `Właściciel: ${o}`, value: o }));
+                // Ulice
+                [...new Set(streets.map(s => s.name))].filter(s => s && s.toLowerCase().includes(query)).slice(0, 2)
+                    .forEach(s => suggestions.push({ type: 'street', label: `Ulica: ${s}`, value: s }));
                 // Adresy Lokali
-                allLocals.filter(l => l.street && l.building && l.localNum && `${l.street.toLowerCase()} ${l.building}/${l.localNum}`.includes(query)).slice(0, 3)
-                    .forEach(l => suggestions.push({ type: 'local_address', label: `Lokal: ${l.street} ${l.building}/${l.localNum}`, value: `${l.street} ${l.building}/${l.localNum}` }));
+                allLocals.filter(l => {
+                    const fullAddress = `${l.street.toLowerCase()} ${l.building}${l.klatka || ''}/${l.localNum}`;
+                    return l.street && l.building && l.localNum && fullAddress.includes(query);
+                }).slice(0, 3)
+                    .forEach(l => {
+                        const address = `${l.street} ${l.building}${l.klatka || ''}/${l.localNum}`;
+                        suggestions.push({ type: 'local_address', label: `Lokal: ${address}`, value: address });
+                    });
                 // Adresy
                 allPlots.filter(p => p.street && p.buildingNumber && `${p.street.toLowerCase()} ${p.buildingNumber}`.includes(query)).slice(0, 3)
-                    .forEach(p => suggestions.push({ type: 'address', label: `Adres: ${p.street} ${p.buildingNumber}`, value: `${p.street} ${p.buildingNumber}` }));
+                    .forEach(p => {
+                        const address = `${p.street} ${p.buildingNumber}`;
+                        suggestions.push({ type: 'address', label: `Adres: ${address}`, value: address });
+                    });
 
                 if (suggestions.length > 0) {
                     suggestions.forEach(s => {
