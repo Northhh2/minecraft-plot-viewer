@@ -367,7 +367,8 @@
 
             let allPlots = [];
             let allLocals = [];
-            let allOwners = []; // NOWA ZMIENNA
+            let allOwners = [];
+            let allTransactions = [];
             let mergedPlots = [];
             let streets = [];
 
@@ -433,6 +434,8 @@
                 destroyActiveCharts();
                 modalHistory = [];
                 modal.classList.remove('show');
+                dimOtherPlots();
+                clearHighlight();
             }
 
             async function fetchAllData() {
@@ -673,6 +676,9 @@
                 allPlots.forEach(plot => {
                     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
                     g.dataset.plotId = plot.id;
+                    g.dataset.plotName = plot.name;
+                    g.dataset.plotDistrict = plot.district || '';
+
                     const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
                     rect.setAttribute('x', plot.x1); rect.setAttribute('y', plot.z1);
                     rect.setAttribute('width', plot.width); rect.setAttribute('height', plot.height);
@@ -680,17 +686,31 @@
                     const isOwned = plot.owner && plot.owner.trim() !== '' && plot.owner.toLowerCase().trim() !== 'skarb miasta';
                     rect.style.fill = getColorForType(plot.type);
                     rect.style.stroke = isOwned ? '#ef4444' : '#22c55e';
+
                     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                     text.setAttribute('x', plot.x1 + plot.width / 2);
                     text.setAttribute('y', plot.z1 + plot.height / 2);
                     text.setAttribute('class', 'plot-text');
                     text.textContent = plot.id.padStart(3, '0');
-                    g.appendChild(rect); g.appendChild(text);
-                    g.addEventListener('mouseenter', (e) => { showSimpleTooltip(e, plot); if (plot.district) highlightDistrict(plot.district); });
-                    g.addEventListener('mouseleave', () => { hideTooltip(); clearHighlight(); });
+
+                    g.appendChild(rect);
+                    g.appendChild(text);
+
+                    g.addEventListener('mouseenter', (e) => {
+                        showSimpleTooltip(e, plot);
+                        if (modalHistory.length === 0 && plot.district) {
+                            highlightDistrict(plot.district);
+                        }
+                    });
+                    g.addEventListener('mouseleave', () => {
+                        hideTooltip();
+                        if (modalHistory.length === 0) {
+                            clearHighlight();
+                        }
+                    });
                     g.addEventListener('mousemove', moveTooltip);
                     g.addEventListener('click', (e) => {
-                        if (isDragging) return; // Zapobiegaj kliknięciu po przeciągnięciu
+                        if (isDragging) return;
                         e.stopPropagation();
                         openNewModal({ type: 'plot', data: plot });
                     });
@@ -872,18 +892,53 @@
                     destroyActiveCharts();
                     const { type, data } = currentState;
                     let contentHTML = '', title = '';
+                    let plotsToHighlight = []; // Lista działek do podświetlenia
+
                     switch (type) {
-                        case 'plot': title = `Działka: ${data.name}`; contentHTML = renderPlotContent(data); break;
-                        case 'merged': title = 'Połączone działki'; contentHTML = renderMergedContent(data); break;
-                        case 'local': title = `Lokal #${data.localNum}`; contentHTML = renderLocalContent(data); break;
-                        case 'owner': title = `Aktywa: ${data}`; contentHTML = renderOwnerContent(data); break;
-                        case 'district': title = `Dzielnica: ${data.name}`; contentHTML = renderDistrictContent(data.name, data.plots); break;
-                        case 'street': title = `Ulica: ${data}`; contentHTML = renderStreetContent(data); break;
-                        case 'plotType': title = `Typ: ${data}`; contentHTML = renderPlotTypeContent(data); break;
+                        case 'plot':
+                            title = `Działka: ${data.name}`;
+                            contentHTML = renderPlotContent(data);
+                            plotsToHighlight = [data];
+                            break;
+                        case 'merged':
+                            title = 'Połączone działki';
+                            contentHTML = renderMergedContent(data);
+                            plotsToHighlight = data.plots.map(name => allPlots.find(p => p.name === name)).filter(Boolean);
+                            break;
+                        case 'local':
+                            title = `Lokal #${data.localNum}`;
+                            contentHTML = renderLocalContent(data);
+                            const parentPlot = allPlots.find(p => p.name === data.plotName);
+                            if (parentPlot) plotsToHighlight = [parentPlot];
+                            break;
+                        case 'owner':
+                            title = `Aktywa: ${data}`;
+                            contentHTML = renderOwnerContent(data);
+                            plotsToHighlight = allPlots.filter(p => p.owner === data);
+                            break;
+                        case 'district':
+                            title = `Dzielnica: ${data.name}`;
+                            contentHTML = renderDistrictContent(data.name, data.plots);
+                            plotsToHighlight = data.plots;
+                            break;
+                        case 'street':
+                            title = `Ulica: ${data}`;
+                            contentHTML = renderStreetContent(data);
+                            plotsToHighlight = allPlots.filter(p => p.street === data);
+                            break;
+                        case 'plotType':
+                            title = `Typ: ${data}`;
+                            contentHTML = renderPlotTypeContent(data);
+                            plotsToHighlight = allPlots.filter(p => p.type === data);
+                            break;
                     }
+
                     modalTitle.textContent = title;
                     modalContent.innerHTML = contentHTML;
                     addModalEventListeners();
+
+                    dimOtherPlots(plotsToHighlight); // NOWE WYWOŁANIE FUNKCJI PODŚWIETLAJĄCEJ
+
                     document.getElementById('back-modal').classList.toggle('hidden', modalHistory.length <= 1);
                     modal.classList.add('show');
                     modalContent.classList.remove('fade-out');
@@ -962,6 +1017,24 @@
             </div></div>
         ${historyHTML}
         ${localsHTML}`;
+            }
+
+            function dimOtherPlots(plotsToShow = []) {
+                // Najpierw usuń istniejące przyciemnienie, ale zostaw podświetlenie wyszukiwania
+                svg.querySelectorAll('.plot-rect.dimmed').forEach(rect => rect.classList.remove('dimmed'));
+
+                // Jeśli lista jest pusta, po prostu czyścimy i kończymy
+                if (plotsToShow.length === 0) return;
+
+                const plotNamesToShow = new Set(plotsToShow.map(p => p.name));
+
+                svg.querySelectorAll('.plot-rect').forEach(rect => {
+                    const g = rect.parentElement;
+                    // Sprawdź, czy działka NIE jest na liście do pokazania
+                    if (!plotNamesToShow.has(g.dataset.plotName)) {
+                        rect.classList.add('dimmed');
+                    }
+                });
             }
 
             function renderMergedContent(mergedPlot) {
