@@ -361,6 +361,7 @@
             let activeCharts = [];
             let maxViewboxWidth = MAP_WIDTH;
             let isAnimatingModal = false;
+            let isDragging = false;
 
             let allPlots = [];
             let allLocals = [];
@@ -598,6 +599,11 @@
             function drawStreets() {
                 streets.forEach(street => {
                     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                    g.addEventListener('click', (e) => {
+                        if (isDragging) return; // Zapobiegaj kliknięciu po przeciągnięciu
+                        e.stopPropagation();
+                        openNewModal({ type: 'street', data: street.name });
+                    });
                     const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
                     rect.setAttribute('x', street.x1); rect.setAttribute('y', street.z1);
                     rect.setAttribute('width', street.width); rect.setAttribute('height', street.height);
@@ -605,10 +611,7 @@
                     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                     text.setAttribute('x', street.x1 + street.width / 2);
                     text.setAttribute('y', street.z1 + street.height / 2);
-                    text.setAttribute('class', 'street-text');
-                    if (street.height > street.width) {
-                        text.classList.add('street-vertical');
-                    }
+                    text.setAttribute('class', `street-text ${street.height > street.width ? 'street-vertical' : ''}`);
                     text.textContent = street.name;
                     g.appendChild(rect); g.appendChild(text);
                     g.addEventListener('mouseenter', (e) => {
@@ -628,29 +631,11 @@
                     rect.setAttribute('x', merged.x1); rect.setAttribute('y', merged.z1);
                     rect.setAttribute('width', merged.width); rect.setAttribute('height', merged.height);
                     rect.setAttribute('class', 'merged-plot');
-                    rect.addEventListener('mouseenter', (e) => {
-                        tooltip.innerHTML = `<div class="font-semibold mb-1">Połączone działki</div><div class="text-xs">Kliknij, by zobaczyć szczegóły</div>`;
-                        tooltip.classList.remove('hidden');
-                        moveTooltip(e);
+                    rect.addEventListener('click', (e) => {
+                        if (isDragging) return; // Zapobiegaj kliknięciu po przeciągnięciu
+                        e.stopPropagation();
+                        openNewModal({ type: 'merged', data: merged });
                     });
-                    rect.addEventListener('mouseleave', hideTooltip);
-                    rect.addEventListener('mousemove', moveTooltip);
-                    rect.addEventListener('click', (e) => { e.stopPropagation(); openNewModal({ type: 'merged', data: merged }); });
-
-                    let mergedTouchStartInfo = {};
-                    rect.addEventListener('touchstart', (e) => {
-                        if (e.touches.length === 1) mergedTouchStartInfo = { time: Date.now(), x: e.touches[0].clientX, y: e.touches[0].clientY };
-                    }, { passive: true });
-
-                    rect.addEventListener('touchend', (e) => {
-                        if (mergedTouchStartInfo.time) {
-                            const timeDiff = Date.now() - mergedTouchStartInfo.time;
-                            const dist = Math.hypot(e.changedTouches[0].clientX - mergedTouchStartInfo.x, e.changedTouches[0].clientY - mergedTouchStartInfo.y);
-                            if (timeDiff < 250 && dist < 10) { e.preventDefault(); openNewModal({ type: 'merged', data: merged }); }
-                            mergedTouchStartInfo = {};
-                        }
-                    });
-
                     layers.merged.appendChild(rect);
                 });
             }
@@ -659,14 +644,12 @@
                 allPlots.forEach(plot => {
                     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
                     g.dataset.plotId = plot.id;
-                    g.dataset.plotName = plot.name;
-                    g.dataset.plotDistrict = plot.district || '';
                     const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
                     rect.setAttribute('x', plot.x1); rect.setAttribute('y', plot.z1);
                     rect.setAttribute('width', plot.width); rect.setAttribute('height', plot.height);
                     rect.setAttribute('class', 'plot-rect');
-                    rect.style.fill = getColorForType(plot.type);
                     const isOwned = plot.owner && plot.owner.trim() !== '' && plot.owner.toLowerCase().trim() !== 'skarb miasta';
+                    rect.style.fill = getColorForType(plot.type);
                     rect.style.stroke = isOwned ? '#ef4444' : '#22c55e';
                     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                     text.setAttribute('x', plot.x1 + plot.width / 2);
@@ -677,16 +660,11 @@
                     g.addEventListener('mouseenter', (e) => { showSimpleTooltip(e, plot); if (plot.district) highlightDistrict(plot.district); });
                     g.addEventListener('mouseleave', () => { hideTooltip(); clearHighlight(); });
                     g.addEventListener('mousemove', moveTooltip);
-                    g.addEventListener('click', (e) => { e.stopPropagation(); openNewModal({ type: 'plot', data: plot }); });
-
-                    g.addEventListener('touchend', (e) => {
-                        if (touchStartInfo.time) {
-                            const timeDiff = Date.now() - touchStartInfo.time;
-                            const dist = Math.hypot(e.changedTouches[0].clientX - touchStartInfo.x, e.changedTouches[0].clientY - touchStartInfo.y);
-                            if (timeDiff < 250 && dist < 10) { e.preventDefault(); openNewModal({ type: 'plot', data: plot }); }
-                        }
+                    g.addEventListener('click', (e) => {
+                        if (isDragging) return; // Zapobiegaj kliknięciu po przeciągnięciu
+                        e.stopPropagation();
+                        openNewModal({ type: 'plot', data: plot });
                     });
-
                     layers.plots.appendChild(g);
                 });
             }
@@ -694,35 +672,24 @@
             function drawDistrictBoundaries() {
                 const districts = {};
                 allPlots.forEach(plot => {
-                    if (plot.district && plot.district.trim() !== '') {
-                        const districtName = plot.district.trim();
-                        if (!districts[districtName]) districts[districtName] = [];
-                        districts[districtName].push(plot);
+                    if (plot.district) {
+                        if (!districts[plot.district]) districts[plot.district] = [];
+                        districts[plot.district].push(plot);
                     }
                 });
                 Object.entries(districts).forEach(([districtName, districtPlots]) => {
-                    if (districtPlots.length === 0) return;
-                    const clusters = createDistrictClusters(districtPlots, 50);
-                    clusters.forEach((cluster) => {
+                    createDistrictClusters(districtPlots, 50).forEach((cluster) => {
                         const boundary = createDistrictOutline(cluster);
                         if (!boundary) return;
                         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                         path.setAttribute('d', boundary);
                         path.style.cssText = "fill:none; stroke:#8b5cf6; stroke-width:2; stroke-dasharray:8,4; opacity:0.7; cursor:pointer; pointer-events:all;";
-                        path.dataset.districtName = districtName;
-                        path.addEventListener('mouseenter', () => highlightDistrict(districtName));
-                        path.addEventListener('mouseleave', () => clearHighlight());
-                        path.addEventListener('click', (e) => { e.stopPropagation(); openNewModal({ type: 'district', data: { name: districtName, plots: cluster } }); });
+                        path.addEventListener('click', (e) => {
+                            if (isDragging) return; // Zapobiegaj kliknięciu po przeciągnięciu
+                            e.stopPropagation();
+                            openNewModal({ type: 'district', data: { name: districtName, plots: cluster } });
+                        });
                         layers.districts.appendChild(path);
-                        const minX = Math.min(...cluster.map(p => p.x1));
-                        const maxX = Math.max(...cluster.map(p => p.x2));
-                        const minZ = Math.min(...cluster.map(p => p.z1));
-                        const districtLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                        districtLabel.setAttribute('x', minX + (maxX - minX) / 2);
-                        districtLabel.setAttribute('y', minZ - 8);
-                        districtLabel.style.cssText = "fill:#a78bfa; font-size:7px; font-weight:bold; text-anchor:middle; pointer-events:none;";
-                        districtLabel.textContent = districtName;
-                        layers.districts.appendChild(districtLabel);
                     });
                 });
             }
@@ -1290,28 +1257,36 @@
             let pinchZooming = false;
             let lastTouchDistance = 0;
 
-            // Mysz: Przesuwanie
-            mapContainer.addEventListener('mousedown', (e) => { if (e.button === 0) { isPanning = true; mapContainer.classList.add('grabbing'); startPoint = { x: e.x, y: e.y }; } });
-            document.addEventListener('mouseup', () => { isPanning = false; mapContainer.classList.remove('grabbing'); });
+            mapContainer.addEventListener('mousedown', (e) => {
+                if (e.button === 0) {
+                    isDragging = false;
+                    isPanning = true;
+                    mapContainer.classList.add('grabbing');
+                    startPoint = { x: e.x, y: e.y };
+                }
+            });
+            document.addEventListener('mouseup', () => {
+                isPanning = false;
+                mapContainer.classList.remove('grabbing');
+                // Resetuj flagę przeciągania z lekkim opóźnieniem, aby 'click' zdążył się wykonać
+                setTimeout(() => { isDragging = false; }, 0);
+            });
             mapContainer.addEventListener('mousemove', (e) => {
                 if (!isPanning) return;
+                // Jeśli ruch myszy jest większy niż mały próg, uznajemy to za przeciąganie
+                if (Math.abs(e.x - startPoint.x) > 3 || Math.abs(e.y - startPoint.y) > 3) {
+                    isDragging = true;
+                }
                 const dx = (startPoint.x - e.x) * (viewBox.w / mapContainer.clientWidth);
                 const dy = (startPoint.y - e.y) * (viewBox.h / mapContainer.clientHeight);
                 setViewBox(viewBox.x + dx, viewBox.y + dy, viewBox.w, viewBox.h);
                 startPoint = { x: e.x, y: e.y };
             });
 
-            // Mysz: Zoom (scroll)
-            mapContainer.addEventListener('wheel', (e) => {
-                e.preventDefault();
-                const dw = viewBox.w * -Math.sign(e.deltaY) * 0.1;
-                const dx = dw * e.offsetX / mapContainer.clientWidth;
-                const dy = (dw / initialViewBox.w * initialViewBox.h) * e.offsetY / mapContainer.clientHeight;
-                setViewBox(viewBox.x + dx, viewBox.y + dy, viewBox.w - dw, viewBox.h - (dw / initialViewBox.w * initialViewBox.h));
-            }, { passive: false });
+            mapContainer.addEventListener('wheel', (e) => { e.preventDefault(); const dw = viewBox.w * -Math.sign(e.deltaY) * 0.1; const dx = dw * e.offsetX / mapContainer.clientWidth; const dy = (dw / initialViewBox.w * initialViewBox.h) * e.offsetY / mapContainer.clientHeight; setViewBox(viewBox.x + dx, viewBox.y + dy, viewBox.w - dw, viewBox.h - (dw / initialViewBox.w * initialViewBox.h)); }, { passive: false });
 
-            // Dotyk: Start
             mapContainer.addEventListener('touchstart', (e) => {
+                isDragging = false;
                 if (e.touches.length === 1) {
                     touchPanning = true;
                     startPoint = { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -1322,8 +1297,8 @@
                 }
             }, { passive: true });
 
-            // Dotyk: Ruch (przesuwanie i zoom)
             mapContainer.addEventListener('touchmove', (e) => {
+                isDragging = true; // Każdy ruch palcem po ekranie to przeciąganie
                 if (touchPanning && e.touches.length === 1) {
                     const dx = (startPoint.x - e.touches[0].clientX) * (viewBox.w / mapContainer.clientWidth);
                     const dy = (startPoint.y - e.touches[0].clientY) * (viewBox.h / mapContainer.clientHeight);
@@ -1332,26 +1307,22 @@
                 } else if (pinchZooming && e.touches.length >= 2) {
                     const newDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
                     const scale = lastTouchDistance / newDist;
-                    
-                    const w = viewBox.w * scale;
-                    const h = viewBox.h * scale;
-
+                    const w = viewBox.w * scale, h = viewBox.h * scale;
                     const { left, top } = mapContainer.getBoundingClientRect();
                     const centerX = ((e.touches[0].clientX + e.touches[1].clientX) / 2) - left;
                     const centerY = ((e.touches[0].clientY + e.touches[1].clientY) / 2) - top;
-
                     const dx = (viewBox.w - w) * (centerX / mapContainer.clientWidth);
                     const dy = (viewBox.h - h) * (centerY / mapContainer.clientHeight);
-                    
                     setViewBox(viewBox.x + dx, viewBox.y + dy, w, h);
                     lastTouchDistance = newDist;
                 }
             }, { passive: true });
 
-            // Dotyk: Koniec
             mapContainer.addEventListener('touchend', (e) => {
                 touchPanning = false;
                 pinchZooming = false;
+                // Resetuj flagę przeciągania z lekkim opóźnieniem, aby 'click' (tap) zdążył się wykonać
+                setTimeout(() => { isDragging = false; }, 0);
             });
 
             fetchAllData();
