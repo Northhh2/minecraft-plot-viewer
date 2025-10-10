@@ -328,13 +328,15 @@
             const MERGED_GID = '43897086';
             const STREETS_GID = '2101138806';
             const LOCALS_GID = '875214507';
-            const OWNERS_GID = '92681717'; // NOWA TABELA
+            const OWNERS_GID = '92681717';
+            const TRANSACTIONS_GID = '231383988';
 
             const PLOTS_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${PLOTS_GID}`;
             const MERGED_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${MERGED_GID}`;
             const STREETS_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${STREETS_GID}`;
             const LOCALS_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${LOCALS_GID}`;
             const OWNERS_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${OWNERS_GID}`;
+            const TRANSACTIONS_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${TRANSACTIONS_GID}`;
 
             const MAP_IMAGE_URL = 'map.webp';
             const MAP_WIDTH = 4296;
@@ -436,32 +438,24 @@
             async function fetchAllData() {
                 try {
                     const responses = await Promise.all([
-                        fetch(PLOTS_URL), fetch(MERGED_URL), fetch(STREETS_URL), fetch(LOCALS_URL), fetch(OWNERS_URL)
+                        fetch(PLOTS_URL), fetch(MERGED_URL), fetch(STREETS_URL), fetch(LOCALS_URL), fetch(OWNERS_URL), fetch(TRANSACTIONS_URL)
                     ]);
-
-                    if (responses.some(res => !res.ok)) throw new Error('Network response was not ok');
-
                     const texts = await Promise.all(responses.map(res => res.text()));
+                    const results = await Promise.all(texts.map(text => new Promise(resolve => Papa.parse(text, { header: true, skipEmptyLines: true, complete: resolve }))));
 
-                    const [plotsResult, mergedResult, streetsResult, localsResult, ownersResult] = await Promise.all([
-                        new Promise(resolve => Papa.parse(texts[0], { header: true, skipEmptyLines: true, complete: resolve })),
-                        new Promise(resolve => Papa.parse(texts[1], { header: true, skipEmptyLines: true, complete: resolve })),
-                        new Promise(resolve => Papa.parse(texts[2], { header: true, skipEmptyLines: true, complete: resolve })),
-                        new Promise(resolve => Papa.parse(texts[3], { header: true, skipEmptyLines: true, complete: resolve })),
-                        new Promise(resolve => Papa.parse(texts[4], { header: true, skipEmptyLines: true, complete: resolve }))
-                    ]);
-
-                    allPlots = plotsResult.data.filter(p => p['Nr porządkowy'] && p['X (lewy górny)'])
+                    allPlots = results[0].data.filter(p => p['Nr porządkowy'] && p['X (lewy górny)'])
                         .map(d => ({
                             id: d['Nr porządkowy'], name: d['Nazwa porządkowa działki'], type: d['Typ'],
                             x1: parseInt(d['X (lewy górny)'], 10), z1: parseInt(d['Z (lewy górny)'], 10),
                             x2: parseInt(d['X (prawy dolny)'], 10), z2: parseInt(d['Z (prawy dolny)'], 10),
-                            width: parseInt(d['Bok X'], 10), height: parseInt(d['Bok Z'], 10), area: d['Powierzchnia'],
-                            value: d['Wartość'], owner: d['Aktualny właściciel'], district: d['Dzielnica'],
-                            street: d['Ulica'], buildingNumber: d['Numer budynku']
+                            width: Math.abs(parseInt(d['Bok X'], 10)),
+                            height: Math.abs(parseInt(d['Bok Z'], 10)),
+                            area: d['Powierzchnia'], value: d['Wartość'], owner: 'Skarb Miasta', // Domyślny właściciel
+                            district: d['Dzielnica'], street: d['Ulica'], buildingNumber: d['Numer budynku'],
+                            history: [] // Miejsce na historię transakcji
                         }));
 
-                    allLocals = localsResult.data.filter(l => l['Numer porządkowy'] && l['Numer działki'])
+                    allLocals = results[3].data.filter(l => l['Numer porządkowy'] && l['Numer działki'])
                         .map(l => ({
                             id: l['Numer porządkowy'], plotName: l['Numer działki'], street: l['Ulica'],
                             building: l['Numer budynku'], localNum: l['Numer lokalu'], floor: l['Piętro'],
@@ -469,31 +463,66 @@
                             workplaces: parseInt(l['Ilość miejsc pracy']) || 0, tenant: l['Najemca']
                         }));
 
-                    allOwners = ownersResult.data.map(o => ({
+                    allOwners = results[4].data.map(o => ({
                         name: o['Nazwa'], type: o['Typ'], photo: o['Zdjęcie'],
-                        nio: o['NIO'], age: o['Wiek'], profession: o['Zawód'],
-                        legalForm: o['Forma prawna']
+                        nio: o['NIO'], age: o['Wiek'], profession: o['Zawód'], legalForm: o['Forma prawna']
                     }));
 
-                    const connections = mergedResult.data.filter(m => m['Działka główna'] && m['Działka dołączana'])
+                    allTransactions = results[5].data.map(t => ({
+                        plotName: t['Numer działki'],
+                        newOwner: t['Nowy właściciel'],
+                        date: t['Dzień transakcji'],
+                        type: t['Typ transakcji']
+                    }));
+
+                    updatePlotOwners();
+
+                    const connections = results[1].data.filter(m => m['Działka główna'] && m['Działka dołączana'])
                         .map(d => ({ plot1: d['Działka główna'], plot2: d['Działka dołączana'] }));
                     mergedPlots = processMergedPlots(connections);
 
-                    streets = streetsResult.data.filter(s => s['X (lewy górny)'])
+                    streets = results[2].data.filter(s => s['X (lewy górny)'])
                         .map(d => ({
-                            name: d['Nazwa ulicy'],
-                            x1: parseInt(d['X (lewy górny)'], 10), z1: parseInt(d['Z (lewy górny)'], 10),
-                            width: parseInt(d['X (prawy dolny)'], 10) - parseInt(d['X (lewy górny)'], 10) + 1,
-                            height: parseInt(d['Z (prawy dolny)'], 10) - parseInt(d['Z (lewy górny)'], 10) + 1
+                            name: d['Nazwa ulicy'], x1: parseInt(d['X (lewy górny)'], 10), z1: parseInt(d['Z (lewy górny)'], 10),
+                            width: Math.abs(parseInt(d['X (prawy dolny)'], 10) - parseInt(d['X (lewy górny)'], 10)),
+                            height: Math.abs(parseInt(d['Z (prawy dolny)'], 10) - parseInt(d['Z (lewy górny)'], 10))
                         }));
 
                     drawMap();
                     loader.style.display = 'none';
-
                 } catch (error) {
                     console.error("Błąd podczas pobierania danych:", error);
                     loader.innerHTML = `<div class="text-center"><p class="text-lg font-medium text-red-500">Błąd ładowania danych</p><p class="text-sm text-gray-400">Sprawdź konsolę.</p></div>`;
                 }
+            }
+
+            function updatePlotOwners() {
+                const transactionsByPlot = {};
+                allTransactions.forEach(t => {
+                    if (!transactionsByPlot[t.plotName]) {
+                        transactionsByPlot[t.plotName] = [];
+                    }
+                    transactionsByPlot[t.plotName].push(t);
+                });
+
+                for (const plotName in transactionsByPlot) {
+                    // Sortuj transakcje chronologicznie (zakładając format daty DD.MM.RRRR)
+                    transactionsByPlot[plotName].sort((a, b) => {
+                        const dateA = a.date.split('.').reverse().join('');
+                        const dateB = b.date.split('.').reverse().join('');
+                        return dateA.localeCompare(dateB);
+                    });
+                }
+
+                allPlots.forEach(plot => {
+                    const plotTransactions = transactionsByPlot[plot.name];
+                    if (plotTransactions && plotTransactions.length > 0) {
+                        // Ostatnia transakcja określa aktualnego właściciela
+                        plot.owner = plotTransactions[plotTransactions.length - 1].newOwner;
+                        // Zapisz całą historię dla działki
+                        plot.history = plotTransactions;
+                    }
+                });
             }
 
             function processMergedPlots(connections) {
@@ -887,7 +916,8 @@
 
             function renderPlotContent(plot) {
                 const isOwned = plot.owner && plot.owner.trim() !== '' && plot.owner.toLowerCase().trim() !== 'skarb miasta';
-                const ownerInfo = isOwned ? plot.owner : 'Skarb Miasta';
+                const ownerInfo = plot.owner || 'Skarb Miasta';
+
                 const localsOnPlot = allLocals.filter(l => l.plotName === plot.name);
                 let localsHTML = '';
                 if (localsOnPlot.length > 0) {
@@ -906,6 +936,21 @@
                 }
 
                 const typeColorDot = `<span class="inline-block w-2.5 h-2.5 rounded-full mr-2" style="background-color: ${getColorForType(plot.type, 1)}"></span>`;
+
+                let historyHTML = '';
+                if (plot.history && plot.history.length > 0) {
+                    const historyList = [...plot.history].reverse().map(t => `
+            <div class="bg-gray-700 p-2 rounded-md">
+                <div class="text-xs text-gray-400">${t.date} - ${t.type}</div>
+                ${createOwnerCardHTML(t.newOwner)}
+            </div>
+        `).join('');
+                    historyHTML = `<div class="border-t border-gray-700 pt-3 mt-3">
+            <h4 class="text-md font-semibold mb-3">Historia własności</h4>
+            <div class="space-y-2">${historyList}</div>
+        </div>`;
+                }
+
                 return `<div><h3 class="text-2xl font-bold ${isOwned ? 'text-red-400' : 'text-green-400'}">${plot.name}</h3><p class="text-gray-400 text-sm">${address}</p></div>
         <div class="space-y-3">
             ${createOwnerCardHTML(ownerInfo)}
@@ -913,7 +958,10 @@
                 <span class="text-gray-400">Typ:</span><span class="font-medium flex items-center clickable" data-plot-type="${plot.type}">${typeColorDot} ${plot.type || 'Brak'}</span>
                 <span class="text-gray-400">Wartość:</span><span class="font-medium flex items-center">${plot.value || '0'} <img src="minecoin.webp" class="inline w-4 h-4 ml-1" alt="MC"></span>
                 <span class="text-gray-400">Powierzchnia:</span><span class="font-medium">${plot.area || 'Brak'} m²</span>
-            </div></div>${localsHTML}`;
+                <span class="text-gray-400">Rozmiar:</span><span class="font-medium">${plot.width}x${plot.height} m</span>
+            </div></div>
+        ${historyHTML}
+        ${localsHTML}`;
             }
 
             function renderMergedContent(mergedPlot) {
@@ -1253,6 +1301,7 @@
             document.getElementById('toggle-districts').addEventListener('click', () => toggleLayer('districts'));
             document.getElementById('toggle-merged').addEventListener('click', () => toggleLayer('merged'));
 
+            // --- OBSŁUGA INTERAKJI Z MAPĄ (MYSZ I DOTYK) ---
             let touchPanning = false;
             let pinchZooming = false;
             let lastTouchDistance = 0;
@@ -1268,13 +1317,11 @@
             document.addEventListener('mouseup', () => {
                 isPanning = false;
                 mapContainer.classList.remove('grabbing');
-                // Resetuj flagę przeciągania z lekkim opóźnieniem, aby 'click' zdążył się wykonać
-                setTimeout(() => { isDragging = false; }, 0);
+                setTimeout(() => { isDragging = false; }, 50);
             });
             mapContainer.addEventListener('mousemove', (e) => {
                 if (!isPanning) return;
-                // Jeśli ruch myszy jest większy niż mały próg, uznajemy to za przeciąganie
-                if (Math.abs(e.x - startPoint.x) > 3 || Math.abs(e.y - startPoint.y) > 3) {
+                if (Math.abs(e.x - startPoint.x) > 5 || Math.abs(e.y - startPoint.y) > 5) {
                     isDragging = true;
                 }
                 const dx = (startPoint.x - e.x) * (viewBox.w / mapContainer.clientWidth);
@@ -1282,9 +1329,7 @@
                 setViewBox(viewBox.x + dx, viewBox.y + dy, viewBox.w, viewBox.h);
                 startPoint = { x: e.x, y: e.y };
             });
-
             mapContainer.addEventListener('wheel', (e) => { e.preventDefault(); const dw = viewBox.w * -Math.sign(e.deltaY) * 0.1; const dx = dw * e.offsetX / mapContainer.clientWidth; const dy = (dw / initialViewBox.w * initialViewBox.h) * e.offsetY / mapContainer.clientHeight; setViewBox(viewBox.x + dx, viewBox.y + dy, viewBox.w - dw, viewBox.h - (dw / initialViewBox.w * initialViewBox.h)); }, { passive: false });
-
             mapContainer.addEventListener('touchstart', (e) => {
                 isDragging = false;
                 if (e.touches.length === 1) {
@@ -1296,9 +1341,10 @@
                     lastTouchDistance = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
                 }
             }, { passive: true });
-
             mapContainer.addEventListener('touchmove', (e) => {
-                isDragging = true; // Każdy ruch palcem po ekranie to przeciąganie
+                if (Math.abs(e.touches[0].clientX - startPoint.x) > 5 || Math.abs(e.touches[0].clientY - startPoint.y) > 5) {
+                    isDragging = true;
+                }
                 if (touchPanning && e.touches.length === 1) {
                     const dx = (startPoint.x - e.touches[0].clientX) * (viewBox.w / mapContainer.clientWidth);
                     const dy = (startPoint.y - e.touches[0].clientY) * (viewBox.h / mapContainer.clientHeight);
@@ -1317,12 +1363,10 @@
                     lastTouchDistance = newDist;
                 }
             }, { passive: true });
-
             mapContainer.addEventListener('touchend', (e) => {
                 touchPanning = false;
                 pinchZooming = false;
-                // Resetuj flagę przeciągania z lekkim opóźnieniem, aby 'click' (tap) zdążył się wykonać
-                setTimeout(() => { isDragging = false; }, 0);
+                setTimeout(() => { isDragging = false; }, 50);
             });
 
             fetchAllData();
