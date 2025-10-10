@@ -497,8 +497,8 @@
                     streets = results[2].data.filter(s => s['X (lewy górny)'])
                         .map(d => ({
                             name: d['Nazwa ulicy'], x1: parseInt(d['X (lewy górny)'], 10), z1: parseInt(d['Z (lewy górny)'], 10),
-                            width: Math.abs(parseInt(d['X (prawy dolny)'], 10) - parseInt(d['X (lewy górny)'], 10)),
-                            height: Math.abs(parseInt(d['Z (prawy dolny)'], 10) - parseInt(d['Z (lewy górny)'], 10))
+                            width: Math.abs(parseInt(d['X (prawy dolny)'], 10) - parseInt(d['X (lewy górny)'], 10)) + 1,
+                            height: Math.abs(parseInt(d['Z (prawy dolny)'], 10) - parseInt(d['Z (lewy górny)'], 10)) + 1
                         }));
 
                     drawMap();
@@ -508,7 +508,7 @@
                     loader.innerHTML = `<div class="text-center"><p class="text-lg font-medium text-red-500">Błąd ładowania danych</p><p class="text-sm text-gray-400">Sprawdź konsolę.</p></div>`;
                 }
             }
-            
+
             function updatePlotOwners() {
                 const transactionsByPlot = {};
                 allTransactions.forEach(t => {
