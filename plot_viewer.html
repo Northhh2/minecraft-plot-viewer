@@ -226,6 +226,12 @@
     <!-- Simple Tooltip -->
     <div id="tooltip" class="hidden absolute p-2 rounded-lg shadow-xl text-sm z-40 pointer-events-none"></div>
 
+    <!-- Coordinates Display -->
+    <div id="coords-display"
+        class="absolute bottom-5 left-5 z-30 bg-gray-800 bg-opacity-75 text-white text-xs px-2 py-1 rounded-md pointer-events-none">
+        X: 0, Z: 0
+    </div>
+
     <!-- Right Side Modal -->
     <div id="modal"
         class="fixed top-0 right-0 w-full md:w-96 h-full bg-gray-800 border-l border-gray-600 shadow-2xl z-50 overflow-y-auto">
@@ -395,6 +401,14 @@
                 if (y + h > maxY_bound) y = maxY_bound - h;
                 viewBox = { x, y, w, h };
                 svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
+
+                // Zawsze aktualizuj koordynaty środka (dla mobile)
+                const centerX = Math.round(viewBox.x + viewBox.w / 2);
+                const centerZ = Math.round(viewBox.y + viewBox.h / 2);
+                // Sprawdź, czy urządzenie jest dotykowe, aby zdecydować, co wyświetlić
+                if ('ontouchstart' in window) {
+                    coordsDisplay.textContent = `X: ${centerX}, Z: ${centerZ}`;
+                }
             }
 
             function getColorForType(type, alpha = 0.8) {
@@ -1420,7 +1434,22 @@
             mapContainer.addEventListener('mousedown', (e) => { if (e.button === 0) { isPanning = true; mapContainer.classList.add('grabbing'); startPoint = { x: e.x, y: e.y }; } });
             document.addEventListener('mouseup', () => { isPanning = false; mapContainer.classList.remove('grabbing'); });
             mapContainer.addEventListener('mousemove', (e) => {
+                // Obliczanie koordynatów SVG na podstawie pozycji kursora
+                const pt = svg.createSVGPoint();
+                pt.x = e.clientX;
+                pt.y = e.clientY;
+                const svgP = pt.matrixTransform(svg.getScreenCTM().inverse());
+
+                // Aktualizuj wyświetlacz tylko na urządzeniach niedotykowych
+                if (!('ontouchstart' in window)) {
+                    coordsDisplay.textContent = `X: ${Math.round(svgP.x)}, Z: ${Math.round(svgP.y)}`;
+                }
+
+                // Logika przesuwania mapy (pozostaje bez zmian)
                 if (!isPanning) return;
+                if (Math.abs(e.x - startPoint.x) > 5 || Math.abs(e.y - startPoint.y) > 5) {
+                    isDragging = true;
+                }
                 const dx = (startPoint.x - e.x) * (viewBox.w / mapContainer.clientWidth);
                 const dy = (startPoint.y - e.y) * (viewBox.h / mapContainer.clientHeight);
                 setViewBox(viewBox.x + dx, viewBox.y + dy, viewBox.w, viewBox.h);
