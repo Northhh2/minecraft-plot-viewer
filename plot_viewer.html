@@ -1286,6 +1286,74 @@
             document.getElementById('toggle-districts').addEventListener('click', () => toggleLayer('districts'));
             document.getElementById('toggle-merged').addEventListener('click', () => toggleLayer('merged'));
 
+            let touchPanning = false;
+            let pinchZooming = false;
+            let lastTouchDistance = 0;
+
+            // Mysz: Przesuwanie
+            mapContainer.addEventListener('mousedown', (e) => { if (e.button === 0) { isPanning = true; mapContainer.classList.add('grabbing'); startPoint = { x: e.x, y: e.y }; } });
+            document.addEventListener('mouseup', () => { isPanning = false; mapContainer.classList.remove('grabbing'); });
+            mapContainer.addEventListener('mousemove', (e) => {
+                if (!isPanning) return;
+                const dx = (startPoint.x - e.x) * (viewBox.w / mapContainer.clientWidth);
+                const dy = (startPoint.y - e.y) * (viewBox.h / mapContainer.clientHeight);
+                setViewBox(viewBox.x + dx, viewBox.y + dy, viewBox.w, viewBox.h);
+                startPoint = { x: e.x, y: e.y };
+            });
+
+            // Mysz: Zoom (scroll)
+            mapContainer.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const dw = viewBox.w * -Math.sign(e.deltaY) * 0.1;
+                const dx = dw * e.offsetX / mapContainer.clientWidth;
+                const dy = (dw / initialViewBox.w * initialViewBox.h) * e.offsetY / mapContainer.clientHeight;
+                setViewBox(viewBox.x + dx, viewBox.y + dy, viewBox.w - dw, viewBox.h - (dw / initialViewBox.w * initialViewBox.h));
+            }, { passive: false });
+
+            // Dotyk: Start
+            mapContainer.addEventListener('touchstart', (e) => {
+                if (e.touches.length === 1) {
+                    touchPanning = true;
+                    startPoint = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                } else if (e.touches.length >= 2) {
+                    pinchZooming = true;
+                    touchPanning = false;
+                    lastTouchDistance = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                }
+            }, { passive: true });
+
+            // Dotyk: Ruch (przesuwanie i zoom)
+            mapContainer.addEventListener('touchmove', (e) => {
+                if (touchPanning && e.touches.length === 1) {
+                    const dx = (startPoint.x - e.touches[0].clientX) * (viewBox.w / mapContainer.clientWidth);
+                    const dy = (startPoint.y - e.touches[0].clientY) * (viewBox.h / mapContainer.clientHeight);
+                    setViewBox(viewBox.x + dx, viewBox.y + dy, viewBox.w, viewBox.h);
+                    startPoint = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                } else if (pinchZooming && e.touches.length >= 2) {
+                    const newDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                    const scale = lastTouchDistance / newDist;
+                    
+                    const w = viewBox.w * scale;
+                    const h = viewBox.h * scale;
+
+                    const { left, top } = mapContainer.getBoundingClientRect();
+                    const centerX = ((e.touches[0].clientX + e.touches[1].clientX) / 2) - left;
+                    const centerY = ((e.touches[0].clientY + e.touches[1].clientY) / 2) - top;
+
+                    const dx = (viewBox.w - w) * (centerX / mapContainer.clientWidth);
+                    const dy = (viewBox.h - h) * (centerY / mapContainer.clientHeight);
+                    
+                    setViewBox(viewBox.x + dx, viewBox.y + dy, w, h);
+                    lastTouchDistance = newDist;
+                }
+            }, { passive: true });
+
+            // Dotyk: Koniec
+            mapContainer.addEventListener('touchend', (e) => {
+                touchPanning = false;
+                pinchZooming = false;
+            });
+
             fetchAllData();
         });
     </script>
