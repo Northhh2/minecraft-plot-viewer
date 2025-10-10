@@ -459,12 +459,22 @@
                         }));
 
                     allLocals = results[3].data.filter(l => l['Numer porządkowy'] && l['Numer działki'])
-                        .map(l => ({
-                            id: l['Numer porządkowy'], plotName: l['Numer działki'], street: l['Ulica'],
-                            building: l['Numer budynku'], klatka: l['Klatka'], localNum: l['Numer lokalu'], floor: l['Piętro'],
-                            area: parseInt(l['Powierzchnia']) || 0, beds: parseInt(l['Ilość łóżek']) || 0,
-                            workplaces: parseInt(l['Ilość miejsc pracy']) || 0, tenant: l['Najemca']
-                        }));
+                        .map(l => {
+                            const parentPlot = allPlots.find(p => p.name === l['Numer działki']);
+                            return {
+                                id: l['Numer porządkowy'],
+                                plotName: l['Numer działki'],
+                                street: parentPlot ? parentPlot.street : '', // Pobrano z działki
+                                building: parentPlot ? parentPlot.buildingNumber : '', // Pobrano z działki
+                                klatka: l['Klatka'],
+                                localNum: l['Numer lokalu'],
+                                floor: l['Piętro'],
+                                area: parseInt(l['Powierzchnia']) || 0,
+                                beds: parseInt(l['Ilość łóżek']) || 0,
+                                workplaces: parseInt(l['Ilość miejsc pracy']) || 0,
+                                tenant: l['Najemca']
+                            };
+                        });
 
                     allOwners = results[4].data.map(o => ({
                         name: o['Nazwa'], type: o['Typ'], photo: o['Zdjęcie'],
@@ -498,7 +508,7 @@
                     loader.innerHTML = `<div class="text-center"><p class="text-lg font-medium text-red-500">Błąd ładowania danych</p><p class="text-sm text-gray-400">Sprawdź konsolę.</p></div>`;
                 }
             }
-
+            
             function updatePlotOwners() {
                 const transactionsByPlot = {};
                 allTransactions.forEach(t => {
