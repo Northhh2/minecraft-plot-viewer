@@ -57,7 +57,7 @@
 
         .street-rect {
             fill: #4b5563;
-            fill-opacity: 0.9;
+            fill-opacity: 1;
             stroke: transparent;
             stroke-width: 0.25;
             transition: fill-opacity 0.2s, stroke 0.2s;
@@ -833,95 +833,15 @@
 
             function createDistrictOutline(plots) {
                 if (plots.length === 0) return '';
-                const borders = { top: [], right: [], bottom: [], left: [] };
-                let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-                plots.forEach(plot => {
-                    const x_min = Math.min(plot.x1, plot.x2), x_max = Math.max(plot.x1, plot.x2);
-                    const z_min = Math.min(plot.z1, plot.z2), z_max = Math.max(plot.z1, plot.z2);
-                    minX = Math.min(minX, x_min); maxX = Math.max(maxX, x_max);
-                    minZ = Math.min(minZ, z_min); maxZ = Math.max(maxZ, z_max);
-                    borders.top.push({ fcrd: z_min, scrd: [x_min, x_max] });
-                    borders.bottom.push({ fcrd: z_max, scrd: [x_min, x_max] });
-                    borders.left.push({ fcrd: x_min, scrd: [z_min, z_max] });
-                    borders.right.push({ fcrd: x_max, scrd: [z_min, z_max] });
-                });
-                const sweepAndFindBorders = (a_borders, span, sortAsc) => {
-                    const externalBorders = []; let uncoveredSpan = [span];
-                    a_borders.sort((a, b) => sortAsc ? a.fcrd - b.fcrd : b.fcrd - a.fcrd);
-                    for (const border of a_borders) {
-                        if (uncoveredSpan.length === 0) break;
-                        const [border_start, border_end] = border.scrd; const nextUncovered = [];
-                        for (const [span_start, span_end] of uncoveredSpan) {
-                            const overlap_start = Math.max(border_start, span_start), overlap_end = Math.min(border_end, span_end);
-                            if (overlap_end > overlap_start) {
-                                externalBorders.push({ ...border, scrd: [overlap_start, overlap_end] });
-                                if (span_start < overlap_start) nextUncovered.push([span_start, overlap_start]);
-                                if (span_end > overlap_end) nextUncovered.push([overlap_end, span_end]);
-                            } else { nextUncovered.push([span_start, span_end]); }
-                        }
-                        uncoveredSpan = nextUncovered;
-                    }
-                    return externalBorders;
-                };
-                const topExt = sweepAndFindBorders(borders.top, [minX, maxX], true);
-                const bottomExt = sweepAndFindBorders(borders.bottom, [minX, maxX], false);
-                const leftExt = sweepAndFindBorders(borders.left, [minZ, maxZ], true);
-                const rightExt = sweepAndFindBorders(borders.right, [minZ, maxZ], false);
-                const allSegmentsRaw = [
-                    ...topExt.map(s => [[s.scrd[0], s.fcrd], [s.scrd[1], s.fcrd]]),
-                    ...bottomExt.map(s => [[s.scrd[0], s.fcrd], [s.scrd[1], s.fcrd]]),
-                    ...leftExt.map(s => [[s.fcrd, s.scrd[0]], [s.fcrd, s.scrd[1]]]),
-                    ...rightExt.map(s => [[s.fcrd, s.scrd[0]], [s.fcrd, s.scrd[1]]]),
-                ];
 
-                const minLength = 8;
-                const allSegments = allSegmentsRaw.filter(seg => {
-                    const p1 = seg[0];
-                    const p2 = seg[1];
-                    const length = Math.abs(p2[0] - p1[0]) + Math.abs(p2[1] - p1[1]);
-                    return length >= minLength;
-                });
+                // Znajdź skrajne koordynaty dla wszystkich działek w klastrze
+                const minX = Math.min(...plots.map(p => p.x1));
+                const maxX = Math.max(...plots.map(p => p.x2));
+                const minZ = Math.min(...plots.map(p => p.z1));
+                const maxZ = Math.max(...plots.map(p => p.z2));
 
-                if (allSegments.length === 0) return '';
-
-                const points = new Map();
-                allSegments.forEach(seg => {
-                    const p1_key = seg[0].join(',');
-                    const p2_key = seg[1].join(',');
-                    if (!points.has(p1_key)) points.set(p1_key, []);
-                    if (!points.has(p2_key)) points.set(p2_key, []);
-                    points.get(p1_key).push(p2_key);
-                    points.get(p2_key).push(p1_key);
-                });
-
-                let svgPath = '';
-                const visited = new Set();
-                for (const startNode of points.keys()) {
-                    if (visited.has(startNode)) continue;
-                    const path = [startNode];
-                    visited.add(startNode);
-                    let currentNode = startNode;
-                    while (true) {
-                        const neighbors = points.get(currentNode);
-                        const nextNode = neighbors.find(n => !visited.has(n));
-                        if (!nextNode) break;
-                        visited.add(nextNode);
-                        path.push(nextNode);
-                        currentNode = nextNode;
-                    }
-                    if (path.length > 1) {
-                        svgPath += `M ${path[0].replace(',', ' ')} `;
-                        for (let i = 1; i < path.length; i++) {
-                            svgPath += `L ${path[i].replace(',', ' ')} `;
-                        }
-                        const lastNode = path[path.length - 1];
-                        const lastNodeNeighbors = points.get(lastNode);
-                        if (lastNodeNeighbors && lastNodeNeighbors.includes(startNode)) {
-                            svgPath += 'Z ';
-                        }
-                    }
-                }
-                return svgPath.trim();
+                // Zwróć prostą ścieżkę prostokąta otaczającego
+                return `M ${minX} ${minZ} L ${maxX} ${minZ} L ${maxX} ${maxZ} L ${minX} ${maxZ} Z`;
             }
 
 
@@ -955,52 +875,22 @@
                     destroyActiveCharts();
                     const { type, data } = currentState;
                     let contentHTML = '', title = '';
-                    let plotsToHighlight = []; // Lista działek do podświetlenia
+                    let plotsToHighlight = [];
 
                     switch (type) {
-                        case 'plot':
-                            title = `Działka: ${data.name}`;
-                            contentHTML = renderPlotContent(data);
-                            plotsToHighlight = [data];
-                            break;
-                        case 'merged':
-                            title = 'Połączone działki';
-                            contentHTML = renderMergedContent(data);
-                            plotsToHighlight = data.plots.map(name => allPlots.find(p => p.name === name)).filter(Boolean);
-                            break;
-                        case 'local':
-                            title = `Lokal #${data.localNum}`;
-                            contentHTML = renderLocalContent(data);
-                            const parentPlot = allPlots.find(p => p.name === data.plotName);
-                            if (parentPlot) plotsToHighlight = [parentPlot];
-                            break;
-                        case 'owner':
-                            title = `Aktywa: ${data}`;
-                            contentHTML = renderOwnerContent(data);
-                            plotsToHighlight = allPlots.filter(p => p.owner === data);
-                            break;
-                        case 'district':
-                            title = `Dzielnica: ${data.name}`;
-                            contentHTML = renderDistrictContent(data.name, data.plots);
-                            plotsToHighlight = data.plots;
-                            break;
-                        case 'street':
-                            title = `Ulica: ${data}`;
-                            contentHTML = renderStreetContent(data);
-                            plotsToHighlight = allPlots.filter(p => p.street === data);
-                            break;
-                        case 'plotType':
-                            title = `Typ: ${data}`;
-                            contentHTML = renderPlotTypeContent(data);
-                            plotsToHighlight = allPlots.filter(p => p.type === data);
-                            break;
+                        case 'plot': title = `Działka: ${data.name}`; contentHTML = renderPlotContent(data); plotsToHighlight = [data]; break;
+                        case 'merged': title = 'Połączone działki'; contentHTML = renderMergedContent(data); plotsToHighlight = data.plots.map(name => allPlots.find(p => p.name === name)).filter(Boolean); break;
+                        case 'local': title = `Lokal #${data.klatka ? data.klatka + '/' : ''}${data.localNum}`; contentHTML = renderLocalContent(data); const parentPlot = allPlots.find(p => p.name === data.plotName); if (parentPlot) plotsToHighlight = [parentPlot]; break;
+                        case 'owner': title = `Aktywa: ${data}`; contentHTML = renderOwnerContent(data); plotsToHighlight = allPlots.filter(p => p.owner === data); break;
+                        case 'district': title = `Dzielnica: ${data.name}`; contentHTML = renderDistrictContent(data.name, data.plots); plotsToHighlight = data.plots; break;
+                        case 'street': title = `Ulica: ${data}`; contentHTML = renderStreetContent(data); plotsToHighlight = allPlots.filter(p => p.street === data); break;
+                        case 'plotType': title = `Typ: ${data}`; contentHTML = renderPlotTypeContent(data); plotsToHighlight = allPlots.filter(p => p.type === data); break;
                     }
 
                     modalTitle.textContent = title;
                     modalContent.innerHTML = contentHTML;
                     addModalEventListeners();
-
-                    dimOtherPlots(plotsToHighlight); // NOWE WYWOŁANIE FUNKCJI PODŚWIETLAJĄCEJ
+                    dimOtherPlots(plotsToHighlight);
 
                     document.getElementById('back-modal').classList.toggle('hidden', modalHistory.length <= 1);
                     modal.classList.add('show');
@@ -1038,10 +928,32 @@
 
                 const localsOnPlot = allLocals.filter(l => l.plotName === plot.name);
                 let localsHTML = '';
-                if (localsOnPlot.length > 0) {
-                    const localDetailsList = localsOnPlot.map(l => `<div data-local-id="${l.id}" class="bg-gray-700 p-2 rounded-md hover:bg-gray-600 cursor-pointer transition-colors">
-            <div class="font-semibold text-purple-400">Lokal #${l.localNum} (${l.area} m²)</div>
-            <div class="text-xs text-gray-400">Najemca: <span class="font-medium text-gray-200">${l.tenant || 'Brak'}</span></div></div>`).join('');
+
+                // Jeśli jest DOKŁADNIE jeden lokal, wyświetl jego szczegóły bezpośrednio
+                if (localsOnPlot.length === 1) {
+                    const singleLocal = localsOnPlot[0];
+                    const localTitle = `Lokal #${singleLocal.klatka ? singleLocal.klatka + '/' : ''}${singleLocal.localNum}`;
+                    localsHTML = `<div class="border-t border-gray-700 pt-3 mt-3">
+            <h4 class="text-md font-semibold">${localTitle}</h4>
+            <div class="space-y-3 mt-2">
+               <div><span class="text-gray-400 text-sm">Najemca:</span>${createOwnerCardHTML(singleLocal.tenant || 'Brak')}</div>
+               <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm pt-3 border-t border-gray-700">
+                   <span class="text-gray-400">Powierzchnia:</span><span class="font-medium">${singleLocal.area} m²</span>
+                   <span class="text-gray-400">Piętro:</span><span class="font-medium">${singleLocal.floor}</span>
+                   <span class="text-gray-400">Miejsca pracy:</span><span class="font-medium">${singleLocal.workplaces}</span>
+                   <span class="text-gray-400">Ilość łóżek:</span><span class="font-medium">${singleLocal.beds}</span>
+               </div>
+            </div>
+        </div>`;
+
+                } else if (localsOnPlot.length > 1) {
+                    // Jeśli jest więcej niż jeden lokal, wyświetl listę
+                    const localDetailsList = localsOnPlot.map(l => {
+                        const localTitle = `Lokal #${l.klatka ? l.klatka + '/' : ''}${l.localNum}`;
+                        return `<div data-local-id="${l.id}" class="bg-gray-700 p-2 rounded-md hover:bg-gray-600 cursor-pointer transition-colors">
+                <div class="font-semibold text-purple-400">${localTitle} (${l.area} m²)</div>
+                <div class="text-xs text-gray-400">Najemca: <span class="font-medium text-gray-200">${l.tenant || 'Brak'}</span></div></div>`
+                    }).join('');
                     localsHTML = `<div class="border-t border-gray-700 pt-3 mt-3"><h4 class="text-md font-semibold mb-3">Lokale w budynku (${localsOnPlot.length})</h4><div class="space-y-2">${localDetailsList}</div></div>`;
                 }
 
@@ -1131,7 +1043,8 @@
                     address += `<span data-district-name="${plot.district}" class="clickable">${plot.district}</span>`;
                 }
 
-                return `<div><h3 class="text-2xl font-bold text-cyan-400">Lokal #${local.localNum}</h3><p class="text-gray-400 text-sm">${address}</p></div>
+                const localTitle = `Lokal #${local.klatka ? local.klatka + '/' : ''}${local.localNum}`;
+                return `<div><h3 class="text-2xl font-bold text-cyan-400">${localTitle}</h3><p class="text-gray-400 text-sm">${address}</p></div>
          <div class="space-y-3">
             <div><span class="text-gray-400 text-sm">Najemca:</span>${createOwnerCardHTML(local.tenant || 'Brak')}</div>
             <div><span class="text-gray-400 text-sm">Właściciel budynku:</span>${createOwnerCardHTML(plot?.owner)}</div>
