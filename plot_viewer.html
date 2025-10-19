@@ -223,6 +223,9 @@
         <svg id="map-svg"></svg>
     </div>
 
+    <button id="lottery-button"
+        class="hidden absolute bottom-5 left-24 z-30 bg-yellow-500 text-black font-bold px-4 py-2 rounded-lg shadow-lg hover:bg-yellow-400 transition-colors">Loteria</button>
+
     <!-- Simple Tooltip -->
     <div id="tooltip" class="hidden absolute p-2 rounded-lg shadow-xl text-sm z-40 pointer-events-none"></div>
 
@@ -374,6 +377,23 @@
         </div>
     </div>
 
+    <!-- 2. OVERLAY LOTERII (umieść gdziekolwiek w <body>, np. przed tagiem <script>) -->
+    <div id="lottery-overlay" class="hidden fixed inset-0 z-50">
+        <div class="absolute top-5 right-5">
+            <button id="close-lottery-button" class="text-gray-400 hover:text-white text-4xl font-bold">&times;</button>
+        </div>
+        <div class="relative flex flex-col items-center justify-center">
+            <div class="absolute top-0 -mt-8 text-white text-2xl font-bold" style="text-shadow: 2px 2px 4px #000;">▲
+            </div>
+            <canvas id="wheelCanvas" width="500" height="500"></canvas>
+            <button id="spin-button"
+                class="mt-8 bg-green-600 text-white font-bold py-4 px-8 rounded-full text-2xl shadow-lg hover:bg-green-500 transition-transform transform hover:scale-105 disabled:bg-gray-500 disabled:cursor-not-allowed">Zakręć!</button>
+        </div>
+        <div id="lottery-result"
+            class="hidden absolute inset-0 bg-gray-900 bg-opacity-90 flex items-center justify-center text-center p-8">
+        </div>
+    </div>
+
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const SHEET_ID = '1swtElpz27sqLMNbATocFe9VHc1yZTSRxvHyikFL_R7U';
@@ -383,13 +403,19 @@
             const LOCALS_GID = '875214507';
             const OWNERS_GID = '92681717';
             const TRANSACTIONS_GID = '231383988';
+            const SETTINGS_GID = '464636229';
+            const LOTTERY_GID = '1580637376';
 
-            const PLOTS_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${PLOTS_GID}`;
-            const MERGED_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${MERGED_GID}`;
-            const STREETS_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${STREETS_GID}`;
-            const LOCALS_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${LOCALS_GID}`;
-            const OWNERS_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${OWNERS_GID}`;
-            const TRANSACTIONS_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${TRANSACTIONS_GID}`;
+            const urls = {
+                plots: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${PLOTS_GID}`,
+                merged: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${MERGED_GID}`,
+                streets: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${STREETS_GID}`,
+                locals: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${LOCALS_GID}`,
+                owners: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${OWNERS_GID}`,
+                transactions: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${TRANSACTIONS_GID}`,
+                settings: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SETTINGS_GID}`,
+                lottery: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${LOTTERY_GID}`
+            };
 
             const MAP_IMAGE_URL = 'map.webp';
             const MAP_WIDTH = 4296;
@@ -407,6 +433,12 @@
             const searchButton = document.getElementById('search-button');
             const searchSuggestions = document.getElementById('search-suggestions');
             const closeModalBtn = document.getElementById('close-modal');
+
+            let lotterySettings = {};
+            let lotteryHistory = [];
+            let eligibleForLottery = [];
+            let physicalPersons = [];
+            let nextWinnerIndex = 0;
 
             let viewBox = { x: 0, y: 0, w: 0, h: 0 };
             let isPanning = false;
@@ -503,26 +535,22 @@
 
             async function fetchAllData() {
                 try {
-                    const responses = await Promise.all([
-                        fetch(PLOTS_URL), fetch(MERGED_URL), fetch(STREETS_URL), fetch(LOCALS_URL), fetch(OWNERS_URL), fetch(TRANSACTIONS_URL)
-                    ]);
+                    const responses = await Promise.all(Object.values(urls).map(url => fetch(url)));
                     const texts = await Promise.all(responses.map(res => res.text()));
                     const results = await Promise.all(texts.map(text => new Promise(resolve => Papa.parse(text, { header: true, skipEmptyLines: true, complete: resolve }))));
 
-                    allPlots = results[0].data.filter(p => p['Nr porządkowy'] && p['X (lewy górny)'])
-                        .map(d => ({
-                            id: d['Nr porządkowy'], name: d['Nazwa porządkowa działki'], type: d['Typ'],
-                            x1: parseInt(d['X (lewy górny)'], 10), z1: parseInt(d['Z (lewy górny)'], 10),
-                            x2: parseInt(d['X (prawy dolny)'], 10), z2: parseInt(d['Z (prawy dolny)'], 10),
-                            width: Math.abs(parseInt(d['Bok X'], 10)),
-                            height: Math.abs(parseInt(d['Bok Z'], 10)),
-                            area: d['Powierzchnia'], value: d['Wartość'], owner: 'Skarb Miasta',
-                            status: 'owned', // 'owned' or 'pending'
-                            district: d['Dzielnica'], street: d['Ulica'], buildingNumber: d['Numer budynku'],
-                            history: []
-                        }));
+                    const [plotsData, mergedData, streetsData, localsData, ownersData, transactionsData, settingsData, lotteryData] = results;
 
-                    allLocals = results[3].data.map(l => {
+                    allPlots = plotsData.data.map(d => ({
+                        id: d['Nr porządkowy'], name: d['Nazwa porządkowa działki'], type: d['Typ'],
+                        x1: parseInt(d['X (lewy górny)'], 10), z1: parseInt(d['Z (lewy górny)'], 10),
+                        x2: parseInt(d['X (prawy dolny)'], 10), z2: parseInt(d['Z (prawy dolny)'], 10),
+                        width: Math.abs(parseInt(d['Bok X'], 10)), height: Math.abs(parseInt(d['Bok Z'], 10)),
+                        area: d['Powierzchnia'], value: d['Wartość'], owner: 'Skarb Miasta', status: 'owned',
+                        district: d['Dzielnica'], street: d['Ulica'], buildingNumber: d['Numer budynku'], history: []
+                    }));
+
+                    allLocals = localsData.data.map(l => {
                         const parentPlot = allPlots.find(p => p.name === l['Numer działki']);
                         return {
                             id: l['Numer porządkowy'], plotName: l['Numer działki'],
@@ -533,37 +561,39 @@
                         };
                     });
 
-                    allOwners = results[4].data.map(o => ({
+                    allOwners = ownersData.data.map(o => ({
                         name: o['Nazwa'], type: o['Typ'], photo: o['Zdjęcie'],
-                        nio: o['NIO'], age: o['Wiek'], profession: o['Zawód'], legalForm: o['Forma prawna'], pin: o['PIN']
+                        nio: o['NIO'], age: o['Wiek'], profession: o['Zawód'],
+                        legalForm: o['Forma prawna'], pin: o['PIN'], staff: o['Obsługa'] === 'Tak'
                     }));
 
-                    allTransactions = results[5].data.map(t => ({
+                    allTransactions = transactionsData.data.map(t => ({
                         plotName: t['Numer działki'], newOwner: t['Nowy właściciel'],
                         transactionValue: t['Wartość transakcji'], date: t['Dzień transakcji'],
                         type: t['Typ transakcji'], checkNumber: t['Numer czeku'],
                         paid: t['Opłacone?'] === 'TRUE'
                     }));
 
+                    settingsData.data.forEach(s => { lotterySettings[s['Ustawienie']] = s['Włączone?'] === 'TRUE'; });
+                    lotteryHistory = lotteryData.data.map(l => ({
+                        plotName: l['Działka'], winner: l['Zwycięzca'], amount: l['Kwota'],
+                        checkNumber: l['Numer czeku'], paid: l['Opłacone?'] === 'TRUE'
+                    }));
+
                     updatePlotOwners();
-
-                    const connections = results[1].data.filter(m => m['Działka główna'] && m['Działka dołączana'])
-                        .map(d => ({ plot1: d['Działka główna'], plot2: d['Działka dołączana'] }));
-                    mergedPlots = processMergedPlots(connections);
-
-                    streets = results[2].data.filter(s => s['X (lewy górny)'])
-                        .map(d => ({
-                            name: d['Nazwa ulicy'], x1: parseInt(d['X (lewy górny)'], 10), z1: parseInt(d['Z (lewy górny)'], 10),
-                            width: Math.abs(parseInt(d['X (prawy dolny)'], 10) - parseInt(d['X (lewy górny)'], 10)) + 1,
-                            height: Math.abs(parseInt(d['Z (prawy dolny)'], 10) - parseInt(d['Z (lewy górny)'], 10)) + 1
-                        }));
+                    mergedPlots = processMergedPlots(mergedData.data.filter(m => m['Działka główna'] && m['Działka dołączana']).map(d => ({ plot1: d['Działka główna'], plot2: d['Działka dołączana'] })));
+                    streets = streetsData.data.map(d => ({
+                        name: d['Nazwa ulicy'], x1: parseInt(d['X (lewy górny)'], 10), z1: parseInt(d['Z (lewy górny)'], 10),
+                        width: Math.abs(parseInt(d['X (prawy dolny)'], 10) - parseInt(d['X (lewy górny)'], 10)) + 1,
+                        height: Math.abs(parseInt(d['Z (prawy dolny)'], 10) - parseInt(d['Z (lewy górny)'], 10)) + 1
+                    }));
 
                     drawMap();
+                    setupLottery();
                     attemptAutoLogin();
                     loader.style.display = 'none';
                 } catch (error) {
                     console.error("Błąd podczas pobierania danych:", error);
-                    loader.innerHTML = `<div class="text-center"><p class="text-lg font-medium text-red-500">Błąd ładowania danych</p><p class="text-sm text-gray-400">Sprawdź konsolę.</p></div>`;
                 }
             }
 
@@ -1018,7 +1048,6 @@
                </div>
             </div>
         </div>`;
-
                 } else if (localsOnPlot.length > 1) {
                     const localDetailsList = localsOnPlot.map(l => {
                         const localTitle = `Lokal #${l.klatka ? l.klatka + '/' : ''}${l.localNum}`;
@@ -1045,7 +1074,6 @@
                     const historyList = reversedHistory.map((t, index) => {
                         let durationText = '';
                         const nextTransaction = reversedHistory[index - 1];
-
                         if (nextTransaction) {
                             const duration = parseInt(nextTransaction.date, 10) - parseInt(t.date, 10);
                             durationText = `${duration} dni`;
@@ -1063,7 +1091,7 @@
                         return `
             <div class="bg-gray-700 p-2 rounded-md">
                 <div class="flex justify-between items-center">
-                    <div class="text-xs text-gray-400">${t.date} - ${t.type}</div>
+                    <div class="text-xs text-gray-400">${t.type}</div>
                     <div class="text-xs text-gray-300">${durationText}</div>
                 </div>
                 ${createOwnerCardHTML(t.newOwner)}
@@ -1077,9 +1105,16 @@
         </div>`;
                 }
 
+                const lotteryWin = lotteryHistory.find(l => l.plotName === plot.name && l.paid);
+                let lotteryBadgeHTML = '';
+                if (lotteryWin) {
+                    lotteryBadgeHTML = `<div class="mt-2"><span class="lottery-badge">Zdobyte w Loterii Działkowej</span></div>`;
+                }
+
                 return `<div><h3 class="text-2xl font-bold ${isOwned ? 'text-red-400' : 'text-green-400'}">${plot.name}</h3><p class="text-gray-400 text-sm">${address}</p></div>
         <div class="space-y-3">
             ${createOwnerCardHTML(ownerInfo)}
+            ${lotteryBadgeHTML}
             <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm pt-3 border-t border-gray-700">
                 <span class="text-gray-400">Typ:</span><span class="font-medium flex items-center clickable" data-plot-type="${plot.type}">${typeColorDot} ${plot.type || 'Brak'}</span>
                 <span class="text-gray-400">Wartość:</span><span class="font-medium flex items-center">${plot.value || '0'} <img src="minecoin.webp" class="inline w-4 h-4 ml-1" alt="MC"></span>
@@ -1614,6 +1649,132 @@
                 const pin = e.target.pin.value;
                 loginUser(identifier, pin);
             });
+
+            // --- NOWE FUNKCJE LOTERII ---
+            const lotteryButton = document.getElementById('lottery-button');
+            const lotteryOverlay = document.getElementById('lottery-overlay');
+            const closeLotteryButton = document.getElementById('close-lottery-button');
+            const wheelCanvas = document.getElementById('wheelCanvas');
+            const spinButton = document.getElementById('spin-button');
+            const lotteryResult = document.getElementById('lottery-result');
+
+            function setupLottery() {
+                if (!lotterySettings.plot_lottery_enabled) return;
+
+                physicalPersons = allOwners.filter(o => o.type === 'fizyczna');
+                const lotteryHistoryPlots = new Set(lotteryHistory.map(l => l.plotName));
+
+                const legalEntityOwners = new Set(allOwners.filter(o => o.type === 'prawna' && o.name !== 'Skarb Miasta Amoguszowice').map(o => o.name));
+
+                eligibleForLottery = allPlots.filter(plot => {
+                    if (lotteryHistoryPlots.has(plot.name)) return false;
+
+                    // Znajdź ostatnią OPŁACONĄ transakcję
+                    const lastPaidTransaction = [...plot.history].reverse().find(t => t.paid);
+                    if (!lastPaidTransaction || lastPaidTransaction.type !== 'Darowizna') return false;
+
+                    // Sprawdź, kto był darczyńcą w tej transakcji. Darczyńca to właściciel z poprzedniej transakcji.
+                    const transactionIndex = plot.history.findIndex(h => h.date === lastPaidTransaction.date && h.newOwner === lastPaidTransaction.newOwner);
+                    const donorName = (transactionIndex > 0) ? plot.history[transactionIndex - 1].newOwner : 'Skarb Miasta';
+
+                    return legalEntityOwners.has(donorName);
+                });
+
+                if (eligibleForLottery.length > 0) {
+                    lotteryButton.classList.remove('hidden');
+                }
+            }
+
+            lotteryButton.addEventListener('click', () => {
+                lotteryOverlay.classList.remove('hidden');
+                drawWheel();
+                spinButton.disabled = !(currentUser && currentUser.staff);
+            });
+            closeLotteryButton.addEventListener('click', () => lotteryOverlay.classList.add('hidden'));
+
+            function drawWheel() {
+                const ctx = wheelCanvas.getContext('2d');
+                const numOptions = eligibleForLottery.length;
+                if (numOptions === 0) return;
+                const arcSize = 2 * Math.PI / numOptions;
+                const radius = wheelCanvas.width / 2;
+
+                ctx.clearRect(0, 0, wheelCanvas.width, wheelCanvas.height);
+                ctx.strokeStyle = '#374151';
+                ctx.lineWidth = 2;
+
+                for (let i = 0; i < numOptions; i++) {
+                    const angle = i * arcSize;
+                    ctx.beginPath();
+                    ctx.fillStyle = i % 2 === 0 ? '#4f46e5' : '#7c3aed';
+                    ctx.moveTo(radius, radius);
+                    ctx.arc(radius, radius, radius - 5, angle, angle + arcSize);
+                    ctx.lineTo(radius, radius);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    ctx.save();
+                    ctx.fillStyle = 'white';
+                    ctx.font = '14px Inter';
+                    ctx.translate(radius + Math.cos(angle + arcSize / 2) * (radius * 0.7), radius + Math.sin(angle + arcSize / 2) * (radius * 0.7));
+                    ctx.rotate(angle + arcSize / 2 + Math.PI / 2);
+                    ctx.fillText(eligibleForLottery[i].name, -ctx.measureText(eligibleForLottery[i].name).width / 2, 0);
+                    ctx.restore();
+                }
+            }
+
+            function spinWheel() {
+                if (eligibleForLottery.length === 0) return;
+                spinButton.disabled = true;
+                const numOptions = eligibleForLottery.length;
+                const degrees = Math.random() * 360 + 360 * 5; // min 5 obrotów
+                const currentRotation = parseFloat(wheelCanvas.style.transform.replace(/[^0-9.-]/g, '')) || 0;
+                wheelCanvas.style.transform = `rotate(${currentRotation + degrees}deg)`;
+
+                setTimeout(() => {
+                    const finalAngle = (currentRotation + degrees) % 360;
+                    const winningIndex = Math.floor(numOptions - (finalAngle / (360 / numOptions))) % numOptions;
+                    const winningPlot = eligibleForLottery[winningIndex];
+
+                    const winner = physicalPersons[nextWinnerIndex % physicalPersons.length];
+                    nextWinnerIndex++;
+
+                    showLotteryResult(winningPlot, winner);
+                }, 5100);
+            }
+
+            spinButton.addEventListener('click', spinWheel);
+
+            function showLotteryResult(plot, winner) {
+                lotteryResult.innerHTML = `
+                    <div class="space-y-4">
+                        <h2 class="text-4xl font-bold text-yellow-400">Gratulacje!</h2>
+                        <p class="text-2xl">${winner.name}</p>
+                        <p class="text-lg">wygrywa działkę</p>
+                        <p class="text-3xl font-bold text-purple-400">${plot.name}</p>
+                        <button id="close-result-button" class="mt-8 bg-purple-600 text-white font-bold py-2 px-6 rounded-lg">OK</button>
+                    </div>
+                `;
+                lotteryResult.classList.remove('hidden');
+
+                for (let i = 0; i < 100; i++) { createConfetti(); }
+
+                document.getElementById('close-result-button').addEventListener('click', () => {
+                    lotteryResult.classList.add('hidden');
+                    lotteryOverlay.classList.add('hidden');
+                    spinButton.disabled = !(currentUser && currentUser.staff);
+                });
+            }
+
+            function createConfetti() {
+                const confetti = document.createElement('div');
+                confetti.className = 'confetti';
+                confetti.style.left = `${Math.random() * 100}vw`;
+                confetti.style.animationDuration = `${Math.random() * 1 + 1}s`;
+                confetti.style.backgroundColor = `hsl(${Math.random() * 360}, 100%, 50%)`;
+                lotteryResult.appendChild(confetti);
+                setTimeout(() => confetti.remove(), 2000);
+            }
 
             fetchAllData();
         });
