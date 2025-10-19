@@ -1,7 +1,7 @@
 import { urls } from './config.js';
 import { state } from './state.js';
 
-export async function fetchAllData() {
+export async function fetchData() {
     try {
         const responses = await Promise.all(Object.values(urls).map(url => fetch(url)));
         if (responses.some(res => !res.ok)) throw new Error('Network response was not ok');
