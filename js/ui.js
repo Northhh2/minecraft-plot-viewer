@@ -112,6 +112,16 @@ function setupEventListeners() {
     });
     dom.spinButton.addEventListener('click', spinWheel);
 
+    dom.wheelCanvas.addEventListener('mouseenter', () => {
+        dom.wheelCanvas.classList.remove('wheel-idle-spin');
+    });
+    dom.wheelCanvas.addEventListener('mouseleave', () => {
+        if (!dom.spinButton.disabled) {
+            dom.wheelCanvas.classList.add('wheel-idle-spin');
+        }
+        hideTooltip();
+    });
+
     dom.wheelCanvas.addEventListener('mousemove', (e) => {
         if (state.eligibleForLottery.length <= 10) return;
 
@@ -142,8 +152,6 @@ function setupEventListeners() {
             moveTooltip(e);
         }
     });
-
-    dom.wheelCanvas.addEventListener('mouseleave', hideTooltip);
 }
 
 function renderCurrentModal() {
@@ -552,8 +560,6 @@ function setupLottery() {
         const lastPaidTransaction = [...plot.history].reverse().find(t => t.paid);
         if (!lastPaidTransaction || lastPaidTransaction.type !== 'Darowizna') return false;
         
-        // Działka jest uprawniona, jeśli jej obecnym właścicielem jest firma (nie skarb miasta),
-        // która otrzymała ją w darowiźnie.
         return legalEntityOwners.has(plot.owner);
     });
     
@@ -625,7 +631,13 @@ function spinWheel() {
     const numOptions = state.eligibleForLottery.length;
     const degrees = Math.random() * 360 + 360 * 5;
     const currentRotation = parseFloat(dom.wheelCanvas.style.transform.replace(/[^0-9.-]/g, '')) || 0;
-    dom.wheelCanvas.style.transform = `rotate(${currentRotation + degrees}deg)`;
+
+    // Force reflow
+    setTimeout(() => {
+        dom.wheelCanvas.style.transition = 'transform 5s cubic-bezier(.24,.99,.43,1)';
+        dom.wheelCanvas.style.transform = `rotate(${currentRotation + degrees}deg)`;
+    }, 0);
+    
     setTimeout(() => {
         const finalAngle = (currentRotation + degrees) % 360;
         const winningIndex = Math.floor(numOptions - (finalAngle / (360 / numOptions))) % numOptions;
