@@ -910,8 +910,24 @@
             }
 
             function showSimpleTooltip(e, plot) {
-                const isOwned = plot.owner && plot.owner.trim() !== '' && plot.owner.toLowerCase().trim() !== 'skarb miasta';
-                tooltip.innerHTML = `<div class="font-bold">${plot.name || `Działka ${plot.id}`}</div><div class="text-xs ${isOwned ? 'text-red-400' : 'text-green-400'}">${isOwned ? 'Zajęta' : 'Wolna'}</div>`;
+                let statusText = '';
+                let statusColor = '';
+
+                if (plot.status === 'pending') {
+                    statusText = 'W trakcie zmiany własności';
+                    statusColor = 'text-yellow-400';
+                } else {
+                    const isOwned = plot.owner && plot.owner.trim() !== '' && plot.owner.toLowerCase().trim() !== 'skarb miasta';
+                    if (isOwned) {
+                        statusText = 'Zajęta';
+                        statusColor = 'text-red-400';
+                    } else {
+                        statusText = 'Wolna';
+                        statusColor = 'text-green-400';
+                    }
+                }
+
+                tooltip.innerHTML = `<div class="font-bold">${plot.name || `Działka ${plot.id}`}</div><div class="text-xs ${statusColor}">${statusText}</div>`;
                 tooltip.classList.remove('hidden');
                 moveTooltip(e);
             }
@@ -951,15 +967,22 @@
             }
 
             function createPlotListItemHTML(plot) {
-                const isOwned = plot.owner && plot.owner.trim() !== '' && plot.owner.toLowerCase().trim() !== 'skarb miasta';
-                const statusText = isOwned ? 'Zajęta' : 'Wolna';
-                const statusColor = isOwned ? 'text-red-400' : 'text-green-400';
-                return `
-                <div data-plot-name="${plot.name}" class="bg-gray-700 p-2 rounded-md hover:bg-gray-600 cursor-pointer transition-colors">
-                    <div class="font-semibold text-purple-400">${plot.name} (${plot.area} m²)</div>
-                    <div class="text-xs text-gray-400">Właściciel: <span class="font-medium text-gray-200">${plot.owner || 'Brak'}</span></div>
-                    <div class="text-xs ${statusColor}">${statusText}</div>
-                </div>`;
+                let statusText = '';
+                let statusColor = '';
+
+                if (plot.status === 'pending') {
+                    statusText = 'W trakcie zmiany własności';
+                    statusColor = 'text-yellow-400';
+                } else {
+                    const isOwned = plot.owner && plot.owner.trim() !== '' && plot.owner.toLowerCase().trim() !== 'skarb miasta';
+                    statusText = isOwned ? 'Zajęta' : 'Wolna';
+                    statusColor = isOwned ? 'text-red-400' : 'text-green-400';
+                }
+
+                return `<div data-plot-name="${plot.name}" class="bg-gray-700 p-2 rounded-md hover:bg-gray-600 cursor-pointer transition-colors">
+        <div class="font-semibold text-purple-400">${plot.name} (${plot.area} m²)</div>
+        <div class="text-xs text-gray-400">Właściciel: <span class="font-medium text-gray-200">${plot.owner || 'Brak'}</span></div>
+        <div class="text-xs ${statusColor}">${statusText}</div></div>`;
             }
 
             function createOwnerCardHTML(ownerName, isSelf = false) {
@@ -980,7 +1003,6 @@
                 const localsOnPlot = allLocals.filter(l => l.plotName === plot.name);
                 let localsHTML = '';
 
-                // Jeśli jest DOKŁADNIE jeden lokal, wyświetl jego szczegóły bezpośrednio
                 if (localsOnPlot.length === 1) {
                     const singleLocal = localsOnPlot[0];
                     const localTitle = `Lokal #${singleLocal.klatka ? singleLocal.klatka + '/' : ''}${singleLocal.localNum}`;
@@ -998,7 +1020,6 @@
         </div>`;
 
                 } else if (localsOnPlot.length > 1) {
-                    // Jeśli jest więcej niż jeden lokal, wyświetl listę
                     const localDetailsList = localsOnPlot.map(l => {
                         const localTitle = `Lokal #${l.klatka ? l.klatka + '/' : ''}${l.localNum}`;
                         return `<div data-local-id="${l.id}" class="bg-gray-700 p-2 rounded-md hover:bg-gray-600 cursor-pointer transition-colors">
@@ -1024,9 +1045,9 @@
                     const historyList = reversedHistory.map((t, index) => {
                         const startDate = parseDate(t.date);
                         let endDate;
-                        if (index === 0) { // Najnowsza transakcja
+                        if (index === 0) {
                             endDate = new Date();
-                        } else { // Starsza transakcja
+                        } else {
                             const previousTransaction = reversedHistory[index - 1];
                             endDate = parseDate(previousTransaction.date);
                         }
@@ -1069,51 +1090,14 @@
         ${localsHTML}`;
             }
 
-            function renderDistrictContent(districtName, plotsInDistrict) {
-                const totalArea = plotsInDistrict.reduce((sum, p) => sum + (parseInt(p.area) || 0), 0);
-                return `<div><h3 class="text-2xl font-bold text-purple-400">${districtName}</h3></div>
-        <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm border-b border-gray-700 pb-3 mb-3">
-            <span>Liczba działek:</span><span class="font-medium">${plotsInDistrict.length}</span>
-            <span>Łączna powierzchnia:</span><span class="font-medium">${totalArea.toLocaleString()} m²</span></div>
-        <div class="space-y-2 mb-4">${plotsInDistrict.map(p => createPlotListItemHTML(p)).join('')}</div>`;
-            }
-
-            function dimOtherPlots(plotsToShow = []) {
-                // Najpierw usuń istniejące przyciemnienie, ale zostaw podświetlenie wyszukiwania
-                svg.querySelectorAll('.plot-rect.dimmed').forEach(rect => rect.classList.remove('dimmed'));
-
-                // Jeśli lista jest pusta, po prostu czyścimy i kończymy
-                if (plotsToShow.length === 0) return;
-
-                const plotNamesToShow = new Set(plotsToShow.map(p => p.name));
-
-                svg.querySelectorAll('.plot-rect').forEach(rect => {
-                    const g = rect.parentElement;
-                    // Sprawdź, czy działka NIE jest na liście do pokazania
-                    if (!plotNamesToShow.has(g.dataset.plotName)) {
-                        rect.classList.add('dimmed');
-                    }
-                });
-            }
-
             function renderMergedContent(mergedPlot) {
-                const constituentPlotsDetails = mergedPlot.plots
-                    .map(plotName => allPlots.find(p => p.name === plotName))
-                    .filter(Boolean)
-                    .map(plot => createPlotListItemHTML(plot))
-                    .join('');
-                return `
-                    <div><h3 class="text-2xl font-bold text-amber-400">Połączone Działki</h3><p class="text-gray-400">Grupa ${mergedPlot.plots.length} działek</p></div>
-                    <div class="space-y-3">
-                        <div>
-                            <span class="text-gray-400 block mb-2">Działki wchodzące w skład:</span>
-                            <div class="font-medium space-y-2">${constituentPlotsDetails}</div>
-                        </div>
-                        <div class="grid grid-cols-2 gap-x-4 gap-y-2 pt-3 border-t border-gray-700 text-sm">
-                            <span class="text-gray-400">Pow. oryginalna:</span><span class="font-medium">${mergedPlot.originalArea} m²</span>
-                            <span class="text-gray-400">Pow. połączona:</span><span class="font-medium">${mergedPlot.mergedArea} m²</span>
-                        </div>
-                    </div>`;
+                const plotsDetails = mergedPlot.plots.map(name => allPlots.find(p => p.name === name)).filter(Boolean).map(p => createPlotListItemHTML(p)).join('');
+                return `<div><h3 class="text-2xl font-bold text-amber-400">Połączone Działki</h3><p class="text-gray-400">Grupa ${mergedPlot.plots.length} działek</p></div>
+        <div class="space-y-3"><div><span class="text-gray-400 block mb-2">Działki wchodzące w skład:</span><div class="font-medium space-y-2">${plotsDetails}</div></div>
+            <div class="grid grid-cols-2 gap-x-4 gap-y-2 pt-3 border-t border-gray-700 text-sm">
+                <span class="text-gray-400">Pow. oryginalna:</span><span class="font-medium">${mergedPlot.originalArea} m²</span>
+                <span class="text-gray-400">Pow. połączona:</span><span class="font-medium">${mergedPlot.mergedArea} m²</span>
+            </div></div>`;
             }
 
             function renderLocalContent(local) {
@@ -1156,7 +1140,6 @@
         <div class="font-semibold text-purple-400">Lokal #${l.klatka ? l.klatka + '/' : ''}${l.localNum} w ${l.plotName}</div><div class="text-xs text-gray-400">Powierzchnia: ${l.area} m²</div></div>
         <div class="mt-2 text-xs text-gray-400">Wynajmowane od:</div>${createOwnerCardHTML(allPlots.find(p => p.name === l.plotName)?.owner)}</div>`).join('');
 
-                // Dodaj przycisk wylogowania, jeśli to profil zalogowanego użytkownika
                 const logoutButtonHTML = (currentUser && currentUser.name === ownerName) ?
                     `<button id="modal-logout-button" class="w-full mt-4 bg-red-800 text-white px-4 py-2 rounded-lg border border-red-600 hover:bg-red-700 transition-colors">Wyloguj się</button>` : '';
 
@@ -1171,16 +1154,25 @@
         </div>`;
             }
 
+            function renderDistrictContent(districtName, plotsInDistrict) {
+                const totalArea = plotsInDistrict.reduce((sum, p) => sum + (parseInt(p.area) || 0), 0);
+                return `<div><h3 class="text-2xl font-bold text-purple-400">${districtName}</h3></div>
+        <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm border-b border-gray-700 pb-3 mb-3">
+            <span>Liczba działek:</span><span class="font-medium">${plotsInDistrict.length}</span>
+            <span>Łączna powierzchnia:</span><span class="font-medium">${totalArea.toLocaleString()} m²</span></div>
+        <div class="space-y-2 mb-4">${plotsInDistrict.map(p => createPlotListItemHTML(p)).join('')}</div>`;
+            }
+
             function renderStreetContent(streetName) {
                 const street = streets.find(s => s.name === streetName);
                 if (!street) return '<p>Nie znaleziono ulicy.</p>';
                 const plotsOnStreet = allPlots.filter(p => p.street === streetName);
                 const length = street.width > street.height ? street.width : street.height;
                 return `<div><h3 class="text-2xl font-bold text-blue-400">${streetName}</h3></div>
-                    <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm border-b border-gray-700 pb-3 mb-3">
-                        <span>Długość:</span><span class="font-medium">${length} m</span>
-                        <span>Liczba działek:</span><span class="font-medium">${plotsOnStreet.length}</span></div>
-                    <div class="space-y-2 mb-4">${plotsOnStreet.map(p => createPlotListItemHTML(p)).join('')}</div>`;
+        <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm border-b border-gray-700 pb-3 mb-3">
+            <span>Długość:</span><span class="font-medium">${length} m</span>
+            <span>Liczba działek:</span><span class="font-medium">${plotsOnStreet.length}</span></div>
+        <div class="space-y-2 mb-4">${plotsOnStreet.map(p => createPlotListItemHTML(p)).join('')}</div>`;
             }
 
             function renderPlotTypeContent(typeName) {
@@ -1194,14 +1186,32 @@
                 const typeColorDot = `<span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: ${getColorForType(typeName, 1)}"></span>`;
 
                 return `<div><h3 class="text-2xl font-bold flex items-center">${typeColorDot} ${typeName}</h3></div>
-                    <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm border-b border-gray-700 pb-3 mb-3">
-                        <span>Liczba działek:</span><span class="font-medium">${plotsOfType.length}</span>
-                        <span>Łączna powierzchnia:</span><span class="font-medium">${totalArea.toLocaleString()} m²</span>
-                        <span>Liczba lokali:</span><span class="font-medium">${totalLocals}</span>
-                        <span>Miejsca pracy:</span><span class="font-medium">${totalWorkplaces}</span>
-                        <span>Ilość łóżek:</span><span class="font-medium">${totalBeds}</span>
-                    </div>
-                    <div class="space-y-2 mb-4">${plotsOfType.map(p => createPlotListItemHTML(p)).join('')}</div>`;
+        <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm border-b border-gray-700 pb-3 mb-3">
+            <span>Liczba działek:</span><span class="font-medium">${plotsOfType.length}</span>
+            <span>Łączna powierzchnia:</span><span class="font-medium">${totalArea.toLocaleString()} m²</span>
+            <span>Liczba lokali:</span><span class="font-medium">${totalLocals}</span>
+            <span>Miejsca pracy:</span><span class="font-medium">${totalWorkplaces}</span>
+            <span>Ilość łóżek:</span><span class="font-medium">${totalBeds}</span>
+        </div>
+        <div class="space-y-2 mb-4">${plotsOfType.map(p => createPlotListItemHTML(p)).join('')}</div>`;
+            }
+
+            function dimOtherPlots(plotsToShow = []) {
+                // Najpierw usuń istniejące przyciemnienie, ale zostaw podświetlenie wyszukiwania
+                svg.querySelectorAll('.plot-rect.dimmed').forEach(rect => rect.classList.remove('dimmed'));
+
+                // Jeśli lista jest pusta, po prostu czyścimy i kończymy
+                if (plotsToShow.length === 0) return;
+
+                const plotNamesToShow = new Set(plotsToShow.map(p => p.name));
+
+                svg.querySelectorAll('.plot-rect').forEach(rect => {
+                    const g = rect.parentElement;
+                    // Sprawdź, czy działka NIE jest na liście do pokazania
+                    if (!plotNamesToShow.has(g.dataset.plotName)) {
+                        rect.classList.add('dimmed');
+                    }
+                });
             }
 
             function createChart(canvasId, type, chartData, label) {
