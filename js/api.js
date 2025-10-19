@@ -1,9 +1,5 @@
 import { urls } from './config.js';
 
-/**
- * Pobiera surowe dane ze wszystkich arkuszy Google.
- * @returns {Promise<Array|null>} Obietnica, która zwraca tablicę z przetworzonymi danymi CSV lub null w przypadku błędu.
- */
 export async function fetchData() {
     try {
         const responses = await Promise.all(Object.values(urls).map(url => fetch(url)));
@@ -17,11 +13,6 @@ export async function fetchData() {
     }
 }
 
-/**
- * Przetwarza surowe dane wczytane z arkuszy na ustrukturyzowane obiekty aplikacji.
- * @param {Array} results - Tablica surowych danych z PapaParse.
- * @returns {Object|null} Obiekt zawierający wszystkie przetworzone dane aplikacji lub null w przypadku błędu.
- */
 export function processData(results) {
     if (!results) return null;
 
@@ -29,13 +20,11 @@ export function processData(results) {
         const [plotsData, mergedData, streetsData, localsData, ownersData, transactionsData, settingsData, lotteryData] = results;
 
         const allPlots = plotsData.data
-            // KROK 1: Odfiltruj wiersze z brakującymi, kluczowymi danymi
             .filter(d => 
                 d['Nr porządkowy'] &&
                 d['X (lewy górny)'] && d['Z (lewy górny)'] &&
                 d['Bok X'] && d['Bok Z']
             )
-            // KROK 2: Przetwarzaj tylko poprawne wiersze
             .map(d => ({
                 id: d['Nr porządkowy'],
                 name: d['Nazwa porządkowa działki'],
@@ -111,12 +100,10 @@ export function processData(results) {
         const mergedPlots = processMergedPlots(mergedData.data.filter(m => m['Działka główna'] && m['Działka dołączana']).map(d => ({ plot1: d['Działka główna'], plot2: d['Działka dołączana'] })), allPlots);
         
         const streets = streetsData.data
-            // KROK 1: Odfiltruj ulice z brakującymi koordynatami
             .filter(d => 
                 d['X (lewy górny)'] && d['Z (lewy górny)'] &&
                 d['X (prawy dolny)'] && d['Z (prawy dolny)']
             )
-            // KROK 2: Przetwarzaj tylko poprawne ulice
             .map(d => ({
                 name: d['Nazwa ulicy'],
                 x1: parseInt(d['X (lewy górny)'], 10),
@@ -126,14 +113,8 @@ export function processData(results) {
             }));
 
         return {
-            allPlots,
-            allLocals,
-            allOwners,
-            allTransactions,
-            mergedPlots,
-            streets,
-            settings,
-            lotteryHistory
+            allPlots, allLocals, allOwners, allTransactions,
+            mergedPlots, streets, settings, lotteryHistory
         };
 
     } catch (error) {
@@ -145,14 +126,14 @@ export function processData(results) {
 function updatePlotOwners(allPlots, allTransactions) {
     const transactionsByPlot = {};
     allTransactions.forEach(t => {
-        if (!transactionsByPlot[t.plotName]) transactionsByPlot[t.plotName] = [];
-        transactionsByPlot[t.plotName].push(t);
+        if (t.plotName) {
+            if (!transactionsByPlot[t.plotName]) transactionsByPlot[t.plotName] = [];
+            transactionsByPlot[t.plotName].push(t);
+        }
     });
 
     for (const plotName in transactionsByPlot) {
-        transactionsByPlot[plotName].sort((a, b) => {
-            return (parseInt(a.date, 10) || 0) - (parseInt(b.date, 10) || 0);
-        });
+        transactionsByPlot[plotName].sort((a, b) => (parseInt(a.date, 10) || 0) - (parseInt(b.date, 10) || 0));
     }
     
     allPlots.forEach(plot => {
@@ -188,10 +169,7 @@ function processMergedPlots(connections, allPlots) {
                 const currentId = stack.pop();
                 group.push(currentId);
                 for (const neighbor of (adj.get(currentId) || [])) {
-                    if (!visited.has(neighbor)) {
-                        visited.add(neighbor);
-                        stack.push(neighbor);
-                    }
+                    if (!visited.has(neighbor)) { visited.add(neighbor); stack.push(neighbor); }
                 }
             }
             groups.push(group);

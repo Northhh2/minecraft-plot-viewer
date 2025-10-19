@@ -266,10 +266,7 @@ function renderPlotContent(plot) {
     const lotteryWin = lotteryHistory.find(l => l.plotName === plot.name && l.paid);
     let lotteryBadgeHTML = '';
     if (lotteryWin) {
-        const lastPaidTransaction = [...plot.history].reverse().find(t => t.paid);
-        const transactionIndex = plot.history.findIndex(h => h.date === lastPaidTransaction.date && h.newOwner === lastPaidTransaction.newOwner);
-        const donorName = (transactionIndex > 0) ? plot.history[transactionIndex - 1].newOwner : 'Skarb Miasta';
-        lotteryBadgeHTML = createDonorBadgeHTML(donorName);
+        lotteryBadgeHTML = createDonorBadgeHTML(lotteryWin.winner);
     }
 
     return `<div><h3 class="text-2xl font-bold ${isOwned ? 'text-red-400' : 'text-green-400'}">${plot.name}</h3><p class="text-gray-400 text-sm">${address}</p></div>
@@ -339,25 +336,15 @@ function renderOwnerContent(ownerName) {
         <div class="font-semibold text-purple-400">Lokal #${l.klatka ? l.klatka + '/' : ''}${l.localNum} w ${l.plotName}</div><div class="text-xs text-gray-400">Powierzchnia: ${l.area} m²</div></div>
         <div class="mt-2 text-xs text-gray-400">Wynajmowane od:</div>${createOwnerCardHTML(allPlots.find(p=>p.name===l.plotName)?.owner)}</div>`).join('');
     
-    let sponsoredPlotsHTML = '';
+    let wonPlotsHTML = '';
     const wonAndPaidPlots = lotteryHistory.filter(l => l.winner === ownerName && l.paid);
-
     if (wonAndPaidPlots.length > 0) {
         const wonList = wonAndPaidPlots.map(l => {
-            const plot = allPlots.find(p => p.name === l.plotName);
-            if (!plot) return '';
-
-            const lastPaidTransaction = [...plot.history].reverse().find(t => t.paid);
-            if(!lastPaidTransaction) return '';
-            const transactionIndex = plot.history.findIndex(h => h.date === lastPaidTransaction.date && h.newOwner === lastPaidTransaction.newOwner);
-            const donorName = (transactionIndex > 0) ? plot.history[transactionIndex - 1].newOwner : 'Skarb Miasta';
-            
             return `<div class="bg-gray-700 p-2 rounded-md">
                 <div data-plot-name="${l.plotName}" class="font-semibold text-purple-400 cursor-pointer hover:underline">${l.plotName}</div>
-                <div class="text-xs text-gray-400">Otrzymano od: <span class="font-medium text-gray-200">${donorName}</span></div>
             </div>`;
         }).join('');
-        sponsoredPlotsHTML = `<div class="border-t border-gray-700 pt-3"><h4 class="font-semibold text-md mb-2">Działki zdobyte w Loterii (${wonAndPaidPlots.length})</h4><div class="space-y-2">${wonList}</div></div>`;
+        wonPlotsHTML = `<div class="border-t border-gray-700 pt-3"><h4 class="font-semibold text-md mb-2">Działki zdobyte w Loterii (${wonAndPaidPlots.length})</h4><div class="space-y-2">${wonList}</div></div>`;
     }
 
     const logoutButtonHTML = (state.currentUser && state.currentUser.name === ownerName) ? 
@@ -370,7 +357,7 @@ function renderOwnerContent(ownerName) {
             ${ownedPlots.length > 0 ? `<div class="space-y-2 mt-2">${ownedPlots.map(p => createPlotListItemHTML(p)).join('')}</div>` : ''}</div>
         <div class="border-t border-gray-700 pt-3"><h4 class="font-semibold text-md mb-1">Wynajmowane Lokale (${rentedLocals.length})</h4>
             ${rentedLocals.length > 0 ? `<div class="space-y-2 mt-2">${rentedLocalsHTML}</div>` : '<p class="text-gray-500 text-sm">Brak</p>'}</div>
-        ${sponsoredPlotsHTML}
+        ${wonPlotsHTML}
         ${logoutButtonHTML}
         </div>`;
 }
@@ -564,7 +551,7 @@ function setupLottery() {
         if (!lastPaidTransaction || lastPaidTransaction.type !== 'Darowizna') return false;
         const transactionIndex = plot.history.findIndex(h => h.date === lastPaidTransaction.date && h.newOwner === lastPaidTransaction.newOwner);
         const donorName = (transactionIndex > 0) ? plot.history[transactionIndex - 1].newOwner : 'Skarb Miasta';
-        return legalEntityOwners.has(donorName);
+        return legalEntityOwners.has(donorName) && !donorName.toLowerCase().includes('skarb miasta');
     });
     if (state.eligibleForLottery.length > 0) {
         dom.lotteryButton.classList.remove('hidden');
@@ -606,9 +593,10 @@ function drawWheel() {
     ctx.strokeStyle = '#374151';
     ctx.lineWidth = 2;
     for (let i = 0; i < numOptions; i++) {
+        const plot = state.eligibleForLottery[i];
         const angle = i * arcSize;
         ctx.beginPath();
-        ctx.fillStyle = i % 2 === 0 ? '#4f46e5' : '#7c3aed';
+        ctx.fillStyle = getColorForType(plot.type);
         ctx.moveTo(radius, radius);
         ctx.arc(radius, radius, radius - 5, angle, angle + arcSize);
         ctx.lineTo(radius, radius);
@@ -621,7 +609,7 @@ function drawWheel() {
             ctx.font = '14px Inter';
             ctx.translate(radius + Math.cos(angle + arcSize / 2) * (radius * 0.7), radius + Math.sin(angle + arcSize / 2) * (radius * 0.7));
             ctx.rotate(angle + arcSize / 2 + Math.PI / 2);
-            ctx.fillText(state.eligibleForLottery[i].name, -ctx.measureText(state.eligibleForLottery[i].name).width / 2, 0);
+            ctx.fillText(plot.name, -ctx.measureText(plot.name).width / 2, 0);
             ctx.restore();
         }
     }
