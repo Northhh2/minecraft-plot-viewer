@@ -1043,15 +1043,15 @@
                 if (plot.history && plot.history.length > 0) {
                     const reversedHistory = [...plot.history].reverse();
                     const historyList = reversedHistory.map((t, index) => {
-                        const startDate = parseDate(t.date);
-                        let endDate;
-                        if (index === 0) {
-                            endDate = new Date();
+                        let durationText = '';
+                        const nextTransaction = reversedHistory[index - 1];
+
+                        if (nextTransaction) {
+                            const duration = parseInt(nextTransaction.date, 10) - parseInt(t.date, 10);
+                            durationText = `${duration} dni`;
                         } else {
-                            const previousTransaction = reversedHistory[index - 1];
-                            endDate = parseDate(previousTransaction.date);
+                            durationText = 'Obecnie';
                         }
-                        const duration = dateDiffInDays(startDate, endDate);
 
                         let confidentialInfo = '';
                         if (currentUser && (t.newOwner === currentUser.name || (index > 0 && reversedHistory[index - 1].newOwner === currentUser.name))) {
@@ -1064,7 +1064,7 @@
             <div class="bg-gray-700 p-2 rounded-md">
                 <div class="flex justify-between items-center">
                     <div class="text-xs text-gray-400">${t.date} - ${t.type}</div>
-                    <div class="text-xs text-gray-300">${duration} dni</div>
+                    <div class="text-xs text-gray-300">${durationText}</div>
                 </div>
                 ${createOwnerCardHTML(t.newOwner)}
                 ${confidentialInfo}
@@ -1236,18 +1236,6 @@
                     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: type === 'bar' ? 'top' : 'right', labels: { color: '#d1d5db' } } } }
                 });
                 activeCharts.push(chart);
-            }
-
-            function parseDate(dateStr) {
-                const parts = dateStr.split('.');
-                return new Date(parts[2], parts[1] - 1, parts[0]);
-            }
-
-            function dateDiffInDays(a, b) {
-                const _MS_PER_DAY = 1000 * 60 * 60 * 24;
-                const utc1 = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
-                const utc2 = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
-                return Math.floor((utc2 - utc1) / _MS_PER_DAY);
             }
 
             function destroyActiveCharts() {
