@@ -330,12 +330,15 @@
     <div class="absolute top-5 right-5 z-30">
         <div id="user-auth-container">
             <!-- Przycisk Zaloguj (domyślnie widoczny) -->
-            <button id="login-button" class="bg-gray-800 text-white px-4 py-2 rounded-lg border border-gray-600 hover:bg-gray-700 transition-colors">
+            <button id="login-button"
+                class="bg-gray-800 text-white px-4 py-2 rounded-lg border border-gray-600 hover:bg-gray-700 transition-colors">
                 Zaloguj się
             </button>
             <!-- Przycisk profilu (domyślnie ukryty) -->
-            <button id="profile-button" class="hidden w-10 h-10 rounded-full border-2 border-purple-500 hover:border-purple-400 transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500">
-                <img id="profile-pic" src="placeholder.webp" onerror="this.onerror=null;this.src='placeholder.webp';" class="w-full h-full rounded-full object-cover">
+            <button id="profile-button"
+                class="hidden w-10 h-10 rounded-full border-2 border-purple-500 hover:border-purple-400 transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500">
+                <img id="profile-pic" src="placeholder.webp" onerror="this.onerror=null;this.src='placeholder.webp';"
+                    class="w-full h-full rounded-full object-cover">
             </button>
         </div>
     </div>
@@ -1064,6 +1067,15 @@
             </div></div>
         ${historyHTML}
         ${localsHTML}`;
+            }
+
+            function renderDistrictContent(districtName, plotsInDistrict) {
+                const totalArea = plotsInDistrict.reduce((sum, p) => sum + (parseInt(p.area) || 0), 0);
+                return `<div><h3 class="text-2xl font-bold text-purple-400">${districtName}</h3></div>
+        <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm border-b border-gray-700 pb-3 mb-3">
+            <span>Liczba działek:</span><span class="font-medium">${plotsInDistrict.length}</span>
+            <span>Łączna powierzchnia:</span><span class="font-medium">${totalArea.toLocaleString()} m²</span></div>
+        <div class="space-y-2 mb-4">${plotsInDistrict.map(p => createPlotListItemHTML(p)).join('')}</div>`;
             }
 
             function dimOtherPlots(plotsToShow = []) {
