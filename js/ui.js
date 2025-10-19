@@ -548,15 +548,15 @@ function setupLottery() {
     
     state.eligibleForLottery = allPlots.filter(plot => {
         if (lotteryHistoryPlots.has(plot.name)) return false;
+        
         const lastPaidTransaction = [...plot.history].reverse().find(t => t.paid);
         if (!lastPaidTransaction || lastPaidTransaction.type !== 'Darowizna') return false;
-        const transactionIndex = plot.history.findIndex(h => h.date === lastPaidTransaction.date && h.newOwner === lastPaidTransaction.newOwner);
-        const donorName = (transactionIndex > 0) ? plot.history[transactionIndex - 1].newOwner : 'Skarb Miasta';
-        console.log(legalEntityOwners);
-        console.log(donorName);
-        return legalEntityOwners.has(donorName) && !donorName.toLowerCase().includes('skarb miasta');
+        
+        // Działka jest uprawniona, jeśli jej obecnym właścicielem jest firma (nie skarb miasta),
+        // która otrzymała ją w darowiźnie.
+        return legalEntityOwners.has(plot.owner);
     });
-    console.log(state.eligibleForLottery);
+    
     if (state.eligibleForLottery.length > 0) {
         dom.lotteryButton.classList.remove('hidden');
     }
