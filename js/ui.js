@@ -439,9 +439,10 @@ function createDonorBadgeHTML(donorName) {
     const { allOwners } = appData;
     const owner = allOwners.find(o => o.name === donorName);
     const photo = owner?.photo || 'placeholder.webp';
+    const isClickable = !donorName.toLowerCase().includes('skarb miasta');
     return `<div class="mt-2">
         <div class="text-xs text-yellow-300 mb-1">Hojny Darczyńca Loterii Działkowej</div>
-        <div class="flex items-center p-2 rounded-md donor-badge">
+        <div class="flex items-center p-2 rounded-md donor-badge ${isClickable ? 'clickable' : ''}" ${isClickable ? `data-owner-name="${donorName}"` : ''}>
             <img src="${photo}" onerror="this.onerror=null;this.src='placeholder.webp';" class="w-8 h-8 rounded-full mr-3 object-cover border-2 border-yellow-600">
             <div>
                 <div class="font-semibold text-yellow-900">${donorName}</div>
