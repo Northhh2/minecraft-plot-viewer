@@ -327,6 +327,50 @@
         </div>
     </div>
 
+    <div class="absolute top-5 right-5 z-30">
+        <div id="user-auth-container">
+            <!-- Przycisk Zaloguj (domyślnie widoczny) -->
+            <button id="login-button" class="bg-gray-800 text-white px-4 py-2 rounded-lg border border-gray-600 hover:bg-gray-700 transition-colors">
+                Zaloguj się
+            </button>
+            <!-- Przycisk profilu (domyślnie ukryty) -->
+            <button id="profile-button" class="hidden w-10 h-10 rounded-full border-2 border-purple-500 hover:border-purple-400 transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500">
+                <img id="profile-pic" src="placeholder.webp" onerror="this.onerror=null;this.src='placeholder.webp';" class="w-full h-full rounded-full object-cover">
+            </button>
+        </div>
+    </div>
+
+    <div id="login-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-80 flex items-center justify-center z-50">
+        <div class="bg-gray-800 p-8 rounded-lg shadow-2xl border border-gray-600 w-full max-w-sm">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold">Logowanie</h2>
+                <button id="close-login-modal" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <form id="login-form">
+                <div class="space-y-4">
+                    <div>
+                        <label for="loginIdentifier" class="block text-sm font-medium text-gray-300">Nazwa gracza lub
+                            NIO</label>
+                        <input type="text" id="loginIdentifier" name="loginIdentifier" required
+                            class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    </div>
+                    <div>
+                        <label for="pin" class="block text-sm font-medium text-gray-300">PIN</label>
+                        <input type="password" id="pin" name="pin" required maxlength="4"
+                            class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    </div>
+                </div>
+                <p id="login-error" class="hidden text-red-400 text-sm mt-4"></p>
+                <div class="mt-6">
+                    <button type="submit"
+                        class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                        Zaloguj się
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const SHEET_ID = '1swtElpz27sqLMNbATocFe9VHc1yZTSRxvHyikFL_R7U';
@@ -371,6 +415,7 @@
             let maxViewboxWidth = MAP_WIDTH;
             let isAnimatingModal = false;
             let isDragging = false;
+            let currentUser = null;
 
             let allPlots = [];
             let allLocals = [];
@@ -469,38 +514,32 @@
                             width: Math.abs(parseInt(d['Bok X'], 10)),
                             height: Math.abs(parseInt(d['Bok Z'], 10)),
                             area: d['Powierzchnia'], value: d['Wartość'], owner: 'Skarb Miasta',
+                            status: 'owned', // 'owned' or 'pending'
                             district: d['Dzielnica'], street: d['Ulica'], buildingNumber: d['Numer budynku'],
                             history: []
                         }));
 
-                    allLocals = results[3].data.filter(l => l['Numer porządkowy'] && l['Numer działki'])
-                        .map(l => {
-                            const parentPlot = allPlots.find(p => p.name === l['Numer działki']);
-                            return {
-                                id: l['Numer porządkowy'],
-                                plotName: l['Numer działki'],
-                                street: parentPlot ? parentPlot.street : '', // Pobrano z działki
-                                building: parentPlot ? parentPlot.buildingNumber : '', // Pobrano z działki
-                                klatka: l['Klatka'],
-                                localNum: l['Numer lokalu'],
-                                floor: l['Piętro'],
-                                area: parseInt(l['Powierzchnia']) || 0,
-                                beds: parseInt(l['Ilość łóżek']) || 0,
-                                workplaces: parseInt(l['Ilość miejsc pracy']) || 0,
-                                tenant: l['Najemca']
-                            };
-                        });
+                    allLocals = results[3].data.map(l => {
+                        const parentPlot = allPlots.find(p => p.name === l['Numer działki']);
+                        return {
+                            id: l['Numer porządkowy'], plotName: l['Numer działki'],
+                            street: parentPlot ? parentPlot.street : '', building: parentPlot ? parentPlot.buildingNumber : '',
+                            klatka: l['Klatka'], localNum: l['Numer lokalu'], floor: l['Piętro'],
+                            area: parseInt(l['Powierzchnia']) || 0, beds: parseInt(l['Ilość łóżek']) || 0,
+                            workplaces: parseInt(l['Ilość miejsc pracy']) || 0, tenant: l['Najemca']
+                        };
+                    });
 
                     allOwners = results[4].data.map(o => ({
                         name: o['Nazwa'], type: o['Typ'], photo: o['Zdjęcie'],
-                        nio: o['NIO'], age: o['Wiek'], profession: o['Zawód'], legalForm: o['Forma prawna']
+                        nio: o['NIO'], age: o['Wiek'], profession: o['Zawód'], legalForm: o['Forma prawna'], pin: o['PIN']
                     }));
 
                     allTransactions = results[5].data.map(t => ({
-                        plotName: t['Numer działki'],
-                        newOwner: t['Nowy właściciel'],
-                        date: t['Dzień transakcji'],
-                        type: t['Typ transakcji']
+                        plotName: t['Numer działki'], newOwner: t['Nowy właściciel'],
+                        transactionValue: t['Wartość transakcji'], date: t['Dzień transakcji'],
+                        type: t['Typ transakcji'], checkNumber: t['Numer czeku'],
+                        paid: t['Opłacone?'] === 'TRUE'
                     }));
 
                     updatePlotOwners();
@@ -517,6 +556,7 @@
                         }));
 
                     drawMap();
+                    attemptAutoLogin();
                     loader.style.display = 'none';
                 } catch (error) {
                     console.error("Błąd podczas pobierania danych:", error);
@@ -527,14 +567,11 @@
             function updatePlotOwners() {
                 const transactionsByPlot = {};
                 allTransactions.forEach(t => {
-                    if (!transactionsByPlot[t.plotName]) {
-                        transactionsByPlot[t.plotName] = [];
-                    }
+                    if (!transactionsByPlot[t.plotName]) transactionsByPlot[t.plotName] = [];
                     transactionsByPlot[t.plotName].push(t);
                 });
 
                 for (const plotName in transactionsByPlot) {
-                    // Sortuj transakcje chronologicznie (zakładając format daty DD.MM.RRRR)
                     transactionsByPlot[plotName].sort((a, b) => {
                         const dateA = a.date.split('.').reverse().join('');
                         const dateB = b.date.split('.').reverse().join('');
@@ -545,10 +582,22 @@
                 allPlots.forEach(plot => {
                     const plotTransactions = transactionsByPlot[plot.name];
                     if (plotTransactions && plotTransactions.length > 0) {
-                        // Ostatnia transakcja określa aktualnego właściciela
-                        plot.owner = plotTransactions[plotTransactions.length - 1].newOwner;
-                        // Zapisz całą historię dla działki
                         plot.history = plotTransactions;
+
+                        const lastTransaction = plotTransactions[plotTransactions.length - 1];
+                        const lastPaidTransaction = [...plotTransactions].reverse().find(t => t.paid);
+
+                        if (lastPaidTransaction) {
+                            plot.owner = lastPaidTransaction.newOwner;
+                        } else {
+                            plot.owner = 'Skarb Miasta';
+                        }
+
+                        if (lastTransaction && !lastTransaction.paid) {
+                            plot.status = 'pending';
+                        } else {
+                            plot.status = 'owned';
+                        }
                     }
                 });
             }
@@ -740,37 +789,36 @@
                     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
                     g.dataset.plotId = plot.id;
                     g.dataset.plotName = plot.name;
-                    g.dataset.plotDistrict = plot.district || '';
-
                     const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
                     rect.setAttribute('x', plot.x1); rect.setAttribute('y', plot.z1);
                     rect.setAttribute('width', plot.width); rect.setAttribute('height', plot.height);
                     rect.setAttribute('class', 'plot-rect');
+
                     const isOwned = plot.owner && plot.owner.trim() !== '' && plot.owner.toLowerCase().trim() !== 'skarb miasta';
                     rect.style.fill = getColorForType(plot.type);
-                    rect.style.stroke = isOwned ? '#ef4444' : '#22c55e';
+
+                    if (plot.status === 'pending') {
+                        rect.style.stroke = '#facc15'; // Żółty dla "w trakcie zmiany"
+                    } else {
+                        rect.style.stroke = isOwned ? '#ef4444' : '#22c55e'; // Czerwony/Zielony
+                    }
 
                     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                     text.setAttribute('x', plot.x1 + plot.width / 2);
                     text.setAttribute('y', plot.z1 + plot.height / 2);
                     text.setAttribute('class', 'plot-text');
                     text.textContent = plot.id.padStart(3, '0');
-
-                    g.appendChild(rect);
-                    g.appendChild(text);
+                    g.appendChild(rect); g.appendChild(text);
 
                     g.addEventListener('mouseenter', (e) => {
                         showSimpleTooltip(e, plot);
-                        if (modalHistory.length === 0 && plot.district) {
-                            highlightDistrict(plot.district);
-                        }
+                        if (modalHistory.length === 0 && plot.district) highlightDistrict(plot.district);
                     });
                     g.addEventListener('mouseleave', () => {
                         hideTooltip();
-                        if (modalHistory.length === 0) {
-                            clearHighlight();
-                        }
+                        if (modalHistory.length === 0) clearHighlight();
                     });
+
                     g.addEventListener('mousemove', moveTooltip);
                     g.addEventListener('click', (e) => {
                         if (isDragging) return;
@@ -969,12 +1017,36 @@
 
                 let historyHTML = '';
                 if (plot.history && plot.history.length > 0) {
-                    const historyList = [...plot.history].reverse().map(t => `
+                    const reversedHistory = [...plot.history].reverse();
+                    const historyList = reversedHistory.map((t, index) => {
+                        const startDate = parseDate(t.date);
+                        let endDate;
+                        if (index === 0) { // Najnowsza transakcja
+                            endDate = new Date();
+                        } else { // Starsza transakcja
+                            const previousTransaction = reversedHistory[index - 1];
+                            endDate = parseDate(previousTransaction.date);
+                        }
+                        const duration = dateDiffInDays(startDate, endDate);
+
+                        let confidentialInfo = '';
+                        if (currentUser && (t.newOwner === currentUser.name || (index > 0 && reversedHistory[index - 1].newOwner === currentUser.name))) {
+                            confidentialInfo = `
+                    <div class="text-xs text-gray-400 mt-1">Wartość: ${t.transactionValue || 'Brak'} | Czek: #${t.checkNumber || 'Brak'}</div>
+                 `;
+                        }
+
+                        return `
             <div class="bg-gray-700 p-2 rounded-md">
-                <div class="text-xs text-gray-400">${t.date} - ${t.type}</div>
+                <div class="flex justify-between items-center">
+                    <div class="text-xs text-gray-400">${t.date} - ${t.type}</div>
+                    <div class="text-xs text-gray-300">${duration} dni</div>
+                </div>
                 ${createOwnerCardHTML(t.newOwner)}
-            </div>
-        `).join('');
+                ${confidentialInfo}
+            </div>`;
+                    }).join('');
+
                     historyHTML = `<div class="border-t border-gray-700 pt-3 mt-3">
             <h4 class="text-md font-semibold mb-3">Historia własności</h4>
             <div class="space-y-2">${historyList}</div>
@@ -1069,50 +1141,22 @@
                     ownerDetailsHTML += '</div>';
                 }
                 const rentedLocalsHTML = rentedLocals.map(l => `<div class="bg-gray-700 p-2 rounded-md"><div data-local-id="${l.id}" class="cursor-pointer">
-        <div class="font-semibold text-purple-400">Lokal #${l.localNum} w ${l.plotName}</div><div class="text-xs text-gray-400">Powierzchnia: ${l.area} m²</div></div>
+        <div class="font-semibold text-purple-400">Lokal #${l.klatka ? l.klatka + '/' : ''}${l.localNum} w ${l.plotName}</div><div class="text-xs text-gray-400">Powierzchnia: ${l.area} m²</div></div>
         <div class="mt-2 text-xs text-gray-400">Wynajmowane od:</div>${createOwnerCardHTML(allPlots.find(p => p.name === l.plotName)?.owner)}</div>`).join('');
+
+                // Dodaj przycisk wylogowania, jeśli to profil zalogowanego użytkownika
+                const logoutButtonHTML = (currentUser && currentUser.name === ownerName) ?
+                    `<button id="modal-logout-button" class="w-full mt-4 bg-red-800 text-white px-4 py-2 rounded-lg border border-red-600 hover:bg-red-700 transition-colors">Wyloguj się</button>` : '';
+
                 return `<div class="space-y-4">${createOwnerCardHTML(ownerName, true)}
         ${ownerDetailsHTML ? `<div class="pt-3 border-t border-gray-700">${ownerDetailsHTML}</div>` : ''}
         <div><h4 class="font-semibold text-md mb-2">Posiadane Działki (${ownedPlots.length})</h4>
             <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm"><span class="text-gray-400">Łączna pow.:</span><span>${totalPlotArea.toLocaleString()} m²</span></div>
             ${ownedPlots.length > 0 ? `<div class="space-y-2 mt-2">${ownedPlots.map(p => createPlotListItemHTML(p)).join('')}</div>` : ''}</div>
         <div class="border-t border-gray-700 pt-3"><h4 class="font-semibold text-md mb-1">Wynajmowane Lokale (${rentedLocals.length})</h4>
-            ${rentedLocals.length > 0 ? `<div class="space-y-2 mt-2">${rentedLocalsHTML}</div>` : '<p class="text-gray-500 text-sm">Brak</p>'}</div></div>`;
-            }
-
-            function renderDistrictContent(districtName, plotsInDistrict) {
-                const plotTypes = {};
-                const occupancy = { Zajęte: 0, Wolne: 0 };
-                let totalArea = 0;
-                plotsInDistrict.forEach(p => {
-                    const type = p.type || 'Inne';
-                    plotTypes[type] = (plotTypes[type] || 0) + 1;
-                    const isOwned = p.owner && p.owner.trim() !== '' && p.owner.toLowerCase().trim() !== 'skarb miasta';
-                    if (isOwned) { occupancy.Zajęte++; } else { occupancy.Wolne++; }
-                    totalArea += parseInt(p.area) || 0;
-                });
-                const plotListHTML = plotsInDistrict.map(p => createPlotListItemHTML(p)).join('');
-                const html = `
-                    <div><h3 class="text-2xl font-bold text-purple-400">${districtName}</h3></div>
-                    <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm border-b border-gray-700 pb-3 mb-3">
-                        <span>Liczba działek:</span><span class="font-medium">${plotsInDistrict.length}</span>
-                        <span>Łączna powierzchnia:</span><span class="font-medium">${totalArea.toLocaleString()} m²</span>
-                    </div>
-                    <div class="space-y-2 mb-4">${plotListHTML}</div>
-                    <div>
-                        <h4 class="text-md font-semibold mt-4 mb-2">Statystyki</h4>
-                        <div class="chart-container"><canvas id="plot-type-chart"></canvas></div>
-                        <div class="chart-container"><canvas id="occupancy-chart"></canvas></div>
-                    </div>`;
-                setTimeout(() => {
-                    destroyActiveCharts();
-                    const typeLabels = Object.keys(plotTypes);
-                    const typeColors = typeLabels.map(label => getColorForType(label, 1));
-                    createChart('plot-type-chart', 'pie', { labels: typeLabels, data: Object.values(plotTypes), colors: typeColors }, 'Typy działek');
-                    const occupancyLabels = Object.keys(occupancy);
-                    createChart('occupancy-chart', 'doughnut', { labels: occupancyLabels, data: Object.values(occupancy), colors: ['rgba(239, 68, 68, 0.8)', 'rgba(34, 197, 94, 0.8)'] }, 'Zajętość');
-                }, 100);
-                return html;
+            ${rentedLocals.length > 0 ? `<div class="space-y-2 mt-2">${rentedLocalsHTML}</div>` : '<p class="text-gray-500 text-sm">Brak</p>'}</div>
+        ${logoutButtonHTML}
+        </div>`;
             }
 
             function renderStreetContent(streetName) {
@@ -1170,6 +1214,18 @@
                     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: type === 'bar' ? 'top' : 'right', labels: { color: '#d1d5db' } } } }
                 });
                 activeCharts.push(chart);
+            }
+
+            function parseDate(dateStr) {
+                const parts = dateStr.split('.');
+                return new Date(parts[2], parts[1] - 1, parts[0]);
+            }
+
+            function dateDiffInDays(a, b) {
+                const _MS_PER_DAY = 1000 * 60 * 60 * 24;
+                const utc1 = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
+                const utc2 = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
+                return Math.floor((utc2 - utc1) / _MS_PER_DAY);
             }
 
             function destroyActiveCharts() {
@@ -1280,6 +1336,15 @@
                     e.preventDefault();
                     navigateToModal({ type: 'plotType', data: e.currentTarget.dataset.plotType });
                 }));
+
+                // Listener dla przycisku wylogowania w modalu
+                const modalLogoutButton = document.getElementById('modal-logout-button');
+                if (modalLogoutButton) {
+                    modalLogoutButton.addEventListener('click', () => {
+                        closeModal();
+                        logoutUser();
+                    });
+                }
             }
 
             searchInput.addEventListener('input', () => {
@@ -1454,6 +1519,90 @@
                 touchPanning = false;
                 pinchZooming = false;
                 setTimeout(() => { isDragging = false; }, 50);
+            });
+
+            const loginButton = document.getElementById('login-button');
+            const profileButton = document.getElementById('profile-button');
+            const profilePic = document.getElementById('profile-pic');
+            const loginModal = document.getElementById('login-modal');
+            const closeLoginModalButton = document.getElementById('close-login-modal');
+            const loginForm = document.getElementById('login-form');
+            const loginError = document.getElementById('login-error');
+
+            function attemptAutoLogin() {
+                const savedIdentifier = localStorage.getItem('userIdentifier');
+                const savedPIN = localStorage.getItem('userPIN');
+
+                if (savedIdentifier && savedPIN) {
+                    loginUser(savedIdentifier, savedPIN, true);
+                }
+            }
+
+            function loginUser(identifier, pin, isAutoLogin = false) {
+                const identifierLower = identifier.toLowerCase();
+                const user = allOwners.find(o =>
+                    o.pin === pin &&
+                    o.type === 'fizyczna' &&
+                    (o.nio === identifier || o.name.toLowerCase() === identifierLower)
+                );
+
+                if (user) {
+                    currentUser = user;
+                    localStorage.setItem('userIdentifier', user.nio || user.name);
+                    localStorage.setItem('userPIN', user.pin);
+
+                    loginModal.classList.add('hidden');
+                    loginButton.classList.add('hidden');
+
+                    profilePic.src = user.photo || 'placeholder.webp';
+                    profileButton.classList.remove('hidden');
+
+                    loginError.classList.add('hidden');
+                    loginForm.reset();
+
+                    if (modalHistory.length > 0) {
+                        renderCurrentModal();
+                    }
+                } else if (!isAutoLogin) {
+                    loginError.textContent = 'Nieprawidłowe dane logowania.';
+                    loginError.classList.remove('hidden');
+                }
+            }
+
+            function logoutUser() {
+                currentUser = null;
+                localStorage.removeItem('userIdentifier');
+                localStorage.removeItem('userPIN');
+
+                loginButton.classList.remove('hidden');
+                profileButton.classList.add('hidden');
+                profilePic.src = 'placeholder.webp';
+
+                if (modalHistory.length > 0) {
+                    renderCurrentModal();
+                }
+            }
+
+            loginButton.addEventListener('click', () => {
+                loginModal.classList.remove('hidden');
+            });
+
+            profileButton.addEventListener('click', () => {
+                if (currentUser) {
+                    openNewModal({ type: 'owner', data: currentUser.name });
+                }
+            });
+
+            closeLoginModalButton.addEventListener('click', () => {
+                loginModal.classList.add('hidden');
+                loginError.classList.add('hidden');
+            });
+
+            loginForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const identifier = e.target.loginIdentifier.value;
+                const pin = e.target.pin.value;
+                loginUser(identifier, pin);
             });
 
             fetchAllData();
