@@ -554,6 +554,7 @@ function setupLottery() {
         const donorName = (transactionIndex > 0) ? plot.history[transactionIndex - 1].newOwner : 'Skarb Miasta';
         return legalEntityOwners.has(donorName) && !donorName.toLowerCase().includes('skarb miasta');
     });
+    console.log(state.eligibleForLottery);
     if (state.eligibleForLottery.length > 0) {
         dom.lotteryButton.classList.remove('hidden');
     }
