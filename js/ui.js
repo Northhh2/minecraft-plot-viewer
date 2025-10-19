@@ -1,12 +1,9 @@
 import { state } from './state.js';
-import { getColorForType, parseDate, dateDiffInDays } from './utils.js';
+import { getColorForType } from './utils.js';
 
-// Zmienne globalne modułu
 let appData;
 let dom;
 let isAnimatingModal = false;
-
-// --- Główne funkcje publiczne ---
 
 export function initializeUI(data) {
     appData = data;
@@ -29,6 +26,7 @@ export function initializeUI(data) {
         wheelCanvas: document.getElementById('wheelCanvas'),
         spinButton: document.getElementById('spin-button'),
         lotteryResult: document.getElementById('lottery-result'),
+        tooltip: document.getElementById('tooltip'),
     };
     
     setupEventListeners();
@@ -56,7 +54,6 @@ export function goBackModal() {
 export function closeModal() {
     state.modalHistory = [];
     dom.modal.classList.remove('show');
-    // Usuń przyciemnienie i podświetlenie z mapy
     const mapModule = import('./map.js');
     mapModule.then(map => {
         map.dimOtherPlots();
@@ -64,7 +61,33 @@ export function closeModal() {
     });
 }
 
-// --- Funkcje wewnętrzne (nieeksportowane) ---
+export function showSimpleTooltip(e, plot) {
+    let statusText = '', statusColor = '';
+    if (plot.status === 'pending') {
+        statusText = 'W trakcie zmiany własności';
+        statusColor = 'text-yellow-400';
+    } else {
+        const isOwned = plot.owner && plot.owner.trim() !== '' && plot.owner.toLowerCase().trim() !== 'skarb miasta';
+        statusText = isOwned ? 'Zajęta' : 'Wolna';
+        statusColor = isOwned ? 'text-red-400' : 'text-green-400';
+    }
+    dom.tooltip.innerHTML = `<div class="font-bold">${plot.name || `Działka ${plot.id}`}</div><div class="text-xs ${statusColor}">${statusText}</div>`;
+    dom.tooltip.classList.remove('hidden');
+    moveTooltip(e);
+}
+
+export function hideTooltip() { 
+    dom.tooltip.classList.add('hidden'); 
+}
+
+export function moveTooltip(e) {
+    const PADDING = 20; let x = e.clientX + PADDING; let y = e.clientY + PADDING;
+    if (x + dom.tooltip.offsetWidth > window.innerWidth) x = e.clientX - dom.tooltip.offsetWidth - PADDING;
+    if (y + dom.tooltip.offsetHeight > window.innerHeight) y = e.clientY - dom.tooltip.offsetHeight - PADDING;
+    dom.tooltip.style.left = `${x}px`; 
+    dom.tooltip.style.top = `${y}px`;
+}
+
 
 function setupEventListeners() {
     dom.closeModalBtn.addEventListener('click', closeModal);
@@ -83,6 +106,39 @@ function setupEventListeners() {
     dom.lotteryButton.addEventListener('click', openLottery);
     dom.closeLotteryButton.addEventListener('click', () => dom.lotteryOverlay.classList.add('hidden'));
     dom.spinButton.addEventListener('click', spinWheel);
+
+    dom.wheelCanvas.addEventListener('mousemove', (e) => {
+        if (state.eligibleForLottery.length <= 10) return;
+
+        const canvasRect = dom.wheelCanvas.getBoundingClientRect();
+        const x = e.clientX - canvasRect.left;
+        const y = e.clientY - canvasRect.top;
+        const radius = dom.wheelCanvas.width / 2;
+        
+        const dx = x - radius;
+        const dy = y - radius;
+        
+        if (dx * dx + dy * dy > (radius-5) * (radius-5)) {
+            hideTooltip();
+            return;
+        }
+
+        let angle = Math.atan2(dy, dx);
+        if (angle < 0) angle += 2 * Math.PI;
+
+        const numOptions = state.eligibleForLottery.length;
+        const arcSize = 2 * Math.PI / numOptions;
+        const segmentIndex = Math.floor(angle / arcSize);
+        
+        const plot = state.eligibleForLottery[segmentIndex];
+        if (plot) {
+            dom.tooltip.innerHTML = `<div class="font-semibold">${plot.name}</div>`;
+            dom.tooltip.classList.remove('hidden');
+            moveTooltip(e);
+        }
+    });
+
+    dom.wheelCanvas.addEventListener('mouseleave', hideTooltip);
 }
 
 function renderCurrentModal() {
@@ -491,13 +547,16 @@ function drawWheel() {
         ctx.lineTo(radius, radius);
         ctx.fill();
         ctx.stroke();
-        ctx.save();
-        ctx.fillStyle = 'white';
-        ctx.font = '14px Inter';
-        ctx.translate(radius + Math.cos(angle + arcSize / 2) * (radius * 0.7), radius + Math.sin(angle + arcSize / 2) * (radius * 0.7));
-        ctx.rotate(angle + arcSize / 2 + Math.PI / 2);
-        ctx.fillText(state.eligibleForLottery[i].name, -ctx.measureText(state.eligibleForLottery[i].name).width / 2, 0);
-        ctx.restore();
+
+        if (numOptions <= 10) {
+            ctx.save();
+            ctx.fillStyle = 'white';
+            ctx.font = '14px Inter';
+            ctx.translate(radius + Math.cos(angle + arcSize / 2) * (radius * 0.7), radius + Math.sin(angle + arcSize / 2) * (radius * 0.7));
+            ctx.rotate(angle + arcSize / 2 + Math.PI / 2);
+            ctx.fillText(state.eligibleForLottery[i].name, -ctx.measureText(state.eligibleForLottery[i].name).width / 2, 0);
+            ctx.restore();
+        }
     }
 }
 function spinWheel() {

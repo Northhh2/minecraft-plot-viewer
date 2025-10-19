@@ -1,6 +1,6 @@
 import { state } from './state.js';
 import { MAP_WIDTH, MAP_HEIGHT, MAP_IMAGE_URL } from './config.js';
-import { openNewModal } from './ui.js';
+import { openNewModal, showSimpleTooltip, hideTooltip, moveTooltip } from './ui.js';
 import { getColorForType } from './utils.js';
 
 let appData;
@@ -374,31 +374,6 @@ function toggleLayer(layerId) {
     const isHidden = layer.classList.toggle('hidden');
     button.classList.toggle('active', !isHidden);
 }
-
-
-function showSimpleTooltip(e, plot) {
-    let statusText = '', statusColor = '';
-    if (plot.status === 'pending') {
-        statusText = 'W trakcie zmiany własności';
-        statusColor = 'text-yellow-400';
-    } else {
-        const isOwned = plot.owner && plot.owner.trim() !== '' && plot.owner.toLowerCase().trim() !== 'skarb miasta';
-        statusText = isOwned ? 'Zajęta' : 'Wolna';
-        statusColor = isOwned ? 'text-red-400' : 'text-green-400';
-    }
-    dom.tooltip.innerHTML = `<div class="font-bold">${plot.name || `Działka ${plot.id}`}</div><div class="text-xs ${statusColor}">${statusText}</div>`;
-    dom.tooltip.classList.remove('hidden');
-    moveTooltip(e);
-}
-
-function hideTooltip() { dom.tooltip.classList.add('hidden'); }
-function moveTooltip(e) {
-    const PADDING = 20; let x = e.clientX + PADDING; let y = e.clientY + PADDING;
-    if (x + dom.tooltip.offsetWidth > window.innerWidth) x = e.clientX - dom.tooltip.offsetWidth - PADDING;
-    if (y + dom.tooltip.offsetHeight > window.innerHeight) y = e.clientY - dom.tooltip.offsetHeight - PADDING;
-    dom.tooltip.style.left = `${x}px`; dom.tooltip.style.top = `${y}px`;
-}
-
 
 export function dimOtherPlots(plotsToShow = []) {
     dom.svg.querySelectorAll('.plot-rect.dimmed').forEach(rect => rect.classList.remove('dimmed'));

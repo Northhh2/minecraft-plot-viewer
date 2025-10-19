@@ -28,25 +28,33 @@ export function processData(results) {
     try {
         const [plotsData, mergedData, streetsData, localsData, ownersData, transactionsData, settingsData, lotteryData] = results;
 
-        const allPlots = plotsData.data.map(d => ({
-            id: d['Nr porządkowy'],
-            name: d['Nazwa porządkowa działki'],
-            type: d['Typ'],
-            x1: parseInt(d['X (lewy górny)'], 10) || 0,
-            z1: parseInt(d['Z (lewy górny)'], 10) || 0,
-            x2: parseInt(d['X (prawy dolny)'], 10) || 0,
-            z2: parseInt(d['Z (prawy dolny)'], 10) || 0,
-            width: Math.abs(parseInt(d['Bok X'], 10)) || 0,
-            height: Math.abs(parseInt(d['Bok Z'], 10)) || 0,
-            area: d['Powierzchnia'],
-            value: d['Wartość'],
-            owner: 'Skarb Miasta',
-            status: 'owned',
-            district: d['Dzielnica'],
-            street: d['Ulica'],
-            buildingNumber: d['Numer budynku'],
-            history: []
-        }));
+        const allPlots = plotsData.data
+            // KROK 1: Odfiltruj wiersze z brakującymi, kluczowymi danymi
+            .filter(d => 
+                d['Nr porządkowy'] &&
+                d['X (lewy górny)'] && d['Z (lewy górny)'] &&
+                d['Bok X'] && d['Bok Z']
+            )
+            // KROK 2: Przetwarzaj tylko poprawne wiersze
+            .map(d => ({
+                id: d['Nr porządkowy'],
+                name: d['Nazwa porządkowa działki'],
+                type: d['Typ'],
+                x1: parseInt(d['X (lewy górny)'], 10),
+                z1: parseInt(d['Z (lewy górny)'], 10),
+                x2: parseInt(d['X (prawy dolny)'], 10),
+                z2: parseInt(d['Z (prawy dolny)'], 10),
+                width: Math.abs(parseInt(d['Bok X'], 10)),
+                height: Math.abs(parseInt(d['Bok Z'], 10)),
+                area: d['Powierzchnia'],
+                value: d['Wartość'],
+                owner: 'Skarb Miasta',
+                status: 'owned',
+                district: d['Dzielnica'],
+                street: d['Ulica'],
+                buildingNumber: d['Numer budynku'],
+                history: []
+            }));
 
         const allLocals = localsData.data.map(l => {
             const parentPlot = allPlots.find(p => p.name === l['Numer działki']);
@@ -102,13 +110,20 @@ export function processData(results) {
 
         const mergedPlots = processMergedPlots(mergedData.data.filter(m => m['Działka główna'] && m['Działka dołączana']).map(d => ({ plot1: d['Działka główna'], plot2: d['Działka dołączana'] })), allPlots);
         
-        const streets = streetsData.data.map(d => ({
-            name: d['Nazwa ulicy'],
-            x1: parseInt(d['X (lewy górny)'], 10) || 0,
-            z1: parseInt(d['Z (lewy górny)'], 10) || 0,
-            width: Math.abs((parseInt(d['X (prawy dolny)'], 10) || 0) - (parseInt(d['X (lewy górny)'], 10) || 0)) + 1,
-            height: Math.abs((parseInt(d['Z (prawy dolny)'], 10) || 0) - (parseInt(d['Z (lewy górny)'], 10) || 0)) + 1
-        }));
+        const streets = streetsData.data
+            // KROK 1: Odfiltruj ulice z brakującymi koordynatami
+            .filter(d => 
+                d['X (lewy górny)'] && d['Z (lewy górny)'] &&
+                d['X (prawy dolny)'] && d['Z (prawy dolny)']
+            )
+            // KROK 2: Przetwarzaj tylko poprawne ulice
+            .map(d => ({
+                name: d['Nazwa ulicy'],
+                x1: parseInt(d['X (lewy górny)'], 10),
+                z1: parseInt(d['Z (lewy górny)'], 10),
+                width: Math.abs(parseInt(d['X (prawy dolny)'], 10) - parseInt(d['X (lewy górny)'], 10)) + 1,
+                height: Math.abs(parseInt(d['Z (prawy dolny)'], 10) - parseInt(d['Z (lewy górny)'], 10)) + 1
+            }));
 
         return {
             allPlots,
