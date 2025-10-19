@@ -101,6 +101,7 @@
             backdrop-filter: blur(5px);
             border: 1px solid #4b5563;
             transition: opacity 0.2s ease-in-out;
+            z-index: 60; /* Zwiększono z-index, aby był nad loterią */
         }
 
         #modal {
@@ -218,7 +219,7 @@
     </div>
 
     <div id="map-container" class="grab"><svg id="map-svg"></svg></div>
-    <div id="tooltip" class="hidden absolute p-2 rounded-lg shadow-xl text-sm z-40 pointer-events-none"></div>
+    <div id="tooltip" class="absolute p-2 rounded-lg shadow-xl text-sm pointer-events-none"></div>
     <div id="coords-display" class="absolute bottom-5 left-5 z-30 bg-gray-800 bg-opacity-75 text-white text-xs px-2 py-1 rounded-md pointer-events-none">X: 0, Z: 0</div>
     <button id="lottery-button" class="hidden absolute bottom-12 left-5 z-30 bg-yellow-500 text-black font-bold px-4 py-2 rounded-lg shadow-lg hover:bg-yellow-400 transition-colors">Loteria</button>
 
