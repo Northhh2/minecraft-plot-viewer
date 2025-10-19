@@ -106,8 +106,8 @@ export function processData(results) {
             name: d['Nazwa ulicy'],
             x1: parseInt(d['X (lewy górny)'], 10) || 0,
             z1: parseInt(d['Z (lewy górny)'], 10) || 0,
-            width: Math.abs(parseInt(d['X (prawy dolny)'], 10) - (parseInt(d['X (lewy górny)'], 10) || 0)) + 1,
-            height: Math.abs(parseInt(d['Z (prawy dolny)'], 10) - (parseInt(d['Z (lewy górny)'], 10) || 0)) + 1
+            width: Math.abs((parseInt(d['X (prawy dolny)'], 10) || 0) - (parseInt(d['X (lewy górny)'], 10) || 0)) + 1,
+            height: Math.abs((parseInt(d['Z (prawy dolny)'], 10) || 0) - (parseInt(d['Z (lewy górny)'], 10) || 0)) + 1
         }));
 
         return {

@@ -1,23 +1,25 @@
 export const SHEET_ID = '1swtElpz27sqLMNbATocFe9VHc1yZTSRxvHyikFL_R7U';
+const PLOTS_GID = '0';
+const MERGED_GID = '43897086';
+const STREETS_GID = '2101138806';
+const LOCALS_GID = '875214507';
+const OWNERS_GID = '92681717';
+const TRANSACTIONS_GID = '231383988';
+const SETTINGS_GID = '464636229';
+const LOTTERY_GID = '1580637376';
 
-const gids = {
-    PLOTS: '0',
-    MERGED: '43897086',
-    STREETS: '2101138806',
-    LOCALS: '875214507',
-    OWNERS: '92681717',
-    TRANSACTIONS: '231383988',
-    SETTINGS: '464636229',
-    LOTTERY: '1580637376'
+export const urls = {
+    plots: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${PLOTS_GID}`,
+    merged: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${MERGED_GID}`,
+    streets: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${STREETS_GID}`,
+    locals: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${LOCALS_GID}`,
+    owners: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${OWNERS_GID}`,
+    transactions: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${TRANSACTIONS_GID}`,
+    settings: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SETTINGS_GID}`,
+    lottery: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${LOTTERY_GID}`
 };
 
-export const urls = Object.fromEntries(
-    Object.entries(gids).map(([key, gid]) => [
-        key.toLowerCase(), 
-        `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`
-    ])
-);
-
-export const MAP_IMAGE_URL = 'map.png';
+export const MAP_IMAGE_URL = 'map.webp';
 export const MAP_WIDTH = 4296;
 export const MAP_HEIGHT = 2360;
+
