@@ -1,14 +1,31 @@
 import { urls } from './config.js';
-import { state } from './state.js';
 
+/**
+ * Pobiera surowe dane ze wszystkich arkuszy Google.
+ * @returns {Promise<Array|null>} Obietnica, która zwraca tablicę z przetworzonymi danymi CSV lub null w przypadku błędu.
+ */
 export async function fetchData() {
     try {
         const responses = await Promise.all(Object.values(urls).map(url => fetch(url)));
         if (responses.some(res => !res.ok)) throw new Error('Network response was not ok');
 
         const texts = await Promise.all(responses.map(res => res.text()));
-        const results = await Promise.all(texts.map(text => new Promise(resolve => Papa.parse(text, { header: true, skipEmptyLines: true, complete: resolve }))));
-        
+        return await Promise.all(texts.map(text => new Promise(resolve => Papa.parse(text, { header: true, skipEmptyLines: true, complete: resolve }))));
+    } catch (error) {
+        console.error("Błąd podczas pobierania danych z sieci:", error);
+        return null;
+    }
+}
+
+/**
+ * Przetwarza surowe dane wczytane z arkuszy na ustrukturyzowane obiekty aplikacji.
+ * @param {Array} results - Tablica surowych danych z PapaParse.
+ * @returns {Object|null} Obiekt zawierający wszystkie przetworzone dane aplikacji lub null w przypadku błędu.
+ */
+export function processData(results) {
+    if (!results) return null;
+
+    try {
         const [plotsData, mergedData, streetsData, localsData, ownersData, transactionsData, settingsData, lotteryData] = results;
 
         const allPlots = plotsData.data.map(d => ({
@@ -105,8 +122,7 @@ export async function fetchData() {
         };
 
     } catch (error) {
-        console.error("Błąd podczas pobierania danych:", error);
-        // Można by tu obsłużyć błąd w UI
+        console.error("Błąd podczas przetwarzania danych:", error);
         return null;
     }
 }
@@ -120,7 +136,6 @@ function updatePlotOwners(allPlots, allTransactions) {
 
     for (const plotName in transactionsByPlot) {
         transactionsByPlot[plotName].sort((a, b) => {
-            // Zakładamy, że data to po prostu liczba dni w grze
             return (parseInt(a.date, 10) || 0) - (parseInt(b.date, 10) || 0);
         });
     }
