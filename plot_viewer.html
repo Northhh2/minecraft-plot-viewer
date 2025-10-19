@@ -101,7 +101,7 @@
             backdrop-filter: blur(5px);
             border: 1px solid #4b5563;
             transition: opacity 0.2s ease-in-out;
-            z-index: 60; /* Zwiększono z-index, aby był nad loterią */
+            z-index: 60;
         }
 
         #modal {
@@ -145,20 +145,25 @@
         
         #search-suggestions { max-height: 300px; overflow-y: auto; }
         
-        .lottery-badge {
-            background: linear-gradient(45deg, #FFD700, #F0B400, #FFD700);
+        .lottery-badge, .donor-badge {
             background-size: 200% 200%;
-            animation: gradient-shine 3s ease infinite;
-            color: #422b00;
-            font-weight: bold;
-            padding: 4px 8px;
+            animation: gradient-shine-gold 3s ease infinite;
             border-radius: 6px;
-            font-size: 10px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+        }
+        .lottery-badge {
+             background: linear-gradient(45deg, #FFD700, #F0B400, #FFD700);
+             color: #422b00;
+             font-weight: bold;
+             padding: 4px 8px;
+             font-size: 10px;
+             text-transform: uppercase;
+             letter-spacing: 0.5px;
+        }
+        .donor-badge {
+            background: linear-gradient(135deg, #6b5a2c, #e0c575, #6b5a2c);
         }
 
-        @keyframes gradient-shine {
+        @keyframes gradient-shine-gold {
             0% { background-position: 0% 50%; }
             50% { background-position: 100% 50%; }
             100% { background-position: 0% 50%; }
@@ -174,6 +179,15 @@
         
         #wheelCanvas {
             transition: transform 5s cubic-bezier(.24,.99,.43,1);
+        }
+        
+        .wheel-idle-spin {
+            animation: wheel-spin-slow 60s linear infinite;
+        }
+
+        @keyframes wheel-spin-slow {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
         }
 
         .confetti {
@@ -191,7 +205,7 @@
         }
 
         @media (max-width: 768px) {
-            #tooltip, .plot-text, .controls, .control-button, #modal { /* ... bez zmian ... */ }
+            /* ... bez zmian ... */
         }
     </style>
 </head>
@@ -266,8 +280,13 @@
         <div class="absolute top-5 right-5">
             <button id="close-lottery-button" class="text-gray-400 hover:text-white text-4xl font-bold">&times;</button>
         </div>
+        <div class="text-center">
+            <h2 class="text-4xl font-bold text-yellow-400 mb-2" style="text-shadow: 2px 2px 8px #000;">Loteria Działkowa</h2>
+            <p id="lottery-plots-count" class="text-lg text-gray-300 mb-4"></p>
+        </div>
         <div class="relative flex flex-col items-center justify-center">
-            <div class="absolute top-0 -mt-8 text-white text-2xl font-bold" style="text-shadow: 2px 2px 4px #000;">▲</div>
+            <p id="next-winner-info" class="mb-4 text-lg text-gray-300"></p>
+            <div class="absolute top-0 text-white text-2xl font-bold" style="text-shadow: 2px 2px 4px #000; transform: translateY(-20px) rotate(180deg);">▲</div>
             <canvas id="wheelCanvas" width="500" height="500"></canvas>
             <button id="spin-button" class="mt-8 bg-green-600 text-white font-bold py-4 px-8 rounded-full text-2xl shadow-lg hover:bg-green-500 transition-transform transform hover:scale-105 disabled:bg-gray-500 disabled:cursor-not-allowed">Zakręć!</button>
         </div>
