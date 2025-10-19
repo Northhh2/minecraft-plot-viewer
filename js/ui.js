@@ -5,6 +5,18 @@ let appData;
 let dom;
 let isAnimatingModal = false;
 
+// --- Helper Functions ---
+function getPlotStatusInfo(plot) {
+    if (plot.status === 'pending') {
+        return { text: 'W trakcie zmiany własności', color: 'text-yellow-400', isOwned: true };
+    }
+    const hasHistory = plot.history && plot.history.length > 0;
+    if (hasHistory) {
+        return { text: 'Zajęta', color: 'text-red-400', isOwned: true };
+    }
+    return { text: 'Wolna', color: 'text-green-400', isOwned: false };
+}
+
 export function initializeUI(data) {
     appData = data;
     dom = {
@@ -29,9 +41,13 @@ export function initializeUI(data) {
         tooltip: document.getElementById('tooltip'),
         nextWinnerInfo: document.getElementById('next-winner-info'),
         lotteryPlotsCount: document.getElementById('lottery-plots-count'),
+        searchInput: document.getElementById('search-input'),
+        searchButton: document.getElementById('search-button'),
+        searchSuggestions: document.getElementById('search-suggestions'),
     };
     
     setupEventListeners();
+    setupSearch();
     setupLottery();
     attemptAutoLogin();
 }
@@ -64,16 +80,8 @@ export function closeModal() {
 }
 
 export function showSimpleTooltip(e, plot) {
-    let statusText = '', statusColor = '';
-    if (plot.status === 'pending') {
-        statusText = 'W trakcie zmiany własności';
-        statusColor = 'text-yellow-400';
-    } else {
-        const isOwned = plot.owner && plot.owner.trim() !== '' && !plot.owner.toLowerCase().includes('skarb miasta');
-        statusText = isOwned ? 'Zajęta' : 'Wolna';
-        statusColor = isOwned ? 'text-red-400' : 'text-green-400';
-    }
-    dom.tooltip.innerHTML = `<div class="font-bold">${plot.name || `Działka ${plot.id}`}</div><div class="text-xs ${statusColor}">${statusText}</div>`;
+    const status = getPlotStatusInfo(plot);
+    dom.tooltip.innerHTML = `<div class="font-bold">${plot.name || `Działka ${plot.id}`}</div><div class="text-xs ${status.color}">${status.text}</div>`;
     dom.tooltip.classList.remove('hidden');
     moveTooltip(e);
 }
@@ -192,7 +200,7 @@ function renderCurrentModal() {
 
 function renderPlotContent(plot) {
     const { allLocals, lotteryHistory } = appData;
-    const isOwned = plot.owner && plot.owner.trim() !== '' && !plot.owner.toLowerCase().includes('skarb miasta');
+    const status = getPlotStatusInfo(plot);
     const ownerInfo = plot.owner || 'Skarb Miasta';
     
     const localsOnPlot = allLocals.filter(l => l.plotName === plot.name);
@@ -277,7 +285,7 @@ function renderPlotContent(plot) {
         lotteryBadgeHTML = createDonorBadgeHTML(lotteryWin.winner);
     }
 
-    return `<div><h3 class="text-2xl font-bold ${isOwned ? 'text-red-400' : 'text-green-400'}">${plot.name}</h3><p class="text-gray-400 text-sm">${address}</p></div>
+    return `<div><h3 class="text-2xl font-bold ${status.isOwned ? 'text-red-400' : 'text-green-400'}">${plot.name}</h3><p class="text-gray-400 text-sm">${address}</p></div>
         <div class="space-y-3">
             ${createOwnerCardHTML(ownerInfo)}
             ${lotteryBadgeHTML}
@@ -414,20 +422,14 @@ function renderPlotTypeContent(typeName) {
         <div class="space-y-2 mb-4">${plotsOfType.map(p => createPlotListItemHTML(p)).join('')}</div>`;
 }
 
+
+
 function createPlotListItemHTML(plot) {
-    let statusText = '', statusColor = '';
-    if (plot.status === 'pending') {
-        statusText = 'W trakcie zmiany własności';
-        statusColor = 'text-yellow-400';
-    } else {
-        const isOwned = plot.owner && plot.owner.trim() !== '' && !plot.owner.toLowerCase().includes('skarb miasta');
-        statusText = isOwned ? 'Zajęta' : 'Wolna';
-        statusColor = isOwned ? 'text-red-400' : 'text-green-400';
-    }
+    const status = getPlotStatusInfo(plot);
     return `<div data-plot-name="${plot.name}" class="bg-gray-700 p-2 rounded-md hover:bg-gray-600 cursor-pointer transition-colors">
         <div class="font-semibold text-purple-400">${plot.name} (${plot.area} m²)</div>
         <div class="text-xs text-gray-400">Właściciel: <span class="font-medium text-gray-200">${plot.owner || 'Brak'}</span></div>
-        <div class="text-xs ${statusColor}">${statusText}</div></div>`;
+        <div class="text-xs ${status.color}">${status.text}</div></div>`;
 }
 
 function createOwnerCardHTML(ownerName, isSelf = false) {
@@ -499,6 +501,115 @@ function addModalEventListeners() {
             logoutUser();
         });
     }
+}
+
+// --- Search Functions ---
+function setupSearch() {
+    dom.searchInput.addEventListener('input', () => {
+        const query = dom.searchInput.value.trim().toLowerCase();
+        dom.searchSuggestions.innerHTML = '';
+        if (!query) {
+            dom.searchSuggestions.classList.add('hidden');
+            return;
+        }
+
+        const suggestions = [];
+        const { allPlots, allOwners, streets, allLocals } = appData;
+        
+        // Działki
+        allPlots.filter(p => p.name.toLowerCase().includes(query) || p.id.includes(query)).slice(0, 3)
+            .forEach(p => suggestions.push({ type: 'plot', label: `Działka: ${p.name}`, value: p.name }));
+        // Właściciele
+        [...new Set(allPlots.map(p => p.owner))].filter(o => o && o.toLowerCase().includes(query)).slice(0, 2)
+            .forEach(o => suggestions.push({ type: 'owner', label: `Właściciel: ${o}`, value: o }));
+        // Ulice
+        [...new Set(streets.map(s => s.name))].filter(s => s && s.toLowerCase().includes(query)).slice(0, 2)
+            .forEach(s => suggestions.push({ type: 'street', label: `Ulica: ${s}`, value: s }));
+        // Adresy Lokali
+        allLocals.filter(l => {
+            const fullAddress = `${l.street.toLowerCase()} ${l.building}${l.klatka || ''}/${l.localNum}`;
+            return l.street && l.building && l.localNum && fullAddress.includes(query);
+        }).slice(0, 3)
+            .forEach(l => {
+                const address = `${l.street} ${l.building}${l.klatka || ''}/${l.localNum}`;
+                suggestions.push({ type: 'local_address', label: `Lokal: ${address}`, value: address});
+            });
+        // Adresy
+        allPlots.filter(p => p.street && p.buildingNumber && `${p.street.toLowerCase()} ${p.buildingNumber}`.includes(query)).slice(0, 3)
+            .forEach(p => {
+                const address = `${p.street} ${p.buildingNumber}`;
+                suggestions.push({ type: 'address', label: `Adres: ${address}`, value: address});
+            });
+        
+        if (suggestions.length > 0) {
+            suggestions.forEach(s => {
+                const div = document.createElement('div');
+                div.className = 'p-2 hover:bg-purple-600 cursor-pointer';
+                div.textContent = s.label;
+                div.addEventListener('click', () => findAndCenter(s));
+                dom.searchSuggestions.appendChild(div);
+            });
+            dom.searchSuggestions.classList.remove('hidden');
+        } else {
+            dom.searchSuggestions.classList.add('hidden');
+        }
+    });
+
+    document.addEventListener('click', (e) => { if (!dom.searchInput.parentElement.contains(e.target)) dom.searchSuggestions.classList.add('hidden'); });
+    dom.searchButton.addEventListener('click', () => dom.searchInput.dispatchEvent(new KeyboardEvent('keyup', {'key': 'Enter'})));
+    dom.searchInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') { const first = dom.searchSuggestions.querySelector('div'); if (first) first.click(); } });
+}
+
+function findAndCenter(item) {
+    clearHighlight();
+    let targetPlots = [];
+    const { allPlots, allLocals } = appData;
+
+    if (item.type === 'plot') {
+        const plot = allPlots.find(p => p.name === item.value);
+        if (plot) { targetPlots.push(plot); openNewModal({type: 'plot', data: plot}); }
+    } else if (item.type === 'owner') {
+        targetPlots = allPlots.filter(p => p.owner === item.value);
+        openNewModal({type: 'owner', data: item.value});
+    } else if (item.type === 'street') {
+        targetPlots = allPlots.filter(p => p.street === item.value);
+        openNewModal({type: 'street', data: item.value});
+    } else if (item.type === 'address' || item.type === 'local_address') {
+        const [addressPart, localNum] = item.value.split('/');
+        const lastSpaceIndex = addressPart.lastIndexOf(' ');
+        const street = addressPart.substring(0, lastSpaceIndex);
+        const buildingAndStaircase = addressPart.substring(lastSpaceIndex + 1);
+
+        if(item.type === 'local_address') {
+            const local = allLocals.find(l => l.street === street && (l.building + (l.klatka || '')) === buildingAndStaircase && l.localNum === localNum);
+            if (local) {
+                const plot = allPlots.find(p => p.name === local.plotName);
+                if(plot) {
+                    targetPlots.push(plot);
+                    openNewModal({type: 'plot', data: plot});
+                    navigateToModal({type: 'local', data: local});
+                }
+            }
+        } else { // address
+            const plot = allPlots.find(p => p.street === street && p.buildingNumber === buildingAndStaircase);
+            if (plot) {
+                targetPlots.push(plot);
+                openNewModal({type: 'plot', data: plot});
+            }
+        }
+    }
+
+    if(targetPlots.length > 0) {
+        const { initialViewBox } = state;
+        const minX = Math.min(...targetPlots.map(p => p.x1)), maxX = Math.max(...targetPlots.map(p => p.x2));
+        const minZ = Math.min(...targetPlots.map(p => p.z1)), maxZ = Math.max(...targetPlots.map(p => p.z2));
+        const centerX = minX + (maxX - minX) / 2, centerZ = minZ + (maxZ - minZ) / 2;
+        const contentWidth = Math.max(300, (maxX - minX) * 1.5), newH = (contentWidth / initialViewBox.w) * initialViewBox.h;
+        setViewBox(centerX - contentWidth / 2, centerZ - newH / 2, contentWidth, newH);
+        highlightPlots(targetPlots.map(p => p.id));
+    }
+    dom.searchInput.value = '';
+    dom.searchSuggestions.classList.add('hidden');
 }
 
 // --- Auth Functions ---

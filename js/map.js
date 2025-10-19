@@ -79,7 +79,7 @@ function calculateInitialViewBox() {
 }
 
 
-function setViewBox(x, y, w, h) {
+export function setViewBox(x, y, w, h) {
     const isMobile = window.innerWidth <= 768;
     const minZoom = isMobile ? 50 : 100;
     w = Math.max(minZoom, w);
