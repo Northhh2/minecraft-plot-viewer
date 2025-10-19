@@ -1,5 +1,6 @@
 import { state } from './state.js';
 import { getColorForType } from './utils.js';
+import { setViewBox, highlightPlots, clearHighlight } from './map.js';
 
 let appData;
 let dom;
