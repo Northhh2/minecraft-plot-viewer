@@ -552,6 +552,8 @@ function setupLottery() {
         if (!lastPaidTransaction || lastPaidTransaction.type !== 'Darowizna') return false;
         const transactionIndex = plot.history.findIndex(h => h.date === lastPaidTransaction.date && h.newOwner === lastPaidTransaction.newOwner);
         const donorName = (transactionIndex > 0) ? plot.history[transactionIndex - 1].newOwner : 'Skarb Miasta';
+        console.log(legalEntityOwners);
+        console.log(donorName);
         return legalEntityOwners.has(donorName) && !donorName.toLowerCase().includes('skarb miasta');
     });
     console.log(state.eligibleForLottery);
