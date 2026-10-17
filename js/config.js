@@ -21,7 +21,7 @@ export const urls = {
 
 // Base URL of the Worker API (e.g. 'https://plot-portal-api.<account>.workers.dev').
 // Empty string = legacy mode: read straight from the Google Sheet above.
-export const API_BASE = globalThis.PLOT_API_BASE ?? '';
+export const API_BASE = globalThis.PLOT_API_BASE ?? 'https://plot-portal-api.northh.workers.dev';
 
 export const MAP_IMAGE_URL = 'map.webp';
 // Square city map drawn over the base map. Bounds are inclusive block coordinates:

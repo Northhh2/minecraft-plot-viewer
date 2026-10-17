@@ -7,4 +7,4 @@ compatibility_date = "2025-01-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "plot-portal"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "3b3043a4-8441-4a93-9a4f-67642721ce99"
