@@ -1,7 +1,7 @@
 import { state } from './state.js';
-import { MAP_WIDTH, MAP_HEIGHT, MAP_IMAGE_URL } from './config.js';
+import { MAP_WIDTH, MAP_HEIGHT, MAP_IMAGE_URL, CITY_MAP } from './config.js';
 import { openNewModal, showSimpleTooltip, hideTooltip, moveTooltip } from './ui.js';
-import { getColorForType } from './utils.js';
+import { getColorForType, escapeHtml } from './utils.js';
 
 let appData;
 let dom;
@@ -32,7 +32,16 @@ export function drawMap() {
     mapImage.setAttribute('height', MAP_HEIGHT);
     dom.svg.appendChild(mapImage);
 
-    ['districts', 'merged', 'streets', 'plots'].forEach(layerId => {
+    const cityImage = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+    cityImage.setAttribute('href', CITY_MAP.url);
+    cityImage.setAttribute('x', CITY_MAP.x1);
+    cityImage.setAttribute('y', CITY_MAP.z1);
+    cityImage.setAttribute('width', CITY_MAP.x2 - CITY_MAP.x1 + 1);
+    cityImage.setAttribute('height', CITY_MAP.z2 - CITY_MAP.z1 + 1);
+    cityImage.setAttribute('preserveAspectRatio', 'none');
+    dom.svg.appendChild(cityImage);
+
+    ['districts', 'merged', 'streets', 'plots', 'metro'].forEach(layerId => {
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         g.id = `${layerId}-layer`;
         layers[layerId] = g;
@@ -43,8 +52,84 @@ export function drawMap() {
     drawPlots();
     drawMergedPlots();
     drawDistrictBoundaries();
+    drawMetro();
     
     calculateInitialViewBox();
+}
+
+/** Metro lines (their compiled route, or straight links between stops when the game could not compile one),
+ *  stations as dots, and a legend of the lines. Names and colours come from the game, so they only ever reach
+ *  the DOM through textContent / attributes. */
+function drawMetro() {
+    const metro = appData.metro;
+    const toggle = document.getElementById('toggle-metro');
+    document.getElementById('metro-legend')?.remove();
+    if (!metro || metro.lines.length === 0) { toggle?.classList.add('hidden'); return; }
+    toggle?.classList.remove('hidden');
+
+    const NS = 'http://www.w3.org/2000/svg';
+    const make = (tag, attrs = {}) => {
+        const el = document.createElementNS(NS, tag);
+        for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+        return el;
+    };
+    const stations = new Map(metro.stations.map(s => [s.id, s]));
+    const showTip = (e, text) => { dom.tooltip.textContent = text; dom.tooltip.classList.remove('hidden'); moveTooltip(e); };
+    const lineColorOfStation = new Map();
+
+    for (const line of metro.lines) {
+        const stops = line.stationIds.map(id => stations.get(id)).filter(s => s && s.x !== null);
+        const drawn = line.segments.length > 0;
+        const polylines = drawn ? line.segments : (stops.length > 1 ? [stops.map(s => [s.x, s.z])] : []);
+        const group = make('g', { 'data-line-id': line.id });
+
+        for (const pts of polylines) {
+            if (pts.length < 2) continue;
+            const points = pts.map(p => `${p[0] + 0.5},${p[1] + 0.5}`).join(' ');
+            const visible = make('polyline', {
+                points, fill: 'none', stroke: line.hex, 'stroke-width': 4, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                'vector-effect': 'non-scaling-stroke', opacity: line.running ? 0.95 : 0.6, 'pointer-events': 'none',
+                ...(drawn ? {} : { 'stroke-dasharray': '8 6' })
+            });
+            const hit = make('polyline', { points, fill: 'none', stroke: 'transparent', 'stroke-width': 14, 'vector-effect': 'non-scaling-stroke', 'pointer-events': 'stroke', style: 'cursor:pointer' });
+            hit.addEventListener('mouseenter', e => showTip(e, `Linia ${line.name}`));
+            hit.addEventListener('mousemove', moveTooltip);
+            hit.addEventListener('mouseleave', hideTooltip);
+            hit.addEventListener('click', () => { if (!state.isDragging) openNewModal({ type: 'metroLine', data: line.id }); });
+            group.append(visible, hit);
+        }
+        layers.metro.append(group);
+        for (const id of line.stationIds) if (!lineColorOfStation.has(id)) lineColorOfStation.set(id, line.hex);
+    }
+
+    for (const s of metro.stations) {
+        if (s.x === null) continue;
+        const dot = make('circle', {
+            cx: s.x + 0.5, cy: s.z + 0.5, r: 5, fill: '#ffffff', stroke: lineColorOfStation.get(s.id) ?? '#111827', 'stroke-width': 3,
+            'vector-effect': 'non-scaling-stroke', 'data-station-id': s.id, style: 'cursor:pointer'
+        });
+        dot.addEventListener('mouseenter', e => showTip(e, s.name));
+        dot.addEventListener('mousemove', moveTooltip);
+        dot.addEventListener('mouseleave', hideTooltip);
+        dot.addEventListener('click', () => { if (!state.isDragging) openNewModal({ type: 'metroStation', data: s.id }); });
+        layers.metro.append(dot);
+    }
+
+    const legend = document.createElement('div');
+    legend.id = 'metro-legend';
+    legend.className = 'fixed bottom-5 left-1/2 -translate-x-1/2 z-30 flex flex-wrap justify-center gap-2 bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 shadow-xl max-w-[70vw]';
+    for (const line of metro.lines) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'flex items-center gap-1.5 text-sm text-white hover:text-purple-300';
+        const dot = document.createElement('span');
+        dot.className = 'inline-block w-3 h-3 rounded-full';
+        dot.style.backgroundColor = line.hex;
+        chip.append(dot, document.createTextNode(line.name));
+        chip.addEventListener('click', () => openNewModal({ type: 'metroLine', data: line.id }));
+        legend.append(chip);
+    }
+    document.body.append(legend);
 }
 
 function calculateInitialViewBox() {
@@ -144,7 +229,7 @@ function drawStreets() {
         });
 
         streetGroup.addEventListener('mouseenter', (e) => {
-            dom.tooltip.innerHTML = `<div class="font-semibold">${streetName}</div>`;
+            dom.tooltip.innerHTML = `<div class="font-semibold">${escapeHtml(streetName)}</div>`;
             dom.tooltip.classList.remove('hidden');
             moveTooltip(e);
             streetGroup.querySelectorAll('.street-rect').forEach(r => {
@@ -280,6 +365,67 @@ function createDistrictOutline(plots) {
     return `M ${minX} ${minZ} L ${maxX} ${minZ} L ${maxX} ${maxZ} L ${minX} ${maxZ} Z`;
 }
 
+let cancelActivePick = null;
+
+/**
+ * Lets the user drag a rectangle on the map (mouse only). Calls done({x1, z1, x2, z2}) with inclusive
+ * block coordinates, or done(null) when cancelled with Escape or replaced by another pick.
+ */
+export function pickRect(done) {
+    if (cancelActivePick) cancelActivePick();
+    const ns = 'http://www.w3.org/2000/svg';
+    const box = document.createElementNS(ns, 'rect');
+    box.setAttribute('fill', 'rgba(168, 85, 247, 0.25)');
+    box.setAttribute('stroke', '#a855f7');
+    box.setAttribute('stroke-width', '2');
+    box.setAttribute('vector-effect', 'non-scaling-stroke');
+    box.style.pointerEvents = 'none';
+    let start = null;
+
+    const toBlock = e => {
+        const pt = dom.svg.createSVGPoint();
+        pt.x = e.clientX; pt.y = e.clientY;
+        const p = pt.matrixTransform(dom.svg.getScreenCTM().inverse());
+        return { x: Math.floor(p.x), z: Math.floor(p.y) };
+    };
+    const bounds = end => ({
+        x1: Math.min(start.x, end.x), z1: Math.min(start.z, end.z),
+        x2: Math.max(start.x, end.x), z2: Math.max(start.z, end.z)
+    });
+    const cleanup = () => {
+        dom.mapContainer.removeEventListener('mousedown', onDown, true);
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        document.removeEventListener('keydown', onKey);
+        dom.mapContainer.classList.remove('picking');
+        box.remove();
+        cancelActivePick = null;
+    };
+    const finish = result => { cleanup(); done(result); };
+    const onDown = e => {
+        if (e.button !== 0) return;
+        e.stopPropagation(); e.preventDefault();   // keep the map from panning / opening plots
+        start = toBlock(e);
+        dom.svg.appendChild(box);
+        onMove(e);
+    };
+    const onMove = e => {
+        if (!start) return;
+        const b = bounds(toBlock(e));
+        box.setAttribute('x', b.x1); box.setAttribute('y', b.z1);
+        box.setAttribute('width', b.x2 - b.x1 + 1); box.setAttribute('height', b.z2 - b.z1 + 1);
+    };
+    const onUp = e => { if (start) finish(bounds(toBlock(e))); };
+    const onKey = e => { if (e.key === 'Escape') finish(null); };
+
+    cancelActivePick = () => finish(null);
+    dom.mapContainer.classList.add('picking');
+    dom.mapContainer.addEventListener('mousedown', onDown, true);
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('keydown', onKey);
+}
+
 function setupMapInteraction() {
     let touchPanning = false;
     let pinchZooming = false;
@@ -366,6 +512,7 @@ function setupMapControls() {
     document.getElementById('toggle-streets').addEventListener('click', () => toggleLayer('streets'));
     document.getElementById('toggle-districts').addEventListener('click', () => toggleLayer('districts'));
     document.getElementById('toggle-merged').addEventListener('click', () => toggleLayer('merged'));
+    document.getElementById('toggle-metro').addEventListener('click', () => toggleLayer('metro'));
 }
 
 function toggleLayer(layerId) {
@@ -373,6 +520,7 @@ function toggleLayer(layerId) {
     const button = document.getElementById(`toggle-${layerId}`);
     const isHidden = layer.classList.toggle('hidden');
     button.classList.toggle('active', !isHidden);
+    if (layerId === 'metro') document.getElementById('metro-legend')?.classList.toggle('hidden', isHidden);
 }
 
 export function dimOtherPlots(plotsToShow = []) {

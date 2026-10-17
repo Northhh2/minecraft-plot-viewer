@@ -1,19 +1,19 @@
-import { urls } from './config.js';
-import { fetchData, processData } from './api.js';
+import { loadAppData } from './api.js';
 import { initializeMap, drawMap } from './map.js';
 import { initializeUI } from './ui.js';
+import { openFromHash } from './editor.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
     const loader = document.getElementById('loader');
     
     try {
-        const rawData = await fetchData(urls);
-        const appData = processData(rawData);
-        
+        const appData = await loadAppData();
+
         initializeUI(appData);
         initializeMap(appData);
         
         drawMap(appData);
+        openFromHash();
         
         loader.style.display = 'none';
     } catch (error) {

@@ -14,6 +14,11 @@ export function getColorForType(type, alpha = 0.8) {
     }
 }
 
+/** Escapes text for use inside innerHTML (element content or a double-quoted attribute). */
+export function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 export function parseDate(dateStr) {
     const parts = dateStr.split('.');
     return new Date(parts[2], parts[1] - 1, parts[0]);

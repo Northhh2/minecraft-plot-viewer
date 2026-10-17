@@ -1,4 +1,109 @@
-import { urls } from './config.js';
+import { urls, API_BASE } from './config.js';
+import { authHeaders, getToken } from './auth.js';
+
+// Loads app data from the Worker API when API_BASE is set, otherwise from the legacy sheet.
+export async function loadAppData() {
+    if (!API_BASE) return processData(await fetchData());
+    try {
+        const [res, metroRes] = await Promise.all([
+            fetch(`${API_BASE}/api/snapshot`, { headers: authHeaders(getToken()) }),
+            // Revalidate: an admin's import or edit must show up on the reload that follows it, not 30 s later.
+            fetch(`${API_BASE}/api/metro`, { cache: 'no-cache' }).catch(() => null)
+        ]);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const appData = snapshotToAppData(await res.json());
+        // The metro is optional: a failure here must not take the rest of the portal down.
+        appData.metro = metroRes?.ok ? await metroRes.json().catch(() => null) : null;
+        if (!appData.metro) appData.metro = { palette: [], stations: [], lines: [] };
+        return appData;
+    } catch (error) {
+        console.error("Błąd podczas pobierania danych z API:", error);
+        return null;
+    }
+}
+
+// Maps a gov-land snapshot (schema/gov-land.schema.json) onto the shape the UI already consumes.
+export function snapshotToAppData(s) {
+    const byId = list => new Map(list.map(x => [x.id, x]));
+    const zoning = byId(s.zoningTypes), districts = byId(s.districts), streetsById = byId(s.streets);
+    const citizens = new Map(s.citizens.map(c => [c.number, c]));
+    const companies = new Map(s.companies.map(c => [c.number, c]));
+    const TREASURY = 'Skarb Miasta';
+    const ownerName = ref => ref ? ((ref.kind === 'citizen' ? citizens : companies).get(ref.number)?.name ?? TREASURY) : TREASURY;
+    const plotNames = new Map(s.plots.map(p => [p.id, p.name]));
+
+    const allTransactions = s.ownershipHistory.map(o => ({
+        plotName: plotNames.get(o.plotId),
+        newOwner: ownerName(o.newOwner),
+        transactionValue: o.transactionValue ?? '',
+        date: String(o.transactionDay ?? ''),
+        type: o.transactionType ?? '',
+        checkNumber: o.checkNumber ?? '',
+        paid: o.paid
+    }));
+
+    const allPlots = s.plots.map(p => ({
+        id: String(p.id),
+        name: p.name,
+        type: zoning.get(p.zoningTypeId)?.name ?? '',
+        x1: p.x1, z1: p.z1, x2: p.x2, z2: p.z2,
+        width: p.sideX, height: p.sideZ,
+        area: String(p.area), value: String(p.value),
+        owner: TREASURY, status: 'owned',
+        district: districts.get(p.districtId)?.name ?? '',
+        street: streetsById.get(p.streetId)?.name ?? '',
+        buildingNumber: p.buildingNumber ?? '',
+        history: [],
+        // Editor metadata (API mode only)
+        dbId: p.id, version: p.version, zoningTypeId: p.zoningTypeId, districtId: p.districtId, streetId: p.streetId
+    }));
+    updatePlotOwners(allPlots, allTransactions);
+
+    const allLocals = s.units.map(u => {
+        const plot = allPlots.find(p => p.id === String(u.plotId));
+        return {
+            id: String(u.id), plotName: plot?.name ?? '',
+            street: plot?.street ?? '', building: plot?.buildingNumber ?? '',
+            klatka: u.stairwell ?? '', localNum: u.unitNumber ?? '', floor: u.floor ?? '',
+            area: u.area, beds: u.bedCount, workplaces: u.workplaceCount,
+            tenant: u.tenant ? ownerName(u.tenant) : (u.tenantLabel ?? '')
+        };
+    });
+
+    // Never expose PIN data to the client; login moves to the API in a later stage.
+    const allOwners = [
+        ...s.citizens.map(c => ({
+            name: c.name, type: 'fizyczna', photo: c.photoUrl ?? '', nio: c.nio ?? '', age: c.age ?? '',
+            profession: c.profession ?? '', legalForm: '', pin: '', staff: c.role !== 'citizen',
+            ref: { kind: 'citizen', number: c.number }
+        })),
+        ...s.companies.map(c => ({
+            name: c.name, type: 'prawna', photo: c.photoUrl ?? '', nio: '', age: '',
+            profession: '', legalForm: c.legalForm ?? '', pin: '', staff: false,
+            ref: { kind: 'company', number: c.number }
+        }))
+    ];
+
+    const lotteryHistory = s.lottery.map(l => ({
+        plotName: plotNames.get(l.plotId), winner: ownerName(l.winner),
+        amount: l.amount ?? '', checkNumber: l.checkNumber ?? '', paid: l.paid
+    }));
+
+    const mergedPlots = processMergedPlots(
+        s.merges.map(m => ({ plot1: plotNames.get(m.mainPlotId), plot2: plotNames.get(m.mergingPlotId) })),
+        allPlots
+    );
+
+    const streets = s.streets.map(st => ({
+        id: st.id, name: st.name, x1: Math.min(st.x1, st.x2), z1: Math.min(st.z1, st.z2),
+        width: Math.abs(st.x2 - st.x1) + 1, height: Math.abs(st.z2 - st.z1) + 1
+    }));
+
+    return {
+        allPlots, allLocals, allOwners, allTransactions, mergedPlots, streets, settings: s.settings, lotteryHistory,
+        districts: s.districts, zoningTypes: s.zoningTypes
+    };
+}
 
 export async function fetchData() {
     try {
