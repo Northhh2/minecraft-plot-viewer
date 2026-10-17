@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "transportation.schema.json",
+  "title": "TransportationBP metro exchange (schemaVersion 1)",
+  "description": "Documents exchanged between TransportationBP and the plot portal. Canonical implementation and validation: TransportationBP/src/registry/metro/MetroExchange.ts (a verbatim copy lives in api/src/MetroExchange.ts). Track and platforms exist only in the game, so a snapshot flows game -> portal and updates flow portal -> game, never creating lines or stations.",
+  "oneOf": [{ "$ref": "#/$defs/snapshot" }, { "$ref": "#/$defs/updates" }],
+  "$defs": {
+    "colorCode": {
+      "description": "Minecraft formatting-code character. Hex values are the palette carried in every snapshot.",
+      "enum": ["c", "9", "a", "e", "6", "d", "b", "f", "5", "2", "3", "4", "1", "n", "u"]
+    },
+    "point": { "type": "array", "items": { "type": "integer" }, "minItems": 2, "maxItems": 2, "description": "[x, z] block coordinates" },
+    "snapshot": {
+      "title": "metro-snapshot (game -> portal)",
+      "type": "object",
+      "required": ["schemaVersion", "kind", "stations", "lines"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "kind": { "const": "metro-snapshot" },
+        "source": { "type": "string" },
+        "exportedAt": { "type": "string", "format": "date-time" },
+        "palette": {
+          "type": "array",
+          "items": { "type": "object", "required": ["code", "hex"], "properties": { "code": { "$ref": "#/$defs/colorCode" }, "hex": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" } } }
+        },
+        "stations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "name", "x", "z"],
+            "properties": {
+              "id": { "type": "integer", "minimum": 1 },
+              "name": { "type": "string", "minLength": 1, "maxLength": 64 },
+              "x": { "type": ["integer", "null"], "description": "Centre of the first platform; null (together with z) when the station has no platform in the world" },
+              "y": { "type": ["integer", "null"] },
+              "z": { "type": ["integer", "null"] },
+              "platforms": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["pieceId", "x", "y", "z"],
+                  "properties": {
+                    "pieceId": { "type": "integer" },
+                    "side": { "enum": ["left", "right"] },
+                    "direction": { "enum": ["forward", "backward", "both"] },
+                    "x": { "type": "integer" }, "y": { "type": "integer" }, "z": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "name", "color", "speed", "dwellSeconds", "stationIds"],
+            "properties": {
+              "id": { "type": "integer", "minimum": 1 },
+              "name": { "type": "string", "minLength": 1, "maxLength": 16, "description": "M1-M12: the voice announcements only know these" },
+              "color": { "$ref": "#/$defs/colorCode" },
+              "speed": { "type": "integer", "minimum": 1, "maximum": 200, "description": "blocks per second" },
+              "dwellSeconds": { "type": "integer", "minimum": 0, "maximum": 600 },
+              "trainCount": { "type": "integer", "minimum": 1, "maximum": 50, "default": 1 },
+              "circular": { "type": "boolean" },
+              "throughLoops": { "type": "boolean" },
+              "shuttle": { "type": "boolean" },
+              "running": { "type": "boolean" },
+              "stationIds": { "type": "array", "items": { "type": "integer" }, "description": "Served in this order outbound, then in reverse inbound" },
+              "segments": {
+                "type": "array",
+                "description": "The compiled route, one polyline per leg, thinned to about one point per 6 blocks; empty when the line does not compile",
+                "items": { "type": "array", "items": { "$ref": "#/$defs/point" } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "updates": {
+      "title": "metro-updates (portal -> game)",
+      "type": "object",
+      "required": ["schemaVersion", "kind"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "kind": { "const": "metro-updates" },
+        "source": { "type": "string" },
+        "exportedAt": { "type": "string", "format": "date-time" },
+        "stations": {
+          "type": "array",
+          "items": { "type": "object", "required": ["id", "name"], "properties": { "id": { "type": "integer" }, "name": { "type": "string", "minLength": 1, "maxLength": 64 } } }
+        },
+        "lines": {
+          "type": "array",
+          "description": "Matched to existing lines by id; unknown ids are skipped with a warning. Changing stops or kind stops the line in the game.",
+          "items": {
+            "type": "object",
+            "required": ["id", "color", "speed", "dwellSeconds", "trainCount", "circular", "throughLoops", "shuttle", "stationIds"],
+            "properties": {
+              "id": { "type": "integer" },
+              "color": { "$ref": "#/$defs/colorCode" },
+              "speed": { "type": "integer", "minimum": 1, "maximum": 200 },
+              "dwellSeconds": { "type": "integer", "minimum": 0, "maximum": 600 },
+              "trainCount": { "type": "integer", "minimum": 1, "maximum": 50 },
+              "circular": { "type": "boolean" },
+              "throughLoops": { "type": "boolean" },
+              "shuttle": { "type": "boolean" },
+              "stationIds": { "type": "array", "items": { "type": "integer" } }
+            }
+          }
+        }
+      }
+    }
+  }
+}

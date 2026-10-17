@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gov-land.schema.json",
+  "title": "GovernmentBP land snapshot (schemaVersion 1)",
+  "description": "Shape of the portal's own /api/snapshot, which follows the GovernmentBP land registries (src/registry/land/*). Owner numbers here are PORTAL numbers (citizens.number / companies.number). The document exchanged with GovernmentBP is a different, stricter format (GovBP identity and company numbers, numeric money): see api/src/LandExchange.ts. Coordinates are inclusive X/Z block corners; sideX/sideZ/area/value are derived by the editor but stored.",
+  "type": "object",
+  "required": ["schemaVersion", "plots", "streets", "districts", "zoningTypes", "citizens", "companies"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "zoningTypes": { "type": "array", "items": { "$ref": "#/$defs/zoningType" } },
+    "districts": { "type": "array", "items": { "$ref": "#/$defs/district" } },
+    "sectors": { "type": "array", "items": { "$ref": "#/$defs/sector" } },
+    "streets": { "type": "array", "items": { "$ref": "#/$defs/street" } },
+    "citizens": { "type": "array", "items": { "$ref": "#/$defs/citizen" } },
+    "companies": { "type": "array", "items": { "$ref": "#/$defs/company" } },
+    "plots": { "type": "array", "items": { "$ref": "#/$defs/plot" } },
+    "units": { "type": "array", "items": { "$ref": "#/$defs/unit" } },
+    "ownershipHistory": { "type": "array", "items": { "$ref": "#/$defs/ownership" } },
+    "lottery": { "type": "array", "items": { "$ref": "#/$defs/lotteryEntry" } },
+    "merges": { "type": "array", "items": { "$ref": "#/$defs/merge" } },
+    "settings": { "type": "object", "additionalProperties": { "type": "boolean" } }
+  },
+  "$defs": {
+    "ownerRef": {
+      "description": "null = City Treasury (Skarb Miasta). Citizen and company numbers are separate address spaces.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["kind", "number"],
+          "properties": { "kind": { "enum": ["citizen", "company"] }, "number": { "type": "integer" } },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "rect": {
+      "type": "object",
+      "required": ["x1", "z1", "x2", "z2"],
+      "properties": {
+        "x1": { "type": "integer" }, "z1": { "type": "integer" },
+        "x2": { "type": "integer" }, "z2": { "type": "integer" }
+      }
+    },
+    "zoningType": {
+      "type": "object", "required": ["id", "name", "pricePer100Blocks"],
+      "properties": { "id": { "type": "integer" }, "name": { "type": "string" }, "pricePer100Blocks": { "type": "integer" } }
+    },
+    "district": {
+      "type": "object", "required": ["id", "name"],
+      "properties": { "id": { "type": "integer" }, "name": { "type": "string" } }
+    },
+    "sector": {
+      "allOf": [{ "$ref": "#/$defs/rect" }],
+      "required": ["id", "name"],
+      "properties": { "id": { "type": "integer" }, "name": { "type": "string" } }
+    },
+    "street": {
+      "allOf": [{ "$ref": "#/$defs/rect" }],
+      "required": ["id", "name"],
+      "properties": { "id": { "type": "integer" }, "name": { "type": "string", "maxLength": 64 } }
+    },
+    "citizen": {
+      "type": "object", "required": ["number", "name", "role"],
+      "properties": {
+        "number": { "type": "integer" },
+        "identityNumber": { "type": ["integer", "null"], "description": "GovBP nb_identity number; used for login" },
+        "name": { "type": "string" },
+        "nio": { "type": ["string", "null"] },
+        "age": { "type": ["string", "null"] },
+        "profession": { "type": ["string", "null"] },
+        "photoUrl": { "type": ["string", "null"] },
+        "role": { "enum": ["citizen", "clerk", "admin"] }
+      }
+    },
+    "company": {
+      "type": "object", "required": ["number", "name"],
+      "properties": {
+        "number": { "type": "integer" }, "name": { "type": "string" },
+        "legalForm": { "type": ["string", "null"] }, "photoUrl": { "type": ["string", "null"] }
+      }
+    },
+    "plot": {
+      "allOf": [{ "$ref": "#/$defs/rect" }],
+      "required": ["id", "name", "sideX", "sideZ", "area", "value"],
+      "properties": {
+        "id": { "type": "integer" },
+        "name": { "type": "string", "maxLength": 32 },
+        "zoningTypeId": { "type": ["integer", "null"] },
+        "sideX": { "type": "integer" }, "sideZ": { "type": "integer" },
+        "area": { "type": "integer" }, "value": { "type": "integer" },
+        "sectorId": { "type": ["integer", "null"] },
+        "districtId": { "type": ["integer", "null"] },
+        "streetId": { "type": ["integer", "null"] },
+        "buildingNumber": { "type": ["string", "null"] },
+        "owner": { "$ref": "#/$defs/ownerRef" },
+        "mergedInto": { "type": ["integer", "null"] },
+        "version": { "type": "integer", "description": "optimistic lock, portal only" }
+      }
+    },
+    "unit": {
+      "type": "object", "required": ["id", "plotId"],
+      "properties": {
+        "id": { "type": "integer" }, "plotId": { "type": "integer" },
+        "unitNumber": { "type": ["string", "null"] }, "stairwell": { "type": ["string", "null"] },
+        "floor": { "type": ["string", "null"] }, "area": { "type": "integer" },
+        "bedCount": { "type": "integer" }, "workplaceCount": { "type": "integer" },
+        "tenant": { "$ref": "#/$defs/ownerRef" },
+        "tenantLabel": { "type": ["string", "null"], "description": "free-text tenant that does not resolve to an OwnerRef" }
+      }
+    },
+    "ownership": {
+      "type": "object", "required": ["id", "plotId", "paid"],
+      "properties": {
+        "id": { "type": "integer" }, "plotId": { "type": "integer" },
+        "newOwner": { "$ref": "#/$defs/ownerRef" },
+        "transactionValue": { "type": ["string", "null"] },
+        "transactionDay": { "type": ["integer", "null"], "description": "raw world.getDay() (0-indexed), identical in GovernmentBP and in the original sheet" },
+        "transactionType": { "type": ["string", "null"] },
+        "checkNumber": { "type": ["string", "null"] },
+        "paid": { "type": "boolean" }
+      }
+    },
+    "lotteryEntry": {
+      "type": "object", "required": ["id", "plotId", "paid"],
+      "properties": {
+        "id": { "type": "integer" }, "plotId": { "type": "integer" },
+        "winner": { "$ref": "#/$defs/ownerRef" },
+        "amount": { "type": ["string", "null"] }, "checkNumber": { "type": ["string", "null"] },
+        "paid": { "type": "boolean" }
+      }
+    },
+    "merge": {
+      "type": "object", "required": ["id", "mainPlotId", "mergingPlotId"],
+      "properties": { "id": { "type": "integer" }, "mainPlotId": { "type": "integer" }, "mergingPlotId": { "type": "integer" } }
+    }
+  }
+}
