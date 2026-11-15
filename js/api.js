@@ -100,6 +100,7 @@ export function snapshotToAppData(s) {
     }));
 
     return {
+        mergeRecords: s.merges.map(m => ({ id: m.id, mainName: plotNames.get(m.mainPlotId), mergingName: plotNames.get(m.mergingPlotId) })),
         allPlots, allLocals, allOwners, allTransactions, mergedPlots, streets, settings: s.settings, lotteryHistory,
         districts: s.districts, zoningTypes: s.zoningTypes
     };

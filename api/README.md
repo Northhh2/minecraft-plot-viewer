@@ -98,7 +98,9 @@ Rows edited in the portal are marked until the next game import replaces them (`
 | POST | `/api/sync/pins` | `SYNC_TOKEN` only |
 | POST | `/api/plots` | clerk/admin. Rectangle is normalized, area/value/sector computed, overlap with other plots -> 409 (`ignoreOverlap` is admin-only) |
 | PATCH | `/api/plots/:id` | clerk/admin. Body needs the `version` you read; stale -> 409 `version_conflict` with the current plot |
-| POST | `/api/plots/:id/transfer` | clerk/admin. Adds an ownership row; the owner changes only when `paid` is true |
+| POST | `/api/plots/:id/transfer` | clerk/admin. Adds an ownership row; the owner changes only when `paid` is true. With `paymentOrder: true` it creates an unpaid order for the given `newOwner` (amount defaults to the plot value; 409 `payment_pending` if the last transaction is still unpaid) |
+| POST | `/api/merges` | clerk/admin. `{mainPlotId, mergingPlotId}` records a merge and sets `merged_into`; 409 `already_merged` prevents chains |
+| DELETE | `/api/merges/:id` | admin. Undoes a merge |
 | DELETE | `/api/plots/:id` | admin. Refused (409) while units, history, lottery or merges reference the plot |
 | POST/PATCH/DELETE | `/api/streets[/:id]`, `/api/districts[/:id]` | clerk/admin create+edit, admin delete (refused while plots use them) |
 | GET | `/api/export[?allowUnlinked=1][&format=module]` | admin. `{doc, warnings}`, or `ImportData.ts` for the game; 409 `unlinked_owners` lists owners without a GovBP number |

@@ -200,9 +200,18 @@ async function transferPlot(env, viewer, id, body) {
     }
     const day = intField(body.transactionDay, 'transactionDay', { min: 0, max: 1_000_000 });
     const type = strField(body.transactionType, 'transactionType', 32);
-    const value = strField(body.transactionValue, 'transactionValue', 32, { required: false });
+    const valueRaw = strField(body.transactionValue, 'transactionValue', 32, { required: false });
     const check = strField(body.checkNumber, 'checkNumber', 32, { required: false });
-    const paid = body.paid === true ? 1 : 0;
+    // A payment order is a transaction addressed to one specific person that stays unpaid (the plot keeps its
+    // owner) until it is settled. The amount defaults to the plot's value.
+    const order = body.paymentOrder === true;
+    if (order) {
+        if (kind === null) throw new HttpError(400, 'invalid_field', { field: 'newOwner.number' });
+        const last = await one(env.DB, 'SELECT paid FROM ownership_history WHERE plot_id = ?1 ORDER BY transaction_day DESC, id DESC LIMIT 1', id);
+        if (last && !last.paid) throw new HttpError(409, 'payment_pending');
+    }
+    const value = order && valueRaw === null ? String(plot.value) : valueRaw;
+    const paid = !order && body.paid === true ? 1 : 0;
 
     const results = await env.DB.batch([
         env.DB.prepare(
@@ -216,7 +225,7 @@ async function transferPlot(env, viewer, id, body) {
                               version = version + 1, updated_at = datetime('now')
              WHERE id = ?1 AND version = ?5`
         ).bind(id, paid, kind, number, version),
-        auditStmt(env.DB, viewer, 'plot', id, 'transfer', { owner: mapPlot(plot).owner },
+        auditStmt(env.DB, viewer, 'plot', id, order ? 'payment_order' : 'transfer', { owner: mapPlot(plot).owner },
             { newOwner: kind ? { kind, number } : null, day, type, value, check, paid: !!paid }, { onlyIfChanged: true })
     ]);
     if (results[1].meta.changes === 0) {
@@ -225,6 +234,44 @@ async function transferPlot(env, viewer, id, body) {
         throw new HttpError(409, 'version_conflict', { current: mapPlot(await one(env.DB, 'SELECT * FROM plots WHERE id = ?1', id)) });
     }
     return { status: 200, body: { plot: mapPlot(await one(env.DB, 'SELECT * FROM plots WHERE id = ?1', id)) } };
+}
+
+// ─── merges ─────────────────────────────────────────────────────────────────────
+
+/** Records that `mergingPlotId` is merged into `mainPlotId` (one level: a main plot may absorb many plots). */
+async function mergePlots(env, viewer, body) {
+    requireStaff(viewer);
+    const mainId = intField(body?.mainPlotId, 'mainPlotId', { min: 1 });
+    const mergingId = intField(body?.mergingPlotId, 'mergingPlotId', { min: 1 });
+    if (mainId === mergingId) throw new HttpError(400, 'invalid_field', { field: 'mergingPlotId' });
+    const main = await one(env.DB, 'SELECT * FROM plots WHERE id = ?1', mainId);
+    const merging = await one(env.DB, 'SELECT * FROM plots WHERE id = ?1', mergingId);
+    if (!main) throw new HttpError(400, 'unknown_reference', { field: 'mainPlotId' });
+    if (!merging) throw new HttpError(400, 'unknown_reference', { field: 'mergingPlotId' });
+    const mergingIsMain = await one(env.DB, 'SELECT 1 FROM merges WHERE main_plot_id = ?1', mergingId);
+    if (main.merged_into !== null || merging.merged_into !== null || mergingIsMain) throw new HttpError(409, 'already_merged');
+
+    const results = await env.DB.batch([
+        env.DB.prepare('UPDATE plots SET merged_into = ?1, version = version + 1, updated_at = datetime(\'now\') WHERE id = ?2 AND merged_into IS NULL')
+            .bind(mainId, mergingId),
+        env.DB.prepare('INSERT INTO merges (main_plot_id, merging_plot_id) SELECT ?1, ?2 WHERE changes() > 0').bind(mainId, mergingId),
+        auditStmt(env.DB, viewer, 'plot', mergingId, 'merge', { mergedInto: null }, { mergedInto: mainId, main: main.name, merging: merging.name }, { onlyIfChanged: true })
+    ]);
+    if (results[0].meta.changes === 0) throw new HttpError(409, 'already_merged');
+    return { status: 201, body: { merge: { id: results[1].meta.last_row_id, mainPlotId: mainId, mergingPlotId: mergingId } } };
+}
+
+async function unmergePlots(env, viewer, id) {
+    requireAdmin(viewer);
+    const merge = await one(env.DB, 'SELECT * FROM merges WHERE id = ?1', id);
+    if (!merge) throw new HttpError(404, 'not_found');
+    await env.DB.batch([
+        env.DB.prepare('DELETE FROM merges WHERE id = ?1').bind(id),
+        env.DB.prepare('UPDATE plots SET merged_into = NULL, version = version + 1, updated_at = datetime(\'now\') WHERE id = ?1 AND merged_into = ?2')
+            .bind(merge.merging_plot_id, merge.main_plot_id),
+        auditStmt(env.DB, viewer, 'plot', merge.merging_plot_id, 'unmerge', { mergedInto: merge.main_plot_id }, { mergedInto: null })
+    ]);
+    return { status: 200, body: { ok: true } };
 }
 
 // ─── streets & districts ────────────────────────────────────────────────────────
@@ -326,6 +373,8 @@ const ROUTES = [
     ['PATCH', /^\/api\/plots\/(\d+)$/, (e, v, b, m) => updatePlot(e, v, Number(m[1]), b)],
     ['DELETE', /^\/api\/plots\/(\d+)$/, (e, v, b, m) => deletePlot(e, v, Number(m[1]))],
     ['POST', /^\/api\/plots\/(\d+)\/transfer$/, (e, v, b, m) => transferPlot(e, v, Number(m[1]), b)],
+    ['POST', /^\/api\/merges$/, (e, v, b) => mergePlots(e, v, b)],
+    ['DELETE', /^\/api\/merges\/(\d+)$/, (e, v, b, m) => unmergePlots(e, v, Number(m[1]))],
     ['POST', /^\/api\/streets$/, (e, v, b) => createStreet(e, v, b)],
     ['PATCH', /^\/api\/streets\/(\d+)$/, (e, v, b, m) => updateStreet(e, v, Number(m[1]), b)],
     ['DELETE', /^\/api\/streets\/(\d+)$/, (e, v, b, m) => deleteStreet(e, v, Number(m[1]))],

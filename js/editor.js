@@ -64,6 +64,9 @@ function describeError(err) {
         case 'unknown_reference': return `Wybrana wartość nie istnieje: ${FIELD_LABELS[d.field] ?? d.field}.`;
         case 'in_use': return 'Nie można usunąć — element jest nadal używany (działki, historia lub lokale).';
         case 'invalid_line': return `Niepoprawne dane linii: ${(d.errors ?? []).join(' ')}`;
+        case 'client': return d.message;
+        case 'already_merged': return 'Jedna z tych działek jest już połączona (jako dołączana albo główna dla innych) — nie można utworzyć łańcucha scaleń.';
+        case 'payment_pending': return 'Ta działka ma już nieopłaconą transakcję. Najpierw rozlicz poprzednie zlecenie.';
         case 'forbidden': return 'Brak uprawnień do tej operacji.';
         case 'unauthorized': return 'Sesja wygasła. Zaloguj się ponownie.';
         case 'too_many_attempts': return 'Zbyt wiele prób. Spróbuj później.';
@@ -264,6 +267,114 @@ function openTransferForm(plot) {
     });
 }
 
+// ─── search picker (replaces long <select> lists) ────────────────────────────────
+
+const clientError = message => Object.assign(new Error('client'), { data: { error: 'client', message } });
+
+/**
+ * Type-ahead picker. items: [{ key, label, hint?, idText? }]. Typing a number matches idText exactly (and names
+ * containing it); typing text matches labels. Enter or a click picks; read() returns the picked key or null.
+ */
+function searchPicker({ items, placeholder, initialKey = null, max = 8 }) {
+    let selected = items.find(i => i.key === initialKey) ?? null;
+    const input = h('input', { type: 'text', class: INPUT_CLASS, placeholder, autocomplete: 'off', value: selected?.label ?? '' });
+    const results = h('div', { class: 'mt-1 border border-gray-600 rounded-md divide-y divide-gray-700 hidden max-h-48 overflow-y-auto' });
+    const info = h('p', { class: 'text-xs text-green-400 mt-1' });
+    const norm = s => String(s).toLowerCase();
+
+    const matches = () => {
+        const q = norm(input.value.trim());
+        if (!q) return [];
+        const exact = /^\d+$/.test(q) ? items.filter(i => i.idText === q) : [];
+        const rest = items.filter(i => !exact.includes(i) && norm(i.label).includes(q));
+        rest.sort((a, b) => (norm(a.label).startsWith(q) ? 0 : 1) - (norm(b.label).startsWith(q) ? 0 : 1));
+        return [...exact, ...rest].slice(0, max);
+    };
+    const choose = item => {
+        selected = item;
+        input.value = item.label;
+        results.classList.add('hidden');
+        info.textContent = item.hint ? `✓ ${item.hint}` : '✓';
+    };
+    const refresh = () => {
+        const list = matches();
+        results.replaceChildren(...list.map(item => h('div', {
+            class: 'px-3 py-2 text-sm cursor-pointer hover:bg-gray-600 bg-gray-700',
+            onmousedown: e => { e.preventDefault(); choose(item); }
+        }, item.label, item.hint ? h('span', { class: 'block text-xs text-gray-400' }, item.hint) : '')));
+        results.classList.toggle('hidden', list.length === 0);
+    };
+    input.addEventListener('input', () => { selected = null; info.textContent = ''; refresh(); });
+    input.addEventListener('focus', refresh);
+    input.addEventListener('blur', () => setTimeout(() => results.classList.add('hidden'), 100));
+    input.addEventListener('keydown', e => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();   // never submit the dialog from the search box
+        const first = matches()[0];
+        if (first) choose(first);
+    });
+    if (selected?.hint) info.textContent = `✓ ${selected.hint}`;
+    return { el: h('div', {}, input, results, info), read: () => selected?.key ?? null };
+}
+
+const plotItems = (exclude = []) => appData.allPlots.filter(p => !exclude.includes(p.dbId)).map(p => ({
+    key: p.dbId, idText: String(p.dbId), label: `${p.name} (#${p.dbId})`,
+    hint: [p.type, `${p.area} m²`, p.owner].filter(Boolean).join(' · ')
+}));
+
+const ownerItems = () => appData.allOwners.filter(o => o.ref).map(o => ({
+    key: `${o.ref.kind}:${o.ref.number}`, idText: String(o.ref.number), label: `${o.name} (${o.type} #${o.ref.number})`,
+    hint: o.type === 'prawna' ? 'Firma' : 'Osoba'
+}));
+
+function openMergeForm(plot = null) {
+    const records = appData.mergeRecords ?? [];
+    const absorbed = new Set(records.map(m => m.mergingName));   // already merged into another plot
+    const mains = new Set(records.map(m => m.mainName));
+    const free = p => !absorbed.has(p.name);
+    const byName = new Map(appData.allPlots.map(p => [p.dbId, p]));
+    const items = (pred, exclude = []) => plotItems(exclude).filter(i => pred(byName.get(i.key)));
+    openDialog({
+        title: plot ? `Połącz działkę: ${plot.name}` : 'Połącz działki',
+        submitLabel: 'Połącz',
+        fields: [
+            { name: 'main', label: 'Działka główna (wpisz ID lub nazwę)', type: 'custom', build: () => searchPicker({ items: items(free), placeholder: 'np. 42 lub nazwa', initialKey: plot?.dbId }) },
+            { name: 'merging', label: 'Działka dołączana (wpisz ID lub nazwę)', type: 'custom', build: () => searchPicker({ items: items(p => free(p) && !mains.has(p.name), plot ? [plot.dbId] : []), placeholder: 'np. 43 lub nazwa' }) }
+        ],
+        preview: () => 'Zapisuje scalenie w rejestrze; na mapie pojawi się obrys połączonych działek. Opłata za scalenie w grze rozliczana jest osobno.',
+        onSubmit: async v => {
+            if (v.main === null || v.merging === null) throw clientError('Wybierz obie działki z podpowiedzi (ID lub nazwa).');
+            if (v.main === v.merging) throw clientError('Działka nie może być połączona sama ze sobą.');
+            await request('POST', '/api/merges', { mainPlotId: v.main, mergingPlotId: v.merging });
+            reload(appData.allPlots.find(p => p.dbId === v.main)?.name);
+        }
+    });
+}
+
+function openPaymentOrderForm(plot) {
+    const lastDay = Math.max(0, ...((plot.history ?? []).map(t => parseInt(t.date, 10) || 0)));
+    openDialog({
+        title: `Zlecenie płatności: ${plot.name}`,
+        submitLabel: 'Utwórz zlecenie',
+        fields: [
+            { name: 'owner', label: 'Płatnik / nabywca (wpisz numer lub nazwę)', type: 'custom', build: () => searchPicker({ items: ownerItems(), placeholder: 'np. Jan Kowalski' }) },
+            { name: 'transactionType', label: 'Typ transakcji', type: 'text', required: true, value: 'Sprzedaż' },
+            { name: 'transactionValue', label: 'Kwota', type: 'text', value: plot.value, hint: ' Domyślnie wartość działki.' },
+            { name: 'transactionDay', label: 'Dzień transakcji', type: 'number', required: true, value: lastDay + 1 }
+        ],
+        preview: () => 'Zlecenie pozostaje nieopłacone — działka zmieni właściciela po jego opłaceniu.',
+        onSubmit: async v => {
+            if (!v.owner) throw clientError('Wybierz osobę lub firmę z podpowiedzi.');
+            const [kind, number] = v.owner.split(':');
+            await request('POST', `/api/plots/${plot.dbId}/transfer`, {
+                version: plot.version, newOwner: { kind, number: Number(number) }, paymentOrder: true,
+                transactionDay: v.transactionDay, transactionType: v.transactionType, transactionValue: v.transactionValue
+            });
+            reload(plot.name);
+        }
+    });
+}
+
 function openStreetForm(segment) {
     const rect = segment && { x1: segment.x1, z1: segment.z1, x2: segment.x1 + segment.width - 1, z2: segment.z1 + segment.height - 1 };
     openDialog({
@@ -304,17 +415,23 @@ async function confirmDelete(label, path) {
 const btn = (action, id, text, danger = false) =>
     `<button data-edit="${action}" data-id="${id}" class="text-sm py-1.5 px-3 rounded-md border ${danger ? 'border-red-700 text-red-300 hover:bg-red-900' : 'border-gray-600 text-white hover:bg-gray-600'} bg-gray-700 transition-colors">${text}</button>`;
 
+const escapeText = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
 /** HTML for the editor buttons shown at the bottom of a modal; empty for non-editors. All interpolated values are numbers. */
 export function editorButtonsHTML(kind, data) {
     if (!isEditor()) return '';
     let buttons = '';
     if (kind === 'plot') {
         buttons = btn('plot-edit', data.dbId, 'Edytuj') + btn('plot-transfer', data.dbId, 'Przekaż własność')
+            + btn('plot-order', data.dbId, 'Zlecenie płatności') + btn('plot-merge', data.dbId, 'Połącz z inną')
             + (isAdmin() ? btn('plot-delete', data.dbId, 'Usuń', true) : '');
     } else if (kind === 'street') {
         const segments = appData.streets.filter(s => s.name === data);
         buttons = segments.map((s, i) => btn('street-edit', s.id, segments.length > 1 ? `Edytuj odcinek ${i + 1}` : 'Edytuj')
             + (isAdmin() ? btn('street-delete', s.id, segments.length > 1 ? `Usuń odcinek ${i + 1}` : 'Usuń', true) : '')).join('');
+    } else if (kind === 'merged') {
+        // data: array of merge records of the group; labels carry plot names, so they are escaped.
+        if (isAdmin()) buttons = data.map(m => btn('unmerge', m.id, `Rozłącz: ${escapeText(m.mergingName)} od ${escapeText(m.mainName)}`, true)).join('');
     } else if (kind === 'metroLine') {
         if (isAdmin()) buttons = btn('metro-line-edit', data, 'Edytuj linię');
     } else if (kind === 'metroStation') {
@@ -333,6 +450,9 @@ export function wireEditorButtons(root) {
         switch (el.dataset.edit) {
             case 'plot-edit': return openPlotForm(plot());
             case 'plot-transfer': return openTransferForm(plot());
+            case 'plot-order': return openPaymentOrderForm(plot());
+            case 'plot-merge': return openMergeForm(plot());
+            case 'unmerge': return confirmDelete('scalenie działek (działki wrócą do osobnych)', `/api/merges/${id}`);
             case 'plot-delete': return confirmDelete(`działka ${plot().name}`, `/api/plots/${id}`);
             case 'street-edit': return openStreetForm(appData.streets.find(s => s.id === id));
             case 'street-delete': return confirmDelete('odcinek ulicy', `/api/streets/${id}`);
@@ -564,6 +684,7 @@ export function initializeEditor(data) {
     toolbar = h('div', { id: 'editor-toolbar', class: 'hidden fixed left-4 bottom-4 z-30 flex flex-col gap-2 bg-gray-800 border border-gray-600 rounded-lg p-3 shadow-xl' },
         h('div', { class: 'text-xs text-gray-400 uppercase tracking-wide' }, 'Edycja'),
         h('button', { class: BTN_SECONDARY + ' text-sm', onclick: () => openPlotForm(null) }, '+ Działka'),
+        h('button', { class: BTN_SECONDARY + ' text-sm', onclick: () => openMergeForm(null) }, 'Połącz działki'),
         h('button', { class: BTN_SECONDARY + ' text-sm', onclick: () => openStreetForm(null) }, '+ Ulica'),
         h('button', { class: BTN_SECONDARY + ' text-sm', onclick: () => openDistrictForm(null) }, '+ Dzielnica'));
     adminSection = h('div', { class: 'hidden flex flex-col gap-2 border-t border-gray-600 pt-2 mt-1' },

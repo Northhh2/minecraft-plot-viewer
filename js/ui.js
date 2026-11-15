@@ -367,7 +367,8 @@ function renderMergedContent(mergedPlot) {
             <div class="grid grid-cols-2 gap-x-4 gap-y-2 pt-3 border-t border-gray-700 text-sm">
                 <span class="text-gray-400">Pow. oryginalna:</span><span class="font-medium">${mergedPlot.originalArea} m²</span>
                 <span class="text-gray-400">Pow. połączona:</span><span class="font-medium">${mergedPlot.mergedArea} m²</span>
-            </div></div>`;
+            </div></div>
+        ${editorButtonsHTML('merged', (appData.mergeRecords ?? []).filter(m => mergedPlot.plots.includes(m.mainName) && mergedPlot.plots.includes(m.mergingName)))}`;
 }
 
 function renderLocalContent(local) {
