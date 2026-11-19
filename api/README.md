@@ -113,3 +113,27 @@ Rows edited in the portal are marked until the next game import replaces them (`
 
 Text written through the plot/street/district endpoints may not contain `< > & " ' \`` or control characters (defence in depth: the portal
 escapes everything it renders, but the same data is also read by the game and by exports).
+
+## Automatic sync with GovernmentBP (stage 6)
+
+`tools/sync-agent.mjs` runs from cron on the VPS (one pass per run) and uses the Worker's `SYNC_TOKEN`:
+
+- **game → portal**: GovernmentBP logs `[gov_land_export]` and `[gov_city_export]` chunks every 10 min, only when the data
+  changed (`/scriptevent nb:sync_export force` forces it, `nb:sync_config <on|off> [minutes]` configures it). The agent
+  reads the server log (`LOG_FILE`, or Crafty's logs API), rebuilds the newest complete export of each kind and POSTs it to
+  `POST /api/sync/land` (replaces the land dataset, same rules as the admin import) and `POST /api/sync/city`
+  (read-only snapshot, public at `GET /api/city`). Unchanged documents are skipped on both sides (hash).
+- **portal → game** (`--pull`): when the portal's land data changed and the game's did not, the agent sends
+  `scriptevent nb:land_pull_chunk <id> <i>/<n> <data>` commands to the server console (Crafty `POST /servers/{id}/stdin`).
+  Applying stays manual in the game: `/scriptevent nb:land_pull_check`, then `nb:land_pull_apply` (a backup export is logged first).
+
+```
+# crontab: every 10 minutes
+*/10 * * * * cd /opt/plot-viewer/tools && PORTAL_URL=https://... SYNC_TOKEN=... CRAFTY_URL=https://127.0.0.1:8443 CRAFTY_INSECURE=1 CRAFTY_TOKEN=... CRAFTY_SERVER_ID=... node sync-agent.mjs --pull >> sync.log 2>&1
+```
+
+Apply `schema.sql` again (it is idempotent) to create the `city_snapshot` table. Crafty endpoints and the scriptevent length
+limit were written from documentation and not yet tried against a live server: use `--dry` first and lower `CHUNK_SIZE` if
+the game reports bad chunks.
+
+The map page has a **Miasto** button (bottom-right controls, js/city.js) opening a read-only panel from GET /api/city: allowance values and history, citizens, companies, projects, Council (members, motions, codes) and election history.

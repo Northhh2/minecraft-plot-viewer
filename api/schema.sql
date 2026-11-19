@@ -131,6 +131,15 @@ CREATE TABLE IF NOT EXISTS audit_log (
     diff        TEXT
 );
 
+-- City snapshot pushed by the sync agent from GovernmentBP's [gov_city_export] (allowance, citizens, companies,
+-- projects, Council, elections). One row, replaced on every push; read-only for the portal.
+CREATE TABLE IF NOT EXISTS city_snapshot (
+    id          INTEGER PRIMARY KEY CHECK (id = 1),
+    received_at TEXT NOT NULL DEFAULT (datetime('now')),
+    hash        TEXT NOT NULL,
+    doc         TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_plots_district ON plots(district_id);
 CREATE INDEX IF NOT EXISTS idx_units_plot ON units(plot_id);
 CREATE INDEX IF NOT EXISTS idx_ownership_plot ON ownership_history(plot_id);
