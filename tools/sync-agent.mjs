@@ -4,11 +4,14 @@
 //   node sync-agent.mjs --pull     push, then also inject the portal's land data into the game if it changed there
 //   node sync-agent.mjs --dry      show what would happen, send nothing
 //
-// Game -> portal: GovernmentBP writes [gov_land_export] / [gov_city_export] chunks to the content log (every
-//   10 min, only when something changed). The agent rebuilds the newest complete export of each and POSTs it.
-// Portal -> game: with --pull the portal's export is cut into `scriptevent nb:land_pull_chunk` commands and sent to
-//   the server console (Crafty stdin). Applying stays a manual step in the game: nb:land_pull_check, nb:land_pull_apply.
-//   Portal edits are only pulled when the game side did not change in the same pass (no silent overwrite).
+// Game -> portal: GovernmentBP and TransportationBP write [gov_land_export] / [gov_city_export] / [trn_metro_export]
+//   chunks to the content log (every 10 min, only when something changed). The agent rebuilds the newest complete
+//   export of each and POSTs it.
+// Portal -> game: with --pull the portal's land and metro data is cut into `scriptevent nb:land_pull_chunk` /
+//   `nb:metro_pull_chunk` commands and sent to the server console (Crafty stdin). Applying stays a manual step in the
+//   game: nb:land_pull_check + nb:land_pull_apply, nb:metro_pull_check + nb:metro_pull_apply.
+//   Portal edits are only pulled when the game side did not change in the same pass (no silent overwrite); the portal
+//   also refuses a metro snapshot (409) while its metro edits are still waiting to be applied in the game.
 //
 // Config (environment variables):
 //   PORTAL_URL        https://your-worker.workers.dev           (required)
@@ -92,7 +95,7 @@ async function sendCommand(command) {
 
 /** Newest complete export per tag. Lines look like: [...] [gov_land_export] <id> <i>/<n> <chunk> */
 function newestExports(lines) {
-    const LINE = /\[(gov_land_export|gov_city_export)\] (\S+) (\d+)\/(\d+) ?(.*?)\r?$/;
+    const LINE = /\[(gov_land_export|gov_city_export|trn_metro_export)\] (\S+) (\d+)\/(\d+) ?(.*?)\r?$/;
     const sets = new Map();
     lines.forEach((line, no) => {
         const m = LINE.exec(line);
@@ -135,46 +138,78 @@ async function portalExport() {
     return r.ok ? { hash: r.json.hash, doc: r.json.doc } : null;
 }
 
+async function portalMetroExport() {
+    const r = await portalCall('GET', '/api/sync/metro-export');
+    return r.ok ? { hash: r.json.hash, doc: r.json.doc } : null;
+}
+
 // ─── Run ─────────────────────────────────────────────────────────────────────────
 
-let gameChanged = false;
+const gameChanged = { land: false, metro: false };
 const found = newestExports(await readLogLines());
 
-for (const [tag, path, key] of [['gov_land_export', '/api/sync/land', 'landHash'], ['gov_city_export', '/api/sync/city', 'cityHash']]) {
+const PUSHES = [
+    { tag: 'gov_land_export', path: '/api/sync/land', key: 'landHash', changed: 'land' },
+    { tag: 'gov_city_export', path: '/api/sync/city', key: 'cityHash' },
+    { tag: 'trn_metro_export', path: '/api/sync/metro', key: 'metroHash', changed: 'metro' }
+];
+
+for (const { tag, path: apiPath, key, changed } of PUSHES) {
     const ex = found[tag];
     if (!ex) { log(`${tag}: no complete export in the log`); continue; }
     const hash = sha(stable(ex.doc));
     if (state[key] === hash) { log(`${tag}: ${ex.id} unchanged`); continue; }
     if (dry) { log(`[dry] would POST ${tag} ${ex.id}`); continue; }
-    const r = await portalCall('POST', path, { doc: ex.doc });
-    log(`${tag}: ${ex.id} -> ${path}: HTTP ${r.status}`, r.ok ? '' : JSON.stringify(r.json).slice(0, 500));
-    if (r.ok) { state[key] = hash; if (tag === 'gov_land_export') gameChanged = true; }
+    const r = await portalCall('POST', apiPath, { doc: ex.doc });
+    if (r.status === 409 && r.json?.error === 'portal_edits_pending') {
+        log(`${tag}: ${ex.id} held back, portal edits are not applied in the game yet: ${(r.json.pending ?? []).slice(0, 5).join('; ')}`);
+        continue;
+    }
+    log(`${tag}: ${ex.id} -> ${apiPath}: HTTP ${r.status}`, r.ok ? '' : JSON.stringify(r.json).slice(0, 500));
+    if (r.ok) { state[key] = hash; if (changed) gameChanged[changed] = true; }
 }
 
-if (!dry && (gameChanged || state.portalHash === undefined)) {
+if (!dry && (gameChanged.land || state.portalHash === undefined)) {
     // The portal now mirrors the game: remember its export hash so that is not mistaken for a portal-side edit.
     const p = await portalExport();
     if (p) state.portalHash = p.hash;
 }
+if (!dry && (gameChanged.metro || state.metroPortalHash === undefined)) {
+    const p = await portalMetroExport();
+    if (p) state.metroPortalHash = p.hash;
+}
+
+/** Cuts a portal document into scriptevent chunks and sends them to the game console. */
+async function sendToGame({ label, event, doc, hash, hashKey }) {
+    const json = JSON.stringify(doc).replace(/ /g, '\\u0020');
+    const id = `p${Date.now().toString(36)}`;
+    const total = Math.max(1, Math.ceil(json.length / chunkSize));
+    log(`pull ${label}: sending ${id} in ${total} chunk(s)${dry ? ' [dry]' : ''}`);
+    if (dry) return;
+    for (let i = 0; i < total; i++) {
+        await sendCommand(`scriptevent ${event} ${id} ${i + 1}/${total} ${json.slice(i * chunkSize, (i + 1) * chunkSize)}`);
+        await new Promise(r => setTimeout(r, chunkDelay));
+    }
+    state[hashKey] = hash;
+}
 
 if (pull) {
-    const p = await portalExport();
-    if (!p) log('pull: could not fetch the portal export');
-    else if (p.hash === state.portalHash) log('pull: portal unchanged since the last sync');
-    else if (gameChanged) log('pull: skipped, the game changed in the same pass (portal edits are kept for the next pass)');
+    const land = await portalExport();
+    if (!land) log('pull land: could not fetch the portal export');
+    else if (land.hash === state.portalHash) log('pull land: portal unchanged since the last sync');
+    else if (gameChanged.land) log('pull land: skipped, the game changed in the same pass (portal edits are kept for the next pass)');
     else {
-        const json = JSON.stringify(p.doc).replace(/ /g, '\\u0020');
-        const id = `p${Date.now().toString(36)}`;
-        const total = Math.max(1, Math.ceil(json.length / chunkSize));
-        log(`pull: sending ${id} in ${total} chunk(s)${dry ? ' [dry]' : ''}`);
-        if (!dry) {
-            for (let i = 0; i < total; i++) {
-                await sendCommand(`scriptevent nb:land_pull_chunk ${id} ${i + 1}/${total} ${json.slice(i * chunkSize, (i + 1) * chunkSize)}`);
-                await new Promise(r => setTimeout(r, chunkDelay));
-            }
-            state.portalHash = p.hash;
-            log('pull: done. In the game run: /scriptevent nb:land_pull_check, then nb:land_pull_apply');
-        }
+        await sendToGame({ label: 'land', event: 'nb:land_pull_chunk', doc: land.doc, hash: land.hash, hashKey: 'portalHash' });
+        if (!dry) log('pull land: done. In the game run: /scriptevent nb:land_pull_check, then nb:land_pull_apply');
+    }
+
+    const metro = await portalMetroExport();
+    if (!metro) log('pull metro: could not fetch the portal export');
+    else if (metro.hash === state.metroPortalHash) log('pull metro: portal unchanged since the last sync');
+    else if (gameChanged.metro) log('pull metro: skipped, the game changed in the same pass (portal edits are kept for the next pass)');
+    else {
+        await sendToGame({ label: 'metro', event: 'nb:metro_pull_chunk', doc: metro.doc, hash: metro.hash, hashKey: 'metroPortalHash' });
+        if (!dry) log('pull metro: done. In the game run: /scriptevent nb:metro_pull_check, then nb:metro_pull_apply');
     }
 }
 

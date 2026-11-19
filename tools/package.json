@@ -1,8 +1,5 @@
 {
   "name": "plot-viewer-tools",
   "private": true,
-  "type": "module",
-  "dependencies": {
-    "papaparse": "5.4.1"
-  }
+  "type": "module"
 }

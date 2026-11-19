@@ -103,7 +103,7 @@ export function buildExchangeDoc(input: ExportInput, resolvers: ExportResolvers,
 const LOG_TAG = "[gov_land_export]";
 
 /** Splits a JSON string into tagged log lines (`[gov_land_export] <id> <i>/<n> <chunk>`) because a
- *  single content-log line is too long to copy reliably. tools/log-to-json.mjs reassembles them.
+ *  single content-log line is too long to copy reliably. The sync agent (tools/sync-agent.mjs in the portal repo) reassembles them.
  *  JSON.stringify output only contains spaces inside strings, so they are written as the escape `\u0020`:
  *  a log viewer that trims whitespace at the end of a line can then never corrupt a chunk boundary. */
 export function chunkForLog(json: string, exportId: string, chunkSize = 1200): string[] {

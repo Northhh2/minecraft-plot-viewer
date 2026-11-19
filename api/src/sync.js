@@ -1,11 +1,14 @@
 // Automated sync with GovernmentBP, driven by tools/sync-agent.mjs (SYNC_TOKEN, no user session):
 //   POST /api/sync/land   game -> portal: a land export document ([gov_land_export]); replaces the land dataset
 //   POST /api/sync/city   game -> portal: a city export document ([gov_city_export]); stored as a read-only snapshot
+//   POST /api/sync/metro  game -> portal: a metro snapshot ([trn_metro_export]); refused (409) while portal edits are pending
 //   GET  /api/sync/export portal -> game: the current land export document (what nb:land_pull_chunk receives)
+//   GET  /api/sync/metro-export  portal -> game: the metro updates document (what nb:metro_pull_chunk receives)
 //   GET  /api/city        public: the stored city snapshot
 // Unchanged documents (same hash, ignoring exportedAt) are skipped.
 import { sha256Hex, timingSafeEqual } from './auth.js';
 import { buildExport, importDoc } from './exchange.js';
+import { buildUpdates, importMetroSnapshot } from './metro.js';
 
 async function authorized(env, request) {
     const given = (request.headers.get('Authorization') ?? '').replace(/^Bearer /, '');
@@ -53,6 +56,26 @@ export async function syncCity(env, request, body) {
                           ON CONFLICT(id) DO UPDATE SET hash = excluded.hash, doc = excluded.doc, received_at = excluded.received_at`)
         .bind(hash, JSON.stringify(doc)).run();
     return { status: 200, body: { ok: true, citizens: doc.citizens.length, companies: doc.companies.length } };
+}
+
+export async function syncMetro(env, request, body) {
+    if (!(await authorized(env, request))) return DENIED;
+    const doc = body?.doc ?? body;
+    if (doc === null || typeof doc !== 'object') return { status: 400, body: { error: 'invalid_request' } };
+
+    const hash = await hashDoc(doc);
+    if (await getMeta(env.DB, 'sync_metro_hash') === hash) return { status: 200, body: { ok: true, unchanged: true } };
+
+    const result = await importMetroSnapshot(env, { number: null, role: 'admin' }, doc, { dryRun: false, refuseOverwrite: true })
+        .catch(err => err?.status ? { status: err.status, body: err.body } : Promise.reject(err));
+    if (result.status === 200) await setMeta(env.DB, 'sync_metro_hash', hash);
+    return result;
+}
+
+export async function syncMetroExport(env, request) {
+    if (!(await authorized(env, request))) return DENIED;
+    const doc = await buildUpdates(env.DB);
+    return { status: 200, body: { doc, hash: await hashDoc(doc) } };
 }
 
 export async function syncExport(env, request) {

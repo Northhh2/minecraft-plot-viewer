@@ -8,6 +8,7 @@
 // Roles: clerk and admin edit; deleting entities and overriding the overlap check is admin-only.
 
 import { mapPlot } from './snapshot.js';
+import { assignSector } from './sectors.js';
 
 class HttpError extends Error {
     constructor(status, code, extra = {}) {
@@ -118,12 +119,7 @@ async function resolvePlot(db, input, existing, { force }) {
         if (overlaps.length) throw new HttpError(409, 'overlap', { with: overlaps.map(o => o.name) });
     }
 
-    let sectorId = null, best = 0;
-    for (const s of await all(db, 'SELECT * FROM sectors')) {
-        const w = Math.min(maxX, Math.max(s.x1, s.x2)) - Math.max(minX, Math.min(s.x1, s.x2)) + 1;
-        const h = Math.min(maxZ, Math.max(s.z1, s.z2)) - Math.max(minZ, Math.min(s.z1, s.z2)) + 1;
-        if (w > 0 && h > 0 && w * h > best) { best = w * h; sectorId = s.id; }
-    }
+    const sectorId = assignSector(await all(db, 'SELECT * FROM sectors'), minX, minZ, maxX, maxZ);
 
     return { name, zoningTypeId, x1: minX, z1: minZ, x2: maxX, z2: maxZ, sideX, sideZ, area, value, sectorId, districtId, streetId, buildingNumber };
 }

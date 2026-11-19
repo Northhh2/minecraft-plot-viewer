@@ -3,7 +3,7 @@ import { authenticate, login, logout, syncPins } from './auth.js';
 import { handleEdit } from './edit.js';
 import { handleExchange } from './exchange.js';
 import { handleMetro, readMetro } from './metro.js';
-import { syncLand, syncCity, syncExport, readCity } from './sync.js';
+import { syncLand, syncCity, syncMetro, syncExport, syncMetroExport, readCity } from './sync.js';
 
 // The front end lives on another origin and authenticates with a bearer token (no cookies),
 // so a wildcard origin is fine: browsers never attach credentials automatically.
@@ -71,14 +71,20 @@ export default {
                 case 'POST /api/sync/city':
                     return reply(await syncCity(env, request, await readBody(request)));
 
+                case 'POST /api/sync/metro':
+                    return reply(await syncMetro(env, request, await readBody(request)));
+
                 case 'GET /api/sync/export':
                     return reply(await syncExport(env, request));
+
+                case 'GET /api/sync/metro-export':
+                    return reply(await syncMetroExport(env, request));
 
                 case 'GET /api/city':
                     return json(await readCity(env.DB), 200, { 'Cache-Control': 'public, max-age=30' });
 
                 default: {
-                    if (!pathname.startsWith('/api/') || request.method === 'GET' && pathname !== '/api/audit' && pathname !== '/api/export' && pathname !== '/api/metro/export') {
+                    if (!pathname.startsWith('/api/') || request.method === 'GET' && pathname !== '/api/audit' && pathname !== '/api/export') {
                         return json({ error: 'not_found' }, 404);
                     }
                     const viewer = await authenticate(env, request);

@@ -99,7 +99,7 @@ export function buildMetroSnapshot(stations: StationRec[], lines: LineRec[], exp
 const LOG_TAG = "[trn_metro_export]";
 
 /** Same chunking as the land export (see GovernmentBP LandExchange.chunkForLog): numbered lines, spaces escaped
- *  as ` ` so a viewer trimming line ends cannot corrupt a chunk. tools/log-to-json.mjs reassembles. */
+ *  as ` ` so a viewer trimming line ends cannot corrupt a chunk. The sync agent (tools/sync-agent.mjs in the portal repo) reassembles. */
 export function chunkForLog(json: string, exportId: string, chunkSize = 1200): string[] {
     const safe = json.replace(/ /g, "\\u0020");
     const parts: string[] = [];

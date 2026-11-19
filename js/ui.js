@@ -89,7 +89,7 @@ export function closeModal() {
 
 export function showSimpleTooltip(e, plot) {
     const status = getPlotStatusInfo(plot);
-    dom.tooltip.innerHTML = `<div class="font-bold">${esc(plot.name || `Działka ${plot.id}`)}</div><div class="text-xs ${status.color}">${status.text}</div>`;
+    dom.tooltip.innerHTML = `<div class="font-bold">${esc(plot.name || `Działka ${plot.id}`)}</div><div class="text-xs text-gray-400">${esc(plot.fullId)}</div><div class="text-xs ${status.color}">${status.text}</div>`;
     dom.tooltip.classList.remove('hidden');
     moveTooltip(e);
 }
@@ -344,7 +344,7 @@ function renderPlotContent(plot) {
         lotteryBadgeHTML = createDonorBadgeHTML(lotteryWin.winner);
     }
 
-    return `<div><h3 class="text-2xl font-bold ${status.isOwned ? 'text-red-400' : 'text-green-400'}">${esc(plot.name)}</h3><p class="text-gray-400 text-sm">${address}</p></div>
+    return `<div><h3 class="text-2xl font-bold ${status.isOwned ? 'text-red-400' : 'text-green-400'}">${esc(plot.name)}</h3><p class="text-gray-400 text-sm">ID: ${esc(plot.fullId)}</p><p class="text-gray-400 text-sm">${address}</p></div>
         <div class="space-y-3">
             ${createOwnerCardHTML(ownerInfo)}
             ${lotteryBadgeHTML}
@@ -491,6 +491,7 @@ function createPlotListItemHTML(plot) {
     const status = getPlotStatusInfo(plot);
     return `<div data-plot-name="${esc(plot.name)}" class="bg-gray-700 p-2 rounded-md hover:bg-gray-600 cursor-pointer transition-colors">
         <div class="font-semibold text-purple-400">${esc(plot.name)} (${esc(plot.area)} m²)</div>
+        <div class="text-xs text-gray-400">${esc(plot.fullId)}</div>
         <div class="text-xs text-gray-400">Właściciel: <span class="font-medium text-gray-200">${esc(plot.owner || 'Brak')}</span></div>
         <div class="text-xs ${status.color}">${status.text}</div></div>`;
 }
@@ -589,8 +590,8 @@ function setupSearch() {
         const { allPlots, allOwners, streets, allLocals } = appData;
         
         // Działki
-        allPlots.filter(p => p.name.toLowerCase().includes(query) || p.id.includes(query)).slice(0, 3)
-            .forEach(p => suggestions.push({ type: 'plot', label: `Działka: ${p.name}`, value: p.name }));
+        allPlots.filter(p => p.name.toLowerCase().includes(query) || p.id.includes(query) || p.fullId.toLowerCase().includes(query)).slice(0, 3)
+            .forEach(p => suggestions.push({ type: 'plot', label: `Działka: ${p.name} (${p.fullId})`, value: p.name }));
         // Właściciele
         [...new Set(allPlots.map(p => p.owner))].filter(o => o && o.toLowerCase().includes(query)).slice(0, 2)
             .forEach(o => suggestions.push({ type: 'owner', label: `Właściciel: ${o}`, value: o }));

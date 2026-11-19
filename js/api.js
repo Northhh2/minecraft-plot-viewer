@@ -1,9 +1,8 @@
-import { urls, API_BASE } from './config.js';
+import { API_BASE } from './config.js';
 import { authHeaders, getToken } from './auth.js';
 
-// Loads app data from the Worker API when API_BASE is set, otherwise from the legacy sheet.
+// Loads app data from the Worker API.
 export async function loadAppData() {
-    if (!API_BASE) return processData(await fetchData());
     try {
         const [res, metroRes] = await Promise.all([
             fetch(`${API_BASE}/api/snapshot`, { headers: authHeaders(getToken()) }),
@@ -25,7 +24,7 @@ export async function loadAppData() {
 // Maps a gov-land snapshot (schema/gov-land.schema.json) onto the shape the UI already consumes.
 export function snapshotToAppData(s) {
     const byId = list => new Map(list.map(x => [x.id, x]));
-    const zoning = byId(s.zoningTypes), districts = byId(s.districts), streetsById = byId(s.streets);
+    const zoning = byId(s.zoningTypes), districts = byId(s.districts), streetsById = byId(s.streets), sectors = byId(s.sectors ?? []);
     const citizens = new Map(s.citizens.map(c => [c.number, c]));
     const companies = new Map(s.companies.map(c => [c.number, c]));
     const TREASURY = 'Skarb Miasta';
@@ -45,6 +44,9 @@ export function snapshotToAppData(s) {
     const allPlots = s.plots.map(p => ({
         id: String(p.id),
         name: p.name,
+        // Full plot identifier: <sector>/<sequence number>. The sector is assigned by the portal from the coordinates.
+        sector: sectors.get(p.sectorId)?.name ?? '',
+        fullId: `${sectors.get(p.sectorId)?.name ?? '?'}/${p.id}`,
         type: zoning.get(p.zoningTypeId)?.name ?? '',
         x1: p.x1, z1: p.z1, x2: p.x2, z2: p.z2,
         width: p.sideX, height: p.sideZ,
@@ -104,129 +106,6 @@ export function snapshotToAppData(s) {
         allPlots, allLocals, allOwners, allTransactions, mergedPlots, streets, settings: s.settings, lotteryHistory,
         districts: s.districts, zoningTypes: s.zoningTypes
     };
-}
-
-export async function fetchData() {
-    try {
-        const responses = await Promise.all(Object.values(urls).map(url => fetch(url)));
-        if (responses.some(res => !res.ok)) throw new Error('Network response was not ok');
-
-        const texts = await Promise.all(responses.map(res => res.text()));
-        return await Promise.all(texts.map(text => new Promise(resolve => Papa.parse(text, { header: true, skipEmptyLines: true, complete: resolve }))));
-    } catch (error) {
-        console.error("Błąd podczas pobierania danych z sieci:", error);
-        return null;
-    }
-}
-
-export function processData(results) {
-    if (!results) return null;
-
-    try {
-        const [plotsData, mergedData, streetsData, localsData, ownersData, transactionsData, settingsData, lotteryData] = results;
-
-        const allPlots = plotsData.data
-            .filter(d => 
-                d['Nr porządkowy'] &&
-                d['X (lewy górny)'] && d['Z (lewy górny)'] &&
-                d['Bok X'] && d['Bok Z']
-            )
-            .map(d => ({
-                id: d['Nr porządkowy'],
-                name: d['Nazwa porządkowa działki'],
-                type: d['Typ'],
-                x1: parseInt(d['X (lewy górny)'], 10),
-                z1: parseInt(d['Z (lewy górny)'], 10),
-                x2: parseInt(d['X (prawy dolny)'], 10),
-                z2: parseInt(d['Z (prawy dolny)'], 10),
-                width: Math.abs(parseInt(d['Bok X'], 10)),
-                height: Math.abs(parseInt(d['Bok Z'], 10)),
-                area: d['Powierzchnia'],
-                value: d['Wartość'],
-                owner: 'Skarb Miasta',
-                status: 'owned',
-                district: d['Dzielnica'],
-                street: d['Ulica'],
-                buildingNumber: d['Numer budynku'],
-                history: []
-            }));
-
-        const allLocals = localsData.data.map(l => {
-            const parentPlot = allPlots.find(p => p.name === l['Numer działki']);
-            return {
-                id: l['Numer porządkowy'],
-                plotName: l['Numer działki'],
-                street: parentPlot ? parentPlot.street : '',
-                building: parentPlot ? parentPlot.buildingNumber : '',
-                klatka: l['Klatka'],
-                localNum: l['Numer lokalu'],
-                floor: l['Piętro'],
-                area: parseInt(l['Powierzchnia'], 10) || 0,
-                beds: parseInt(l['Ilość łóżek'], 10) || 0,
-                workplaces: parseInt(l['Ilość miejsc pracy'], 10) || 0,
-                tenant: l['Najemca']
-            };
-        });
-
-        const allOwners = ownersData.data.map(o => ({
-            name: o['Nazwa'],
-            type: o['Typ'],
-            photo: o['Zdjęcie'],
-            nio: o['NIO'],
-            age: o['Wiek'],
-            profession: o['Zawód'], 
-            legalForm: o['Forma prawna'],
-            pin: o['PIN'],
-            staff: o['Obsługa'] === 'Tak'
-        }));
-        
-        const allTransactions = transactionsData.data.map(t => ({
-            plotName: t['Numer działki'],
-            newOwner: t['Nowy właściciel'],
-            transactionValue: t['Wartość transakcji'],
-            date: t['Dzień transakcji'],
-            type: t['Typ transakcji'],
-            checkNumber: t['Numer czeku'],
-            paid: t['Opłacone?'] === 'TRUE'
-        }));
-
-        const settings = {};
-        settingsData.data.forEach(s => { settings[s['Ustawienie']] = s['Włączone?'] === 'TRUE'; });
-        
-        const lotteryHistory = lotteryData.data.map(l => ({
-            plotName: l['Działka'],
-            winner: l['Zwycięzca'],
-            amount: l['Kwota'],
-            checkNumber: l['Numer czeku'],
-            paid: l['Opłacone?'] === 'TRUE'
-        }));
-
-        updatePlotOwners(allPlots, allTransactions);
-
-        const mergedPlots = processMergedPlots(mergedData.data.filter(m => m['Działka główna'] && m['Działka dołączana']).map(d => ({ plot1: d['Działka główna'], plot2: d['Działka dołączana'] })), allPlots);
-        
-        const streets = streetsData.data
-            .filter(d => 
-                d['X (lewy górny)'] && d['Z (lewy górny)'] &&
-                d['X (prawy dolny)'] && d['Z (prawy dolny)']
-            )
-            .map(d => ({
-                name: d['Nazwa ulicy'],
-                x1: parseInt(d['X (lewy górny)'], 10),
-                z1: parseInt(d['Z (lewy górny)'], 10),
-                width: Math.abs(parseInt(d['X (prawy dolny)'], 10) - parseInt(d['X (lewy górny)'], 10)) + 1,
-                height: Math.abs(parseInt(d['Z (prawy dolny)'], 10) - parseInt(d['Z (lewy górny)'], 10)) + 1
-            }));
-
-        return {
-            allPlots, allLocals, allOwners, allTransactions,
-            mergedPlots, streets, settings, lotteryHistory
-        };
-
-    } catch (error) {
-        console.error("Błąd podczas przetwarzania danych:", error);
-        return null;
-    }
 }
 
 function updatePlotOwners(allPlots, allTransactions) {

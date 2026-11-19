@@ -20,7 +20,7 @@ const { packHash, pepper } = await import(pathToFileURL(path.join(apiDir, 'src',
 
 const seedFile = path.join(apiDir, 'seed.sql');
 if (!fs.existsSync(seedFile)) {
-    console.error('api/seed.sql not found. Run: cd tools && npm install && node import-sheet.mjs');
+    console.error('api/seed.sql not found. api/backup.sql is a dump of the real data; copy it to api/seed.sql to use it.');
     process.exit(1);
 }
 

@@ -523,51 +523,7 @@ function openMetroStationForm(station) {
     });
 }
 
-async function exportMetroModule() {
-    try {
-        const res = await fetch(`${API_BASE}/api/metro/export?format=module`, { headers: authHeaders(getToken()) });
-        if (!res.ok) throw Object.assign(new Error('export'), { status: res.status, data: await res.json().catch(() => ({})) });
-        saveFile('MetroImportData.ts', await res.text(), 'text/plain');
-        openPanel('Plik metra dla gry', [
-            h('p', {}, 'Pobrano MetroImportData.ts. Zawiera zmiany istniejących linii (kolor, prędkość, postój, pociągi, rodzaj, przystanki) i nazw stacji. W paczce TransportationBP:'),
-            list(['podmień src/registry/metro/MetroImportData.ts tym plikiem i uruchom npm run build,',
-                '/scriptevent nb:metro_import_check — sprawdzenie bez zmian,',
-                '/scriptevent nb:metro_import_apply — zastosowanie (linie ze zmienionymi przystankami zostaną zatrzymane).'])
-        ], [{ label: 'Zamknij', onclick: (_, o) => o.remove() }]);
-    } catch (err) {
-        alert(describeError(err));
-    }
-}
-
-async function importMetroFromFile(file) {
-    let doc;
-    try { doc = JSON.parse(await file.text()); }
-    catch { alert('To nie jest poprawny plik JSON.'); return; }
-
-    let plan;
-    try { plan = await request('POST', '/api/metro/import?dryRun=1', doc); }
-    catch (err) {
-        if (err.data?.errors) openPanel('Nieprawidłowy plik metra', [list(err.data.errors, 15)], [{ label: 'Zamknij', onclick: (_, o) => o.remove() }]);
-        else alert(describeError(err));
-        return;
-    }
-    const { before, after } = plan.counts;
-    openPanel('Import metra z gry — podsumowanie', [
-        h('p', { class: 'text-yellow-300' }, 'Import ZASTĘPUJE wszystkie linie i stacje danymi z gry.'),
-        list([`Linie: ${before.lines} → ${after.lines}`, `Stacje: ${before.stations} → ${after.stations}`]),
-        ...(plan.overwritten.length ? [h('p', { class: 'text-yellow-300' }, 'Zmiany z portalu, które zostaną utracone:'), list(plan.overwritten)] : []),
-        ...(plan.warnings.length ? [h('p', { class: 'text-yellow-300' }, 'Uwagi:'), list(plan.warnings)] : [])
-    ], [
-        { label: 'Anuluj', onclick: (_, o) => o.remove() },
-        { label: 'Zastosuj import', primary: true, onclick: async btn => {
-            btn.disabled = true;
-            try { await request('POST', '/api/metro/import', doc); reload(null); }
-            catch (err) { btn.disabled = false; alert(describeError(err)); }
-        } }
-    ]);
-}
-
-// ─── GovBP exchange (admin) ──────────────────────────────────────────────────────
+// ─── GovBP export (admin) ─────────────────────────────────────────────────────────
 
 function openPanel(title, content, buttons) {
     const overlay = h('div', { class: 'fixed inset-0 bg-gray-900 bg-opacity-80 flex items-center justify-center z-50 p-4' },
@@ -596,23 +552,10 @@ function saveFile(name, text, type) {
 
 const stamp = () => new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
 
-/** kind: 'json' (the exchange document) or 'module' (ImportData.ts for GovernmentBP). */
-async function exportForGov(kind, allowUnlinked = false) {
-    const query = [kind === 'module' ? 'format=module' : '', allowUnlinked ? 'allowUnlinked=1' : ''].filter(Boolean).join('&');
-    const path = `/api/export${query ? `?${query}` : ''}`;
+/** Downloads the land data as a JSON file (a backup/inspection copy). Data reaches the game only through the sync agent. */
+async function exportForGov(allowUnlinked = false) {
+    const path = `/api/export${allowUnlinked ? '?allowUnlinked=1' : ''}`;
     try {
-        if (kind === 'module') {
-            const res = await fetch(`${API_BASE}${path}`, { headers: authHeaders(getToken()) });
-            if (!res.ok) throw Object.assign(new Error('export'), { status: res.status, data: await res.json().catch(() => ({})) });
-            saveFile('ImportData.ts', await res.text(), 'text/plain');
-            openPanel('Plik importu dla GovBP', [
-                h('p', {}, 'Pobrano ImportData.ts. W paczce GovernmentBP:'),
-                list(['podmień src/registry/land/ImportData.ts tym plikiem i uruchom npm run build,',
-                    '/scriptevent nb:land_import_check — sprawdzenie bez zmian,',
-                    '/scriptevent nb:land_import_apply — zastosowanie (najpierw loguje kopię zapasową).'])
-            ], [{ label: 'Zamknij', onclick: (_, o) => o.remove() }]);
-            return;
-        }
         const { doc, warnings } = await request('GET', path);
         saveFile(`land-export-${stamp()}.json`, JSON.stringify(doc, null, 2), 'application/json');
         openPanel('Eksport JSON', [
@@ -624,53 +567,15 @@ async function exportForGov(kind, allowUnlinked = false) {
             openPanel('Właściciele bez identyfikatora GovBP', [
                 h('p', {}, 'Ci właściciele nie mają numeru z GovernmentBP, więc nie da się ich zapisać w formacie wymiany:'),
                 list(err.data.unlinked.map(u => `${u.name ?? `#${u.number}`} (${u.kind === 'citizen' ? 'obywatel' : 'firma'})`)),
-                h('p', {}, 'Powiąż ich (najprościej: najpierw zaimportuj dane z GovBP — dopasowanie po nazwie), albo wyeksportuj mimo to — takie działki trafią do Skarbu Miasta.')
+                h('p', {}, 'Takie działki trafią do Skarbu Miasta, jeśli wyeksportujesz mimo to.')
             ], [
                 { label: 'Anuluj', onclick: (_, o) => o.remove() },
-                { label: 'Eksportuj mimo to', primary: true, onclick: async (_, o) => { o.remove(); await exportForGov(kind, true); } }
+                { label: 'Eksportuj mimo to', primary: true, onclick: async (_, o) => { o.remove(); await exportForGov(true); } }
             ]);
         } else {
             alert(describeError(err));
         }
     }
-}
-
-async function importFromFile(file) {
-    let doc;
-    try { doc = JSON.parse(await file.text()); }
-    catch { alert('To nie jest poprawny plik JSON.'); return; }
-
-    let plan;
-    try { plan = await request('POST', '/api/import?dryRun=1', doc); }
-    catch (err) {
-        const errors = err.data?.errors;
-        if (errors) openPanel('Nieprawidłowy plik importu', [list(errors, 15)], [{ label: 'Zamknij', onclick: (_, o) => o.remove() }]);
-        else alert(describeError(err));
-        return;
-    }
-
-    const rowsOf = ([label, key]) => `${label}: ${plan.counts.before[key] ?? '—'} → ${plan.counts.after[key] ?? '—'}`;
-    const owners = (label, o) => `${label}: ${o.existing} istniejących, ${o.link.length} powiązanych po nazwie, ${o.create.length} nowych${o.create.length ? ` (${o.create.slice(0, 5).join(', ')}${o.create.length > 5 ? ', …' : ''})` : ''}`;
-    openPanel('Import z GovBP — podsumowanie', [
-        h('p', { class: 'text-yellow-300' }, 'Import ZASTĘPUJE wszystkie dane o gruntach (działki, ulice, dzielnice, lokale, historię własności, loterię, scalenia). Konta, role i PIN-y zostają.'),
-        list([['Działki', 'plots'], ['Ulice', 'streets'], ['Dzielnice', 'districts'], ['Lokale', 'units'], ['Zmiany własności', 'ownershipHistory']].map(rowsOf)),
-        list([owners('Obywatele', plan.citizens), owners('Firmy', plan.companies)]),
-        ...(plan.warnings.length ? [h('p', { class: 'text-yellow-300' }, 'Uwagi:'), list(plan.warnings)] : [])
-    ], [
-        { label: 'Anuluj', onclick: (_, o) => o.remove() },
-        { label: 'Zastosuj import', primary: true, onclick: async (btn, o) => {
-            btn.disabled = true;
-            try { await request('POST', '/api/import', doc); reload(null); }
-            catch (err) { btn.disabled = false; alert(describeError(err)); }
-        } }
-    ]);
-}
-
-function pickImportFile(handler = importFromFile) {
-    const input = h('input', { type: 'file', accept: 'application/json,.json', class: 'hidden' });
-    input.addEventListener('change', () => { if (input.files[0]) handler(input.files[0]); input.remove(); });
-    document.body.append(input);
-    input.click();
 }
 
 // ─── toolbar ─────────────────────────────────────────────────────────────────────
@@ -689,12 +594,7 @@ export function initializeEditor(data) {
         h('button', { class: BTN_SECONDARY + ' text-sm', onclick: () => openDistrictForm(null) }, '+ Dzielnica'));
     adminSection = h('div', { class: 'hidden flex flex-col gap-2 border-t border-gray-600 pt-2 mt-1' },
         h('div', { class: 'text-xs text-gray-400 uppercase tracking-wide' }, 'GovBP'),
-        h('button', { class: BTN_SECONDARY + ' text-sm', onclick: () => exportForGov('json') }, 'Eksport JSON'),
-        h('button', { class: BTN_SECONDARY + ' text-sm', onclick: () => exportForGov('module') }, 'Plik importu GovBP'),
-        h('button', { class: BTN_SECONDARY + ' text-sm', onclick: () => pickImportFile() }, 'Import JSON…'),
-        h('div', { class: 'text-xs text-gray-400 uppercase tracking-wide pt-1' }, 'Metro'),
-        h('button', { class: BTN_SECONDARY + ' text-sm', onclick: () => pickImportFile(importMetroFromFile) }, 'Import metra…'),
-        h('button', { class: BTN_SECONDARY + ' text-sm', onclick: exportMetroModule }, 'Plik metra dla gry'));
+        h('button', { class: BTN_SECONDARY + ' text-sm', onclick: () => exportForGov() }, 'Eksport JSON'));
     toolbar.append(adminSection);
     document.body.append(toolbar);
 }
