@@ -1,5 +1,5 @@
-// Land exchange with GovernmentBP. Game -> portal import runs through the sync agent (sync.js -> importDoc);
-// the only manual route left is the admin's JSON export download, GET /api/export (a backup, not an import).
+// Land exchange with GovernmentBP, driven entirely by the sync agent (sync.js): importDoc() takes the game's
+// export, buildExport() makes the document the agent injects back into the game. There are no manual routes.
 //
 // The document format and validation are in LandExchange.ts, a verbatim copy of
 // GovernmentBP/src/registry/land/LandExchange.ts (the canonical one) — keep them identical.
@@ -242,17 +242,4 @@ export async function importDoc(env, viewer, doc, { dryRun }) {
 
     await db.batch(stmts);
     return { status: 200, body: summary };
-}
-
-// ─── routes ──────────────────────────────────────────────────────────────────────
-
-export async function handleExchange(env, viewer, method, url) {
-    if (!(method === 'GET' && url.pathname === '/api/export')) return null;
-
-    if (!viewer) return { status: 401, body: { error: 'unauthorized' } };
-    if (viewer.role !== 'admin') return { status: 403, body: { error: 'forbidden' } };
-
-    const result = await buildExport(env.DB, { allowUnlinked: url.searchParams.get('allowUnlinked') === '1' });
-    if (result.unlinked.length) return { status: 409, body: { error: 'unlinked_owners', unlinked: result.unlinked } };
-    return { status: 200, body: { doc: result.doc, warnings: result.warnings } };
 }

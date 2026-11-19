@@ -58,7 +58,6 @@ import and plot edit. A plot's full identifier is `<sector name>/<plot id>`.
 **Portal -> game** (`--pull`): the agent sends the portal's data as `scriptevent` chunks through the Crafty console, and applying it
 stays a manual step in the game: `/scriptevent nb:land_pull_check` then `nb:land_pull_apply` (a backup export is logged first), and
 `nb:metro_pull_check` then `nb:metro_pull_apply`. Portal edits are only pulled when the game did not change in the same pass.
-*Eksport JSON* in the admin toolbar downloads the land data as a bare JSON document (a backup copy, not an import).
 
 What the game cannot hold is skipped with a warning rather than invented: portal units have no geometry (game units stay as
 they are), transfers to the Treasury and lottery entries without a winner are dropped, and merges need the surveyed areas

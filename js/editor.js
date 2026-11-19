@@ -523,65 +523,9 @@ function openMetroStationForm(station) {
     });
 }
 
-// ─── GovBP export (admin) ─────────────────────────────────────────────────────────
-
-function openPanel(title, content, buttons) {
-    const overlay = h('div', { class: 'fixed inset-0 bg-gray-900 bg-opacity-80 flex items-center justify-center z-50 p-4' },
-        h('div', { class: 'bg-gray-800 p-6 rounded-lg shadow-2xl border border-gray-600 w-full max-w-lg max-h-full overflow-y-auto' },
-            h('div', { class: 'flex justify-between items-center mb-4' },
-                h('h2', { class: 'text-xl font-bold' }, title),
-                h('button', { type: 'button', class: 'text-gray-400 hover:text-white text-2xl', onclick: () => overlay.remove() }, '×')),
-            h('div', { class: 'space-y-3 text-sm text-gray-300' }, content),
-            h('div', { class: 'flex justify-end gap-3 pt-4' }, buttons.map(b =>
-                h('button', { type: 'button', class: b.primary ? BTN_PRIMARY : BTN_SECONDARY, onclick: async e => { await b.onclick(e.currentTarget, overlay); } }, b.label)))));
-    document.body.append(overlay);
-    return overlay;
-}
-
-const list = (items, max = 12) => h('ul', { class: 'list-disc pl-5 space-y-1' },
-    items.slice(0, max).map(i => h('li', {}, i)), items.length > max ? h('li', {}, `…i ${items.length - max} więcej`) : '');
-
-function saveFile(name, text, type) {
-    const url = URL.createObjectURL(new Blob([text], { type }));
-    const a = h('a', { href: url, download: name });
-    document.body.append(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 10_000);
-}
-
-const stamp = () => new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
-
-/** Downloads the land data as a JSON file (a backup/inspection copy). Data reaches the game only through the sync agent. */
-async function exportForGov(allowUnlinked = false) {
-    const path = `/api/export${allowUnlinked ? '?allowUnlinked=1' : ''}`;
-    try {
-        const { doc, warnings } = await request('GET', path);
-        saveFile(`land-export-${stamp()}.json`, JSON.stringify(doc, null, 2), 'application/json');
-        openPanel('Eksport JSON', [
-            h('p', {}, `Pobrano plik: ${doc.plots.length} działek, ${doc.streets.length} ulic, ${doc.ownershipHistory.length} zmian własności.`),
-            ...(warnings.length ? [h('p', { class: 'text-yellow-300' }, 'Uwagi:'), list(warnings)] : [])
-        ], [{ label: 'Zamknij', onclick: (_, o) => o.remove() }]);
-    } catch (err) {
-        if (err.data?.error === 'unlinked_owners') {
-            openPanel('Właściciele bez identyfikatora GovBP', [
-                h('p', {}, 'Ci właściciele nie mają numeru z GovernmentBP, więc nie da się ich zapisać w formacie wymiany:'),
-                list(err.data.unlinked.map(u => `${u.name ?? `#${u.number}`} (${u.kind === 'citizen' ? 'obywatel' : 'firma'})`)),
-                h('p', {}, 'Takie działki trafią do Skarbu Miasta, jeśli wyeksportujesz mimo to.')
-            ], [
-                { label: 'Anuluj', onclick: (_, o) => o.remove() },
-                { label: 'Eksportuj mimo to', primary: true, onclick: async (_, o) => { o.remove(); await exportForGov(true); } }
-            ]);
-        } else {
-            alert(describeError(err));
-        }
-    }
-}
-
 // ─── toolbar ─────────────────────────────────────────────────────────────────────
 
 let toolbar;
-let adminSection;
 
 export function initializeEditor(data) {
     appData = data;
@@ -592,15 +536,10 @@ export function initializeEditor(data) {
         h('button', { class: BTN_SECONDARY + ' text-sm', onclick: () => openMergeForm(null) }, 'Połącz działki'),
         h('button', { class: BTN_SECONDARY + ' text-sm', onclick: () => openStreetForm(null) }, '+ Ulica'),
         h('button', { class: BTN_SECONDARY + ' text-sm', onclick: () => openDistrictForm(null) }, '+ Dzielnica'));
-    adminSection = h('div', { class: 'hidden flex flex-col gap-2 border-t border-gray-600 pt-2 mt-1' },
-        h('div', { class: 'text-xs text-gray-400 uppercase tracking-wide' }, 'GovBP'),
-        h('button', { class: BTN_SECONDARY + ' text-sm', onclick: () => exportForGov() }, 'Eksport JSON'));
-    toolbar.append(adminSection);
     document.body.append(toolbar);
 }
 
 /** Call after login state changes. */
 export function refreshEditorUI() {
     toolbar?.classList.toggle('hidden', !isEditor());
-    adminSection?.classList.toggle('hidden', !isAdmin());
 }

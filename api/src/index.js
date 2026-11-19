@@ -1,7 +1,6 @@
 import { SCHEMA_VERSION, buildSnapshot } from './snapshot.js';
 import { authenticate, login, logout, syncPins } from './auth.js';
 import { handleEdit } from './edit.js';
-import { handleExchange } from './exchange.js';
 import { handleMetro, readMetro } from './metro.js';
 import { syncLand, syncCity, syncMetro, syncExport, syncMetroExport, readCity } from './sync.js';
 
@@ -84,14 +83,13 @@ export default {
                     return json(await readCity(env.DB), 200, { 'Cache-Control': 'public, max-age=30' });
 
                 default: {
-                    if (!pathname.startsWith('/api/') || request.method === 'GET' && pathname !== '/api/audit' && pathname !== '/api/export') {
+                    if (!pathname.startsWith('/api/') || request.method === 'GET' && pathname !== '/api/audit') {
                         return json({ error: 'not_found' }, 404);
                     }
                     const viewer = await authenticate(env, request);
                     const body = request.method === 'GET' || request.method === 'DELETE' ? null : await readBody(request);
                     const url = new URL(request.url);
                     const result = await handleEdit(env, viewer, request.method, url, body)
-                        ?? await handleExchange(env, viewer, request.method, url, body)
                         ?? await handleMetro(env, viewer, request.method, url, body);
                     if (!result) return json({ error: 'not_found' }, 404);
                     if (result.raw !== undefined) {
