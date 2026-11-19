@@ -185,6 +185,12 @@ export function parseImport(raw: unknown, ctx: ImportContext): ImportReport {
         if (n === undefined || n < min) { fail(`${where}: nieprawidłowe pole ${field}.`); return 0; }
         return n;
     };
+    /** Fractional values are allowed (prices are only rounded at the end of a value calculation). */
+    const nonNegNumber = (v: unknown, where: string, field: string): number => {
+        const n = typeof v === "number" ? v : (typeof v === "string" && v.trim() !== "" ? Number(v) : NaN);
+        if (!Number.isFinite(n) || n < 0) { fail(`${where}: nieprawidłowe pole ${field}.`); return 0; }
+        return n;
+    };
     const uniqueIds = <T extends { id: number }>(items: T[], label: string): T[] => {
         const seen = new Set<number>();
         for (const it of items) { if (seen.has(it.id)) fail(`${label}: zduplikowane id ${it.id}.`); seen.add(it.id); }
@@ -208,7 +214,7 @@ export function parseImport(raw: unknown, ctx: ImportContext): ImportReport {
     if (zoning) {
         data.zoningTypes = uniqueIds(zoning.map((r, i) => ({
             id: id(r, `Typ strefy [${i}]`), name: String(r.name ?? "").trim(),
-            pricePer100Blocks: num(r.pricePer100Blocks, `Typ strefy [${i}]`, "pricePer100Blocks", 0)
+            pricePer100Blocks: nonNegNumber(r.pricePer100Blocks, `Typ strefy [${i}]`, "pricePer100Blocks")
         })), "Typy stref");
     }
     const districts = list("districts");
