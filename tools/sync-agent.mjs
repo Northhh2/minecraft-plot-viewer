@@ -13,7 +13,7 @@
 // Config (environment variables):
 //   PORTAL_URL        https://your-worker.workers.dev           (required)
 //   SYNC_TOKEN        the Worker's SYNC_TOKEN                    (required)
-//   LOG_FILE          path to the server log file                } one of these two
+//   LOG_FILE          path to the server log file; may contain * (newest match wins) } one of these two
 //   CRAFTY_URL, CRAFTY_TOKEN, CRAFTY_SERVER_ID                   } (reads logs, and sends commands for --pull)
 //   CRAFTY_INSECURE=1 accept a self-signed Crafty certificate
 //   STATE_FILE        default ./sync-agent-state.json
@@ -21,6 +21,7 @@
 //   CHUNK_DELAY_MS    default 150
 import fs from 'node:fs';
 import crypto from 'node:crypto';
+import path from 'node:path';
 
 const args = new Set(process.argv.slice(2));
 const dry = args.has('--dry');
@@ -48,8 +49,32 @@ function crafty() {
     return { base: `${env.CRAFTY_URL.replace(/\/$/, '')}/api/v2/servers/${env.CRAFTY_SERVER_ID}`, headers: { Authorization: `Bearer ${env.CRAFTY_TOKEN}` } };
 }
 
+/** LOG_FILE may contain `*` in its file name (e.g. /srv/bds/ContentLog_*): the newest matching file is used,
+ *  because Bedrock starts a new content log file on every server start. Only the last LOG_TAIL_BYTES are read. */
+function resolveLogFile(spec) {
+    if (!spec.includes('*')) return spec;
+    const dir = path.dirname(spec);
+    const re = new RegExp(`^${path.basename(spec).replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`);
+    const files = fs.readdirSync(dir).filter(f => re.test(f)).map(f => ({ f: path.join(dir, f), t: fs.statSync(path.join(dir, f)).mtimeMs }));
+    if (files.length === 0) throw new Error(`LOG_FILE: nothing matches ${spec}`);
+    return files.sort((a, b) => b.t - a.t)[0].f;
+}
+
+function readTail(file) {
+    const limit = Number(env.LOG_TAIL_BYTES ?? 30 * 1024 * 1024);
+    const size = fs.statSync(file).size;
+    const fd = fs.openSync(file, 'r');
+    try {
+        const start = Math.max(0, size - limit);
+        const buf = Buffer.alloc(size - start);
+        fs.readSync(fd, buf, 0, buf.length, start);
+        const lines = buf.toString('utf8').split('\n');
+        return start > 0 ? lines.slice(1) : lines; // the first line of a tail may be cut in half
+    } finally { fs.closeSync(fd); }
+}
+
 async function readLogLines() {
-    if (env.LOG_FILE) return fs.readFileSync(env.LOG_FILE, 'utf8').split('\n');
+    if (env.LOG_FILE) { const file = resolveLogFile(env.LOG_FILE); log(`log file: ${file}`); return readTail(file); }
     const { base, headers } = crafty();
     const res = await fetch(`${base}/logs?file=false&colors=false&raw=true&html=false`, { headers });
     if (!res.ok) throw new Error(`Crafty logs: HTTP ${res.status}`);

@@ -1,3 +1,5 @@
 node_modules/
 api/seed.sql
 api/.wrangler/
+sync-agent.env
+sync-agent-state.json
