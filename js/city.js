@@ -119,6 +119,39 @@ function chart(config, height = 230) {
     return box;
 }
 
+let openProfession = null;
+/** ui.js registers how to open a profession's modal (city.js cannot import ui.js: circular). */
+export function setProfessionOpener(fn) { openProfession = fn; }
+export const professionName = key => PROFESSIONS[key] ?? key;
+
+/** Modal body for one profession: the villager picture on the left, the count trend across censuses on the right. */
+export async function mountVillager(root, key) {
+    root.replaceChildren(el('p', { class: 'text-sm text-gray-300' }, 'Pobieranie danych miasta...'));
+    let data;
+    try { data = await loadCity(); } catch (err) { root.replaceChildren(el('p', { class: 'text-red-300 text-sm' }, `Nie udało się pobrać danych: ${err.message}`)); return; }
+    const censuses = (data.snapshot?.elections ?? []).filter(e => e.type === 1).sort((a, b) => a.date - b.date || a.electionNumber - b.electionNumber);
+    if (censuses.length === 0) { root.replaceChildren(el('p', { class: 'text-sm text-gray-300' }, 'Brak przeprowadzonych cenzusów.')); return; }
+    const series = censuses.map(c => c.tally?.[key] ?? 0);
+    const totals = censuses.map(c => Object.values(c.tally ?? {}).reduce((s, n) => s + n, 0));
+    const last = series.length - 1;
+    const delta = last > 0 ? series[last] - series[last - 1] : null;
+    const stat = (label, value) => el('div', { class: 'm-stat' }, el('b', {}, value), el('span', {}, label));
+    const left = el('div', { class: 'm-villager-side' },
+        el('img', { class: 'm-villager-big', src: `img/villagers/${PROFESSIONS[key] ? key : 'none'}.png`, alt: PROFESSIONS[key] ?? key }),
+        el('div', { class: 'm-stats' },
+            stat('obecnie', num(series[last])),
+            stat('zmiana', delta === null ? '—' : `${delta > 0 ? '▲' : delta < 0 ? '▼' : ''}${Math.abs(delta)}`),
+            stat('udział', totals[last] ? `${Math.round(series[last] / totals[last] * 100)}%` : '—'),
+            stat('rekord', num(Math.max(...series)))));
+    const color = PALETTE[Object.keys(PROFESSIONS).indexOf(key) % PALETTE.length] ?? PALETTE[0];
+    const right = el('div', { class: 'm-villager-chart' }, el('h3', { class: 'text-lg font-semibold mb-2' }, 'Zmiany liczebności'), chart({
+        type: 'line',
+        data: { labels: censuses.map(c => `#${c.electionNumber} · dz. ${day(c.date)}`), datasets: [{ label: PROFESSIONS[key] ?? key, data: series, borderColor: color, backgroundColor: color + '33', fill: true, borderWidth: 3, pointRadius: 4, tension: 0.3 }] },
+        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+    }, 260));
+    root.replaceChildren(el('div', { class: 'm-villager-layout' }, left, right));
+}
+
 const bar = (value, max, color) => el('div', { class: 'm-bar' }, el('i', { style: `width:${max ? Math.max(2, Math.round(value / max * 100)) : 0}%;background:${color}` }));
 
 function renderCensus(doc) {
@@ -146,10 +179,12 @@ function renderCensus(doc) {
         const lines = Object.entries(c.tally ?? {}).sort((a, b) => b[1] - a[1]).map(([k, n]) => {
             const [icon, name] = profession(k);
             const d = prev ? n - (prev.tally?.[k] ?? 0) : null;
-            return el('div', { class: 'm-line' },
+            const row = el('div', { class: 'm-line clickable', title: 'Pokaż trend' },
                 el('span', { class: 'm-icon' }, icon), el('span', { class: 'm-name' }, name), bar(n, max, PALETTE[keys.indexOf(k) % PALETTE.length]),
                 el('span', { class: 'm-count' }, n),
                 el('span', { class: `m-delta ${d > 0 ? 'up' : d < 0 ? 'down' : ''}` }, d === null || d === 0 ? '' : `${d > 0 ? '▲' : '▼'}${Math.abs(d)}`));
+            row.addEventListener('click', () => openProfession?.(k));
+            return row;
         });
         return el('div', { class: 'm-card' },
             el('div', { class: 'm-card-head' }, el('b', {}, `Cenzus #${c.electionNumber}`), el('span', {}, `dzień ${day(c.date)} · razem ${total(c)}${c.excludedCount ? ` · wykluczeni ${c.excludedCount}` : ''}`)), lines);

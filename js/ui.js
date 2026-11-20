@@ -5,7 +5,7 @@ import { getColorForType, escapeHtml } from './utils.js';
 const esc = escapeHtml;
 import { setViewBox, highlightPlots, clearHighlight } from './map.js';
 import { API_BASE } from './config.js';
-import { mountCity, loadCity } from './city.js';
+import { mountCity, loadCity, mountVillager, professionName, setProfessionOpener } from './city.js';
 import { apiLogin, apiLogout, apiCurrentUser, authHeaders, getToken } from './auth.js';
 import { initializeEditor, refreshEditorUI, editorButtonsHTML, wireEditorButtons } from './editor.js';
 
@@ -204,6 +204,7 @@ function renderCurrentModal() {
             case 'local': title = `Lokal #${data.klatka ? data.klatka + '/' : ''}${data.localNum}`; contentHTML = renderLocalContent(data); const parentPlot = allPlots.find(p => p.name === data.plotName); if (parentPlot) plotsToHighlight = [parentPlot]; break;
             case 'owner': title = `Aktywa: ${data}`; contentHTML = renderOwnerContent(data); plotsToHighlight = allPlots.filter(p => p.owner === data); break;
             case 'ratusz': title = 'Ratusz Miasta'; contentHTML = '<div id="ratusz-root"></div>'; plotsToHighlight = []; break;
+            case 'villager': title = `Villager: ${professionName(data)}`; contentHTML = '<div id="villager-root"></div>'; plotsToHighlight = []; break;
             case 'district': title = `Dzielnica: ${data.name}`; contentHTML = renderDistrictContent(data.name, data.plots); plotsToHighlight = data.plots; break;
             case 'street': title = `Ulica: ${data}`; contentHTML = renderStreetContent(data); plotsToHighlight = allPlots.filter(p => p.street === data); break;
             case 'plotType': title = `Typ: ${data}`; contentHTML = renderPlotTypeContent(data); plotsToHighlight = allPlots.filter(p => p.type === data); break;
@@ -215,11 +216,12 @@ function renderCurrentModal() {
         dom.modal.dataset.kind = type;
         const kicker = document.getElementById('modal-kind');
         if (kicker) kicker.textContent = MODAL_KINDS[type] ?? '';
-        dom.modal.style.width = type === 'ratusz' && window.innerWidth >= 768 ? 'min(60rem, 100vw)' : '';
+        dom.modal.style.width = (type === 'ratusz' || type === 'villager') && window.innerWidth >= 768 ? 'min(60rem, 100vw)' : '';
         dom.modalTitle.textContent = title;
         dom.modalContent.innerHTML = contentHTML;
         addModalEventListeners();
         if (type === 'ratusz') openRatuszContent();
+        if (type === 'villager') Promise.resolve().then(() => mountVillager(document.getElementById('villager-root'), data));
 
         import('./map.js').then(map => map.dimOtherPlots(plotsToHighlight));
 
@@ -440,6 +442,8 @@ async function loadMyAllowance() {
 }
 
 /** Opens the Ratusz modal from anywhere (map button, Treasury owner card). */
+setProfessionOpener(key => openNewModal({ type: 'villager', data: key }));
+
 export function openRatusz() { openNewModal({ type: 'ratusz', data: null }); }
 
 /** Fills the Ratusz modal: the Ratusz plot link and the city information tabs. */
@@ -484,7 +488,7 @@ async function loadCompanyHq(ownerName) {
     } catch { /* optional info */ }
 }
 
-const MODAL_KINDS = { plot: 'Działka', merged: 'Połączone działki', local: 'Lokal', owner: 'Właściciel', district: 'Dzielnica', street: 'Ulica', plotType: 'Typ działki', metroLine: 'Metro · linia', metroStation: 'Metro · stacja', ratusz: 'Skarb Miasta' };
+const MODAL_KINDS = { plot: 'Działka', merged: 'Połączone działki', local: 'Lokal', owner: 'Właściciel', district: 'Dzielnica', street: 'Ulica', plotType: 'Typ działki', metroLine: 'Metro · linia', metroStation: 'Metro · stacja', ratusz: 'Skarb Miasta', villager: 'Cenzus · profesja' };
 
 const PAYMENT_LABELS = { requested: 'Zlecenie wysłane do gry', awaiting_account: 'Czeka na konto bankowe', pending: 'Czek wystawiony, czeka na realizację', paid: 'Opłacone' };
 
