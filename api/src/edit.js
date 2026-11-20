@@ -418,7 +418,7 @@ async function applyCompanyMapping(env, viewer, body) {
         if (!legacy || seenLegacy.has(portalNumber)) throw new HttpError(400, 'invalid_field', { field: 'portalNumber' });
         seenLegacy.add(portalNumber);
         if (m.govNumber === null || m.govNumber === undefined) continue;
-        const gov = intField(m.govNumber, 'govNumber', { min: 1 });
+        const gov = intField(m.govNumber, 'govNumber', { min: 1, max: Number.MAX_SAFE_INTEGER });   // game company numbers are far above the coordinate limit
         const target = gameByNumber.get(gov);
         if (!target || seenGame.has(gov)) throw new HttpError(400, 'invalid_field', { field: 'govNumber' });
         seenGame.add(gov);
