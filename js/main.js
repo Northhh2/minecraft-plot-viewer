@@ -2,7 +2,6 @@ import { loadAppData } from './api.js';
 import { initializeMap, drawMap } from './map.js';
 import { initializeUI } from './ui.js';
 import { openFromHash } from './editor.js';
-import { initializeCityPanel } from './city.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
     const loader = document.getElementById('loader');
@@ -12,7 +11,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         initializeUI(appData);
         initializeMap(appData);
-        initializeCityPanel();
         
         drawMap(appData);
         openFromHash();

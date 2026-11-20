@@ -1,4 +1,5 @@
-// Read-only "Miasto" panel: the city snapshot pushed by the sync agent (GET /api/city). Public, no login.
+// City information shown inside the Ratusz modal (the City Treasury's headquarters): the snapshot pushed by the sync agent
+// (GET /api/city). Public, no login.
 import { API_BASE } from './config.js';
 
 const MOTION_TYPES = ['Zmiana kodeksu', 'Debata', 'Absolutorium', 'Wniosek formalny', 'Wniosek o wybory', 'Odwołanie', 'Budżet', 'Wotum zaufania', 'Komisja', 'Zmiana dodatku', 'Projekt miejski'];
@@ -6,7 +7,7 @@ const PROJECT_STATUS = { draft: 'Szkic', proposed: 'U Rady', approved: 'Zatwierd
 const CITIZEN_STATUS = ['—', 'Wniosek', 'Obywatel', 'Odrzucony'];
 const COUNCIL_ROLE = ['', 'Radny', 'Przewodniczący'];
 const CODEX_NAMES = { civil: 'Kodeks cywilny', criminal: 'Kodeks karny', construction: 'Kodeks budowlany' };
-const TABS = [['citizens', 'Obywatele'], ['companies', 'Firmy'], ['projects', 'Projekty'], ['council', 'Rada'], ['elections', 'Wybory']];
+const TABS = [['projects', 'Projekty'], ['citizens', 'Obywatele'], ['companies', 'Firmy'], ['council', 'Rada'], ['elections', 'Wybory'], ['positions', 'Stanowiska']];
 
 const day = d => (d === null || d === undefined ? '—' : d + 1); // game days are 0-indexed
 const num = n => Number(n ?? 0).toLocaleString('pl-PL');
@@ -79,61 +80,53 @@ function renderCouncil(doc) {
 }
 
 function renderElections(doc) {
-    const rows = [...(doc.elections ?? [])].reverse().map(e => [
-        `#${e.electionNumber}${e.round ? ` (runda ${e.round + 1})` : ''}`, e.type === 1 ? 'Spis' : 'Obywatelskie', day(e.date), e.winner,
+    const rows = list => [...list].reverse().map(e => [
+        `#${e.electionNumber}${e.round ? ` (runda ${e.round + 1})` : ''}`, day(e.date), e.winner,
         Object.entries(e.tally ?? {}).map(([k, v]) => `${k}: ${v}`).join(', ') || '—'
     ]);
-    return table(['Wybory', 'Rodzaj', 'Dzień', 'Wynik', 'Głosy'], rows);
+    const all = doc.elections ?? [];
+    const head = ['Wybory', 'Dzień', 'Wynik', 'Głosy'];
+    return [
+        section('Cenzusy (spisy)', table(head, rows(all.filter(e => e.type === 1)))),
+        section('Wybory powszechne', table(head, rows(all.filter(e => e.type !== 1))))
+    ];
 }
 
-const RENDER = { citizens: renderCitizens, companies: renderCompanies, projects: renderProjects, council: renderCouncil, elections: renderElections };
+function renderPositions(doc) {
+    const names = new Map(doc.citizens.map(c => [c.identityNumber, c.name]));
+    return table(['Stanowisko', 'Piastuje'], (doc.positions ?? []).map(p => [p.name, (p.holders ?? []).map(n => names.get(n) ?? `#${n}`).join(', ') || 'wakat']));
+}
 
-let overlay = null;
+const RENDER = { positions: renderPositions, citizens: renderCitizens, companies: renderCompanies, projects: renderProjects, council: renderCouncil, elections: renderElections };
 
-async function open() {
-    if (!overlay) {
-        overlay = el('div', { class: 'hidden fixed inset-0 z-40 bg-gray-900 bg-opacity-95 overflow-y-auto text-white' });
-        document.body.append(overlay);
-    }
-    overlay.classList.remove('hidden');
-    overlay.replaceChildren(el('p', { class: 'p-6 text-gray-300' }, 'Pobieranie danych miasta...'));
+let cache = null;
+
+/** The public city snapshot ({ snapshot, receivedAt } or { snapshot: null }); cached for 30 s. */
+export async function loadCity() {
+    if (cache && Date.now() - cache.at < 30000) return cache.data;
+    const res = await fetch(`${API_BASE}/api/city`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    cache = { at: Date.now(), data: await res.json() };
+    return cache.data;
+}
+
+/** Fills `root` with the tabbed city information. */
+export async function mountCity(root) {
+    root.replaceChildren(el('p', { class: 'text-sm text-gray-300' }, 'Pobieranie danych miasta...'));
     let data;
-    try {
-        const res = await fetch(`${API_BASE}/api/city`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        data = await res.json();
-    } catch (err) {
-        overlay.replaceChildren(header(null), el('p', { class: 'p-6 text-red-400' }, `Nie udało się pobrać danych: ${err.message}`));
-        return;
-    }
-    if (!data.snapshot) { overlay.replaceChildren(header(null), el('p', { class: 'p-6 text-gray-300' }, 'Brak danych: serwer jeszcze nie wysłał eksportu miasta.')); return; }
-    show(data, 'citizens');
-}
-
-function header(data) {
-    const close = el('button', { class: 'px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-md' }, 'Zamknij');
-    close.addEventListener('click', () => overlay.classList.add('hidden'));
-    return el('div', { class: 'flex items-center justify-between p-4 border-b border-gray-700' },
-        el('div', {}, el('h2', { class: 'text-2xl font-bold' }, 'Miasto'),
-            data ? el('p', { class: 'text-xs text-gray-400' }, `Stan gry: dzień ${day(data.snapshot.day)} · dane odebrane ${data.receivedAt} UTC`) : null), close);
-}
-
-function show(data, tab) {
-    const tabs = el('div', { class: 'flex flex-wrap gap-2 px-4 pt-3' }, TABS.map(([id, label]) => {
-        const b = el('button', { class: `px-3 py-1 rounded-md ${id === tab ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'}` }, label);
-        b.addEventListener('click', () => show(data, id));
-        return b;
-    }));
-    let content;
-    try { content = RENDER[tab](data.snapshot); } catch (err) { content = el('p', { class: 'text-red-400' }, `Błąd wyświetlania: ${err.message}`); }
-    overlay.replaceChildren(header(data), tabs, el('div', { class: 'p-4 max-w-6xl' }, content));
-}
-
-export function initializeCityPanel() {
-    const controls = document.getElementById('layer-toggles');
-    if (!controls) return;
-    const btn = el('button', { id: 'open-city', title: 'Miasto', class: 'control-button w-10 h-10 bg-gray-800 text-white rounded-md flex items-center justify-center hover:bg-gray-700' });
-    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="9" width="7" height="12"></rect><rect x="14" y="3" width="7" height="18"></rect><line x1="6" y1="13" x2="7" y2="13"></line><line x1="17" y1="8" x2="18" y2="8"></line></svg>';
-    btn.addEventListener('click', open);
-    controls.append(btn);
+    try { data = await loadCity(); } catch (err) { root.replaceChildren(el('p', { class: 'text-red-300 text-sm' }, `Nie udało się pobrać danych: ${err.message}`)); return null; }
+    if (!data.snapshot) { root.replaceChildren(el('p', { class: 'text-sm text-gray-300' }, 'Brak danych: serwer jeszcze nie wysłał eksportu miasta.')); return null; }
+    const show = tab => {
+        const tabs = el('div', { class: 'flex flex-wrap gap-2 mb-3' }, TABS.map(([id, label]) => {
+            const b = el('button', { class: `px-3 py-1 rounded-md text-sm ${id === tab ? 'bg-yellow-600 text-gray-900 font-semibold' : 'bg-gray-700 hover:bg-gray-600'}` }, label);
+            b.addEventListener('click', () => show(id));
+            return b;
+        }));
+        let content;
+        try { content = RENDER[tab](data.snapshot); } catch (err) { content = el('p', { class: 'text-red-300' }, `Błąd wyświetlania: ${err.message}`); }
+        root.replaceChildren(
+            el('p', { class: 'text-xs text-yellow-200 opacity-80 mb-3' }, `Stan gry: dzień ${day(data.snapshot.day)} · dane odebrane ${data.receivedAt} UTC`), tabs, el('div', {}, content));
+    };
+    show('projects');
+    return data.snapshot;
 }

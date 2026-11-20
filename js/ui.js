@@ -5,6 +5,7 @@ import { getColorForType, escapeHtml } from './utils.js';
 const esc = escapeHtml;
 import { setViewBox, highlightPlots, clearHighlight } from './map.js';
 import { API_BASE } from './config.js';
+import { mountCity, loadCity } from './city.js';
 import { apiLogin, apiLogout, apiCurrentUser, authHeaders, getToken } from './auth.js';
 import { initializeEditor, refreshEditorUI, editorButtonsHTML, wireEditorButtons } from './editor.js';
 
@@ -58,6 +59,20 @@ export function initializeUI(data) {
     setupLottery();
     initializeEditor(data);
     attemptAutoLogin();
+    initializeRatuszButton();
+}
+
+/** Map button that opens the Ratusz modal (replaces the old separate city panel). */
+function initializeRatuszButton() {
+    const controls = document.getElementById('layer-toggles');
+    if (!controls || document.getElementById('open-ratusz')) return;
+    const btn = document.createElement('button');
+    btn.id = 'open-ratusz';
+    btn.title = 'Ratusz';
+    btn.className = 'control-button w-10 h-10 bg-gray-800 text-yellow-400 rounded-md flex items-center justify-center hover:bg-gray-700';
+    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="9" width="7" height="12"></rect><rect x="14" y="3" width="7" height="18"></rect><line x1="6" y1="13" x2="7" y2="13"></line><line x1="17" y1="8" x2="18" y2="8"></line></svg>';
+    btn.addEventListener('click', openRatusz);
+    controls.append(btn);
 }
 
 export function openNewModal(stateData) {
@@ -188,6 +203,7 @@ function renderCurrentModal() {
             case 'merged': title = 'Połączone działki'; contentHTML = renderMergedContent(data); plotsToHighlight = data.plots.map(name => allPlots.find(p => p.name === name)).filter(Boolean); break;
             case 'local': title = `Lokal #${data.klatka ? data.klatka + '/' : ''}${data.localNum}`; contentHTML = renderLocalContent(data); const parentPlot = allPlots.find(p => p.name === data.plotName); if (parentPlot) plotsToHighlight = [parentPlot]; break;
             case 'owner': title = `Aktywa: ${data}`; contentHTML = renderOwnerContent(data); plotsToHighlight = allPlots.filter(p => p.owner === data); break;
+            case 'ratusz': title = 'Ratusz Miasta'; contentHTML = '<div id="ratusz-root"></div>'; plotsToHighlight = []; break;
             case 'district': title = `Dzielnica: ${data.name}`; contentHTML = renderDistrictContent(data.name, data.plots); plotsToHighlight = data.plots; break;
             case 'street': title = `Ulica: ${data}`; contentHTML = renderStreetContent(data); plotsToHighlight = allPlots.filter(p => p.street === data); break;
             case 'plotType': title = `Typ: ${data}`; contentHTML = renderPlotTypeContent(data); plotsToHighlight = allPlots.filter(p => p.type === data); break;
@@ -195,9 +211,12 @@ function renderCurrentModal() {
             case 'metroStation': { const station = metroStationById(data); title = station ? `Stacja: ${station.name}` : 'Stacja'; contentHTML = renderMetroStationContent(station); break; }
         }
 
+        dom.modal.classList.toggle('ratusz', type === 'ratusz');
+        dom.modal.style.width = type === 'ratusz' && window.innerWidth >= 768 ? 'min(60rem, 100vw)' : '';
         dom.modalTitle.textContent = title;
         dom.modalContent.innerHTML = contentHTML;
         addModalEventListeners();
+        if (type === 'ratusz') openRatuszContent();
 
         import('./map.js').then(map => map.dimOtherPlots(plotsToHighlight));
 
@@ -417,10 +436,47 @@ async function loadMyAllowance() {
     } catch { box.innerHTML = ''; }
 }
 
+/** Opens the Ratusz modal from anywhere (map button, Treasury owner card). */
+export function openRatusz() { openNewModal({ type: 'ratusz', data: null }); }
+
+/** Fills the Ratusz modal: the Ratusz plot link and the city information tabs. */
+async function openRatuszContent() {
+    await Promise.resolve();
+    const root = document.getElementById('ratusz-root');
+    if (!root) return;
+    const header = document.createElement('div');
+    const body = document.createElement('div');
+    root.replaceChildren(header, body);
+    const snapshot = await mountCity(body);
+    const plot = snapshot?.ratuszPlotId != null ? appData.allPlots.find(p => p.id === String(snapshot.ratuszPlotId)) : null;
+    header.className = 'mb-3 text-sm';
+    header.innerHTML = plot
+        ? `<span class="text-yellow-200">Siedziba Skarbu Miasta:</span> <a data-plot-name="${esc(plot.name)}" class="cursor-pointer font-semibold text-yellow-300 hover:underline">${esc(plot.name)}</a>`
+        : '<span class="text-yellow-200 opacity-80">Siedziba Skarbu Miasta: nie ustawiono Ratusza.</span>';
+    header.querySelectorAll('[data-plot-name]').forEach(a => a.addEventListener('click', () => navigateToModal({ type: 'plot', data: plot })));
+}
+
+/** Adds "Siedziba" to a company's owner modal (the headquarters comes with the city snapshot). */
+async function loadCompanyHq(ownerName) {
+    await Promise.resolve();
+    const box = document.getElementById('owner-hq');
+    if (!box) return;
+    try {
+        const owner = appData.allOwners.find(o => o.name === ownerName);
+        if (owner?.ref?.kind !== 'company') return;
+        const city = await loadCity();
+        const company = city.snapshot?.companies?.find(c => c.number === owner.ref.number);
+        const plot = company?.hqPlotId != null ? appData.allPlots.find(p => p.id === String(company.hqPlotId)) : null;
+        box.innerHTML = `<span class="text-gray-400">Siedziba:</span> ${plot ? `<a data-hq-plot class="cursor-pointer font-medium text-purple-400 hover:underline">${esc(plot.name)}</a>` : '<span>Brak</span>'}`;
+        box.querySelector('[data-hq-plot]')?.addEventListener('click', () => navigateToModal({ type: 'plot', data: plot }));
+    } catch { /* optional info */ }
+}
+
 const PAYMENT_LABELS = { requested: 'Zlecenie wysłane do gry', awaiting_account: 'Czeka na konto bankowe', pending: 'Czek wystawiony, czeka na realizację', paid: 'Opłacone' };
 
 function renderOwnerContent(ownerName) {
     if (state.currentUser && state.currentUser.name === ownerName) setTimeout(loadMyAllowance, 0);
+    setTimeout(() => loadCompanyHq(ownerName), 0);
     const { allOwners, allPlots, allLocals, lotteryHistory } = appData;
     const owner = allOwners.find(o => o.name === ownerName);
     const ownedPlots = allPlots.filter(p => p.owner === ownerName);
@@ -453,6 +509,7 @@ function renderOwnerContent(ownerName) {
 
     return `<div class="space-y-4">${createOwnerCardHTML(ownerName, true)}
         ${ownerDetailsHTML ? `<div class="pt-3 border-t border-gray-700">${ownerDetailsHTML}</div>` : ''}
+        <div id="owner-hq" class="text-sm"></div>
         <div><h4 class="font-semibold text-md mb-2">Posiadane Działki (${ownedPlots.length})</h4>
             <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm"><span class="text-gray-400">Łączna pow.:</span><span>${totalPlotArea.toLocaleString()} m²</span></div>
             ${ownedPlots.length > 0 ? `<div class="space-y-2 mt-2">${ownedPlots.map(p => createPlotListItemHTML(p)).join('')}</div>` : ''}</div>
@@ -525,7 +582,7 @@ function createOwnerCardHTML(ownerName, isSelf = false) {
     if (!ownerName) return '';
     const { allOwners } = appData;
     const owner = allOwners.find(o => o.name === ownerName);
-    const isClickable = !isSelf && !ownerName.toLowerCase().includes('skarb miasta');
+    const isClickable = !isSelf;
     const photo = owner?.photo || 'placeholder.webp';
     const type = owner?.type ? (owner.type.charAt(0).toUpperCase() + owner.type.slice(1)) : '';
     return `<div class="flex items-center bg-gray-700 p-2 rounded-md transition-colors ${isClickable ? 'clickable hover:bg-gray-600' : ''}" ${isClickable ? `data-owner-name="${esc(ownerName)}"` : ''}>
@@ -564,9 +621,8 @@ function addModalEventListeners() {
     dom.modalContent.querySelectorAll('[data-owner-name]').forEach(el => el.addEventListener('click', e => { 
         e.preventDefault(); 
         const ownerName = e.currentTarget.dataset.ownerName;
-        if (ownerName && !ownerName.toLowerCase().includes('skarb miasta') && ownerName.toLowerCase() !== 'brak') {
-            navigateToModal({type: 'owner', data: ownerName});
-        }
+        if (ownerName && ownerName.toLowerCase().includes('skarb miasta')) navigateToModal({type: 'ratusz', data: null});
+        else if (ownerName && ownerName.toLowerCase() !== 'brak') navigateToModal({type: 'owner', data: ownerName});
     }));
     dom.modalContent.querySelectorAll('[data-district-name]').forEach(el => el.addEventListener('click', e => {
         e.preventDefault();
