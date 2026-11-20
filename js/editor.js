@@ -69,6 +69,7 @@ function describeError(err) {
         case 'payment_pending': return 'Ta działka ma już nieopłaconą transakcję. Najpierw rozlicz poprzednie zlecenie.';
         case 'owner_not_linked': return 'Ten obywatel nie ma jeszcze powiązanego numeru tożsamości z gry — zlecenie nie dotarłoby do gry.';
         case 'game_day_unknown': return 'Portal nie zna jeszcze bieżącego dnia w grze (brak danych miasta z synchronizacji).';
+        case 'game_data_missing': return 'Portal nie ma jeszcze danych miasta z gry (synchronizacja).';
         case 'forbidden': return 'Brak uprawnień do tej operacji.';
         case 'unauthorized': return 'Sesja wygasła. Zaloguj się ponownie.';
         case 'too_many_attempts': return 'Zbyt wiele prób. Spróbuj później.';
@@ -296,7 +297,7 @@ function openPlotForm(plot) {
 
 function openTransferForm(plot) {
     const owners = [{ value: '', label: 'Skarb Miasta' },
-        ...appData.allOwners.filter(o => o.ref).map(o => ({ value: `${o.ref.kind}:${o.ref.number}`, label: `${o.name} (${o.type})` }))];
+        ...appData.allOwners.filter(isGameOwner).map(o => ({ value: `${o.ref.kind}:${o.ref.number}`, label: `${o.name} (${o.type})` }))];
     openDialog({
         title: `Przekaż własność: ${plot.name}`,
         submitLabel: v => (v.transactionType === 'Darowizna' ? 'Przekaż w darowiźnie' : 'Wyślij zlecenie płatności do gry'),
@@ -385,7 +386,10 @@ const plotItems = (exclude = []) => appData.allPlots.filter(p => !exclude.includ
     hint: [p.type, `${p.area} m²`, p.owner].filter(Boolean).join(' · ')
 }));
 
-const ownerItems = () => appData.allOwners.filter(o => o.ref).map(o => ({
+// Companies without a game number are old portal-only records: they cannot take part in game transactions.
+const isGameOwner = o => o.ref && (o.ref.kind === 'citizen' || o.ref.govNumber != null);
+
+const ownerItems = () => appData.allOwners.filter(isGameOwner).map(o => ({
     key: `${o.ref.kind}:${o.ref.number}`, idText: String(o.ref.number), label: `${o.name} (${o.type} #${o.ref.number})`,
     hint: o.type === 'prawna' ? 'Firma' : 'Osoba'
 }));
@@ -602,4 +606,49 @@ export function initializeEditor(data) {
 /** Call after login state changes. */
 export function refreshEditorUI() {
     toolbar?.classList.toggle('hidden', !isEditor());
+    if (isAdmin()) checkCompanyMapping();
+}
+
+// ─── one-time mapping of old portal companies to the game's ──────────────────────
+
+let mappingChecked = false;
+
+async function checkCompanyMapping() {
+    if (mappingChecked) return;
+    mappingChecked = true;
+    try {
+        const state = await request('GET', '/api/admin/company-mapping');
+        if (state.pending) openCompanyMapping(state);
+    } catch { mappingChecked = false; }   // retry on the next login refresh
+}
+
+function openCompanyMapping({ legacy, gameCompanies }) {
+    const norm = s => String(s).trim().toLowerCase();
+    const selects = legacy.map(c => {
+        const select = h('select', { class: INPUT_CLASS + ' !mt-1' },
+            h('option', { value: '' }, '— brak odpowiednika w grze —'),
+            gameCompanies.map(g => h('option', { value: g.number }, `${g.name} (#${g.number})${g.inPortal ? ' · już w portalu' : ''}`)));
+        const guess = gameCompanies.find(g => norm(g.name) === norm(c.name));
+        if (guess) select.value = String(guess.number);
+        return select;
+    });
+    const error = h('p', { class: 'hidden text-red-400 text-sm mt-3' });
+    const submit = h('button', { type: 'submit', class: BTN_PRIMARY }, 'Zapisz mapowanie');
+    const form = h('form', { class: 'space-y-4' },
+        h('p', { class: 'text-sm text-gray-300' }, 'Te firmy powstały w portalu, zanim połączono go z grą. Przypisz każdą do firmy z gry — jej działki, historia i najem przejdą na firmę z gry. Firmy bez odpowiednika zostaną ukryte na listach właścicieli. Tej operacji nie da się cofnąć.'),
+        legacy.map((c, i) => h('label', { class: 'block text-sm font-medium text-gray-300' }, `${c.name} (powiązań: ${c.references})`, selects[i])),
+        error, h('div', { class: 'flex justify-end pt-2' }, submit));
+    form.addEventListener('submit', async e => {
+        e.preventDefault();
+        const chosen = selects.map(s => s.value).filter(Boolean);
+        if (new Set(chosen).size !== chosen.length) { error.textContent = 'Dwie stare firmy nie mogą wskazywać tej samej firmy z gry.'; error.classList.remove('hidden'); return; }
+        submit.disabled = true; error.classList.add('hidden');
+        try {
+            await request('POST', '/api/admin/company-mapping', { mappings: legacy.map((c, i) => ({ portalNumber: c.number, govNumber: selects[i].value === '' ? null : Number(selects[i].value) })) });
+            reload(null);
+        } catch (err) { error.textContent = describeError(err); error.classList.remove('hidden'); submit.disabled = false; }
+    });
+    document.body.append(h('div', { class: 'fixed inset-0 bg-gray-900 bg-opacity-80 flex items-center justify-center z-50 p-4' },
+        h('div', { class: 'bg-gray-800 p-6 rounded-lg shadow-2xl border border-gray-600 w-full max-w-lg max-h-full overflow-y-auto' },
+            h('h2', { class: 'text-xl font-bold mb-3' }, 'Mapowanie starych firm'), form)));
 }

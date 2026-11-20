@@ -368,6 +368,78 @@ async function listAudit(env, viewer, url) {
     };
 }
 
+// ─── legacy company mapping (admin, once) ───────────────────────────────────────
+// Companies created in the portal before it was connected to the game have no game number. The admin maps each to
+// the real company from the game (its references move to that company) or marks it as having no counterpart.
+
+const MAPPING_DONE = 'company_mapping_done';
+const COMPANY_REFS = [['plots', 'owner'], ['ownership_history', 'owner'], ['units', 'tenant'], ['lottery', 'winner']];
+
+async function companyMappingState(env) {
+    const done = (await one(env.DB, 'SELECT value FROM meta WHERE key = ?1', MAPPING_DONE))?.value === '1';
+    const legacy = await all(env.DB, 'SELECT number, name, legal_form FROM companies WHERE gov_number IS NULL ORDER BY name');
+    for (const c of legacy) {
+        c.refs = 0;
+        for (const [table, prefix] of COMPANY_REFS) {
+            c.refs += (await one(env.DB, `SELECT COUNT(*) AS n FROM ${table} WHERE ${prefix}_kind = 'company' AND ${prefix}_number = ?1`, c.number)).n;
+        }
+    }
+    const snap = await one(env.DB, 'SELECT doc FROM city_snapshot WHERE id = 1');
+    const game = snap ? (JSON.parse(snap.doc).companies ?? []) : null;
+    const linked = new Map((await all(env.DB, 'SELECT number, gov_number FROM companies WHERE gov_number IS NOT NULL')).map(r => [r.gov_number, r.number]));
+    return { done, legacy, game, linked };
+}
+
+async function getCompanyMapping(env, viewer) {
+    requireAdmin(viewer);
+    const s = await companyMappingState(env);
+    return {
+        status: 200,
+        body: {
+            pending: !s.done && s.legacy.length > 0 && s.game !== null,
+            legacy: s.legacy.map(c => ({ number: c.number, name: c.name, legalForm: c.legal_form, references: c.refs })),
+            gameCompanies: (s.game ?? []).map(g => ({ number: g.number, name: g.name, legalForm: g.legalForm ?? null, inPortal: s.linked.has(g.number) }))
+        }
+    };
+}
+
+async function applyCompanyMapping(env, viewer, body) {
+    requireAdmin(viewer);
+    const s = await companyMappingState(env);
+    if (s.game === null) throw new HttpError(409, 'game_data_missing');
+    if (!Array.isArray(body?.mappings)) throw new HttpError(400, 'invalid_field', { field: 'mappings' });
+    const legacyByNumber = new Map(s.legacy.map(c => [c.number, c]));
+    const gameByNumber = new Map(s.game.map(g => [g.number, g]));
+    const seenLegacy = new Set(), seenGame = new Set();
+    const stmts = [];
+    for (const m of body.mappings) {
+        const portalNumber = intField(m?.portalNumber, 'portalNumber', { min: 1 });
+        const legacy = legacyByNumber.get(portalNumber);
+        if (!legacy || seenLegacy.has(portalNumber)) throw new HttpError(400, 'invalid_field', { field: 'portalNumber' });
+        seenLegacy.add(portalNumber);
+        if (m.govNumber === null || m.govNumber === undefined) continue;
+        const gov = intField(m.govNumber, 'govNumber', { min: 1 });
+        const target = gameByNumber.get(gov);
+        if (!target || seenGame.has(gov)) throw new HttpError(400, 'invalid_field', { field: 'govNumber' });
+        seenGame.add(gov);
+        const existing = s.linked.get(gov);
+        if (existing !== undefined) {
+            // The game company already has a portal row: move everything of the old one onto it, then drop the old row.
+            for (const [table, prefix] of COMPANY_REFS) {
+                stmts.push(env.DB.prepare(`UPDATE ${table} SET ${prefix}_number = ?1 WHERE ${prefix}_kind = 'company' AND ${prefix}_number = ?2`).bind(existing, portalNumber));
+            }
+            stmts.push(env.DB.prepare('DELETE FROM companies WHERE number = ?1').bind(portalNumber));
+        } else {
+            stmts.push(env.DB.prepare('UPDATE companies SET gov_number = ?1, name = ?2, legal_form = ?3 WHERE number = ?4').bind(gov, target.name, target.legalForm ?? null, portalNumber));
+        }
+        stmts.push(auditStmt(env.DB, viewer, 'company', portalNumber, 'map_to_game', { name: legacy.name }, { govNumber: gov, name: target.name }));
+    }
+    if (seenLegacy.size !== s.legacy.length) throw new HttpError(400, 'invalid_field', { field: 'mappings' });   // every old company needs a decision
+    stmts.push(env.DB.prepare("INSERT INTO meta (key, value) VALUES (?1, '1') ON CONFLICT(key) DO UPDATE SET value = '1'").bind(MAPPING_DONE));
+    await env.DB.batch(stmts);
+    return { status: 200, body: { ok: true } };
+}
+
 // ─── router ─────────────────────────────────────────────────────────────────────
 
 const ROUTES = [
@@ -383,6 +455,8 @@ const ROUTES = [
     ['POST', /^\/api\/districts$/, (e, v, b) => createDistrict(e, v, b)],
     ['PATCH', /^\/api\/districts\/(\d+)$/, (e, v, b, m) => updateDistrict(e, v, Number(m[1]), b)],
     ['DELETE', /^\/api\/districts\/(\d+)$/, (e, v, b, m) => deleteDistrict(e, v, Number(m[1]))],
+    ['GET', /^\/api\/admin\/company-mapping$/, (e, v) => getCompanyMapping(e, v)],
+    ['POST', /^\/api\/admin\/company-mapping$/, (e, v, b) => applyCompanyMapping(e, v, b)],
     ['GET', /^\/api\/audit$/, (e, v, b, m, url) => listAudit(e, v, url)]
 ];
 

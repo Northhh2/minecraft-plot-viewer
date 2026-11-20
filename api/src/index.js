@@ -89,7 +89,7 @@ export default {
                     return json(await readCity(env.DB), 200, { 'Cache-Control': 'public, max-age=30' });
 
                 default: {
-                    if (!pathname.startsWith('/api/') || request.method === 'GET' && pathname !== '/api/audit') {
+                    if (!pathname.startsWith('/api/') || request.method === 'GET' && pathname !== '/api/audit' && pathname !== '/api/admin/company-mapping') {
                         return json({ error: 'not_found' }, 404);
                     }
                     const viewer = await authenticate(env, request);
