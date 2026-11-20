@@ -251,7 +251,14 @@ function drawStreets() {
 }
 
 function drawPlots() {
-    appData.allPlots.forEach(plot => {
+    // Draw order follows the geometry, not the id: bigger plots first, so a plot lying inside another one is on top of it
+    // (and clickable). Labels go in a final group so a big plot's number is never hidden under a smaller plot.
+    const area = p => (Number(p.width) || 0) * (Number(p.height) || 0);
+    const ordered = [...appData.allPlots].sort((a, b) => area(b) - area(a) || (parseInt(a.id, 10) || 0) - (parseInt(b.id, 10) || 0));
+    const labels = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    labels.setAttribute('class', 'plot-labels');
+    labels.style.pointerEvents = 'none';
+    ordered.forEach(plot => {
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         g.dataset.plotId = plot.id;
         g.dataset.plotName = plot.name;
@@ -272,7 +279,7 @@ function drawPlots() {
         text.textContent = plot.id.padStart(3, '0');
         
         g.appendChild(rect);
-        g.appendChild(text);
+        labels.appendChild(text);
 
         g.addEventListener('mouseenter', (e) => { 
             showSimpleTooltip(e, plot); 
@@ -291,6 +298,7 @@ function drawPlots() {
         
         layers.plots.appendChild(g);
     });
+    layers.plots.appendChild(labels);
 }
 
 function drawMergedPlots() {

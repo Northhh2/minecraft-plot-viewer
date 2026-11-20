@@ -7,7 +7,16 @@ const PROJECT_STATUS = { draft: 'Szkic', proposed: 'U Rady', approved: 'Zatwierd
 const CITIZEN_STATUS = ['—', 'Wniosek', 'Obywatel', 'Odrzucony'];
 const COUNCIL_ROLE = ['', 'Radny', 'Przewodniczący'];
 const CODEX_NAMES = { civil: 'Kodeks cywilny', criminal: 'Kodeks karny', construction: 'Kodeks budowlany' };
-const TABS = [['projects', 'Projekty'], ['citizens', 'Obywatele'], ['companies', 'Firmy'], ['council', 'Rada'], ['elections', 'Wybory'], ['positions', 'Stanowiska']];
+const TABS = [['projects', 'Projekty'], ['citizens', 'Obywatele'], ['companies', 'Firmy'], ['council', 'Rada'], ['census', 'Cenzusy'], ['elections', 'Wybory'], ['positions', 'Stanowiska']];
+
+// Villager professions: icon + Polish name (keys are what the game's census tallies).
+const PROFESSIONS = {
+    farmer: ['🌾', 'Rolnik'], fisherman: ['🎣', 'Rybak'], fletcher: ['🏹', 'Łucznik'], shepherd: ['🐑', 'Pasterz'], librarian: ['📚', 'Bibliotekarz'],
+    cartographer: ['🗺️', 'Kartograf'], cleric: ['⚗️', 'Kleryk'], armorer: ['🛡️', 'Płatnerz'], weaponsmith: ['⚔️', 'Kowal broni'], toolsmith: ['🔧', 'Kowal narzędzi'],
+    butcher: ['🥩', 'Rzeźnik'], leatherworker: ['🧥', 'Garbarz'], mason: ['🧱', 'Kamieniarz'], nitwit: ['🤪', 'Safanduła'], none: ['🚫', 'Bezrobotni'], children: ['🧒', 'Dzieci']
+};
+const PALETTE = ['#a78bfa', '#38bdf8', '#f472b6', '#fbbf24', '#34d399', '#fb7185', '#60a5fa', '#c084fc', '#f97316', '#2dd4bf', '#e879f9', '#facc15', '#4ade80', '#94a3b8', '#f87171', '#22d3ee'];
+const profession = key => PROFESSIONS[key] ?? ['👤', key];
 
 const LEGAL_FORMS = { SOLE_PROPRIETORSHIP: 'Działalność jednoosobowa', PARTNERSHIP: 'Spółka osobowa', FOUNDATION: 'Fundacja', RELIGIOUS_INSTITUTION: 'Instytucja religijna', PUBLIC_INSTITUTION: 'Instytucja publiczna', OTHER: 'Inne', CITY_TREASURY: 'Skarb Miasta' };
 
@@ -81,17 +90,84 @@ function renderCouncil(doc) {
     ];
 }
 
+let charts = [];
+
+/** A Chart.js canvas (the library comes from the CDN in plot_viewer.html); skipped silently when it is missing. */
+function chart(config, height = 230) {
+    const canvas = el('canvas');
+    const box = el('div', { class: 'm-chart', style: `height:${height}px` }, canvas);
+    requestAnimationFrame(() => {
+        if (!window.Chart) { box.remove(); return; }
+        window.Chart.defaults.color = 'rgba(255,255,255,0.75)';
+        window.Chart.defaults.borderColor = 'rgba(255,255,255,0.1)';
+        charts.push(new window.Chart(canvas, { ...config, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, ...config.options } }));
+    });
+    return box;
+}
+
+const bar = (value, max, color) => el('div', { class: 'm-bar' }, el('i', { style: `width:${max ? Math.max(2, Math.round(value / max * 100)) : 0}%;background:${color}` }));
+
+function renderCensus(doc) {
+    const censuses = (doc.elections ?? []).filter(e => e.type === 1).sort((a, b) => a.date - b.date || a.electionNumber - b.electionNumber);
+    if (censuses.length === 0) return el('p', { class: 'text-sm text-gray-300' }, 'Brak przeprowadzonych cenzusów.');
+    const keys = [...new Set(censuses.flatMap(c => Object.keys(c.tally ?? {})))];
+    const total = c => Object.values(c.tally ?? {}).reduce((s, n) => s + n, 0);
+    const labels = censuses.map(c => `#${c.electionNumber} · dz. ${day(c.date)}`);
+
+    const trend = section('Trendy', chart({
+        type: 'line',
+        data: {
+            labels,
+            datasets: [
+                { label: 'Razem', data: censuses.map(total), borderColor: '#ffffff', borderDash: [6, 4], borderWidth: 2, pointRadius: 3, tension: 0.35 },
+                ...keys.map((k, i) => ({ label: `${profession(k)[0]} ${profession(k)[1]}`, data: censuses.map(c => c.tally?.[k] ?? 0), borderColor: PALETTE[i % PALETTE.length], backgroundColor: PALETTE[i % PALETTE.length], borderWidth: 2, pointRadius: 2, tension: 0.35, hidden: i > 5 }))
+            ]
+        },
+        options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, usePointStyle: true } } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+    }, 280));
+
+    const cards = [...censuses].reverse().map((c, idx, list) => {
+        const prev = list[idx + 1];
+        const max = Math.max(1, ...Object.values(c.tally ?? {}));
+        const lines = Object.entries(c.tally ?? {}).sort((a, b) => b[1] - a[1]).map(([k, n]) => {
+            const [icon, name] = profession(k);
+            const d = prev ? n - (prev.tally?.[k] ?? 0) : null;
+            return el('div', { class: 'm-line' },
+                el('span', { class: 'm-icon' }, icon), el('span', { class: 'm-name' }, name), bar(n, max, PALETTE[keys.indexOf(k) % PALETTE.length]),
+                el('span', { class: 'm-count' }, n),
+                el('span', { class: `m-delta ${d > 0 ? 'up' : d < 0 ? 'down' : ''}` }, d === null || d === 0 ? '' : `${d > 0 ? '▲' : '▼'}${Math.abs(d)}`));
+        });
+        return el('div', { class: 'm-card' },
+            el('div', { class: 'm-card-head' }, el('b', {}, `Cenzus #${c.electionNumber}`), el('span', {}, `dzień ${day(c.date)} · razem ${total(c)}${c.excludedCount ? ` · wykluczeni ${c.excludedCount}` : ''}`)), lines);
+    });
+    return [trend, section('Historia', cards)];
+}
+
 function renderElections(doc) {
-    const rows = list => [...list].reverse().map(e => [
-        `#${e.electionNumber}${e.round ? ` (runda ${e.round + 1})` : ''}`, day(e.date), e.winner,
-        Object.entries(e.tally ?? {}).map(([k, v]) => `${k}: ${v}`).join(', ') || '—'
-    ]);
-    const all = doc.elections ?? [];
-    const head = ['Wybory', 'Dzień', 'Wynik', 'Głosy'];
-    return [
-        section('Cenzusy (spisy)', table(head, rows(all.filter(e => e.type === 1)))),
-        section('Wybory powszechne', table(head, rows(all.filter(e => e.type !== 1))))
-    ];
+    const names = new Map(doc.citizens.map(c => [String(c.identityNumber), c.name]));
+    const civic = (doc.elections ?? []).filter(e => e.type !== 1).sort((a, b) => a.date - b.date || a.electionNumber - b.electionNumber || (a.round ?? 0) - (b.round ?? 0));
+    if (civic.length === 0) return el('p', { class: 'text-sm text-gray-300' }, 'Brak przeprowadzonych wyborów.');
+    const sum = e => Object.values(e.tally ?? {}).reduce((s, n) => s + n, 0);
+    const first = civic.filter(e => !e.round);
+
+    const trend = section('Trendy', chart({
+        type: 'bar',
+        data: { labels: first.map(e => `#${e.electionNumber} · dz. ${day(e.date)}`), datasets: [
+            { label: 'Oddane głosy', data: first.map(sum), backgroundColor: 'rgba(167,139,250,0.7)', borderRadius: 8 },
+            { label: 'Głosy zwycięzcy', data: first.map(e => Math.max(0, ...Object.values(e.tally ?? {}))), backgroundColor: 'rgba(251,191,36,0.75)', borderRadius: 8 }
+        ] },
+        options: { plugins: { legend: { position: 'bottom', labels: { usePointStyle: true } } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+    }));
+
+    const cards = [...civic].reverse().map(e => {
+        const entries = Object.entries(e.tally ?? {}).sort((a, b) => b[1] - a[1]);
+        const max = Math.max(1, ...entries.map(x => x[1]));
+        return el('div', { class: 'm-card' },
+            el('div', { class: 'm-card-head' }, el('b', {}, `Wybory #${e.electionNumber}${e.round ? ` · runda ${e.round + 1}` : ''}`), el('span', {}, `dzień ${day(e.date)} · głosów ${sum(e)}`)),
+            entries.map(([k, n], i) => el('div', { class: `m-line ${i === 0 ? 'win' : ''}` },
+                el('span', { class: 'm-icon' }, i === 0 ? '🏆' : '🗳️'), el('span', { class: 'm-name' }, names.get(k) ?? `#${k}`), bar(n, max, PALETTE[i % PALETTE.length]), el('span', { class: 'm-count' }, n), el('span', {}))));
+    });
+    return [trend, section('Historia', cards)];
 }
 
 function renderPositions(doc) {
@@ -99,7 +175,7 @@ function renderPositions(doc) {
     return table(['Stanowisko', 'Piastuje'], (doc.positions ?? []).map(p => [p.name, (p.holders ?? []).map(n => names.get(n) ?? `#${n}`).join(', ') || 'wakat']));
 }
 
-const RENDER = { positions: renderPositions, citizens: renderCitizens, companies: renderCompanies, projects: renderProjects, council: renderCouncil, elections: renderElections };
+const RENDER = { census: renderCensus, positions: renderPositions, citizens: renderCitizens, companies: renderCompanies, projects: renderProjects, council: renderCouncil, elections: renderElections };
 
 let cache = null;
 
@@ -119,6 +195,8 @@ export async function mountCity(root) {
     try { data = await loadCity(); } catch (err) { root.replaceChildren(el('p', { class: 'text-red-300 text-sm' }, `Nie udało się pobrać danych: ${err.message}`)); return null; }
     if (!data.snapshot) { root.replaceChildren(el('p', { class: 'text-sm text-gray-300' }, 'Brak danych: serwer jeszcze nie wysłał eksportu miasta.')); return null; }
     const show = tab => {
+        charts.forEach(c => c.destroy());
+        charts = [];
         const tabs = el('div', { class: 'flex flex-wrap gap-2 mb-3' }, TABS.map(([id, label]) => {
             const b = el('button', { class: `px-3 py-1 rounded-md text-sm ${id === tab ? 'bg-yellow-600 text-gray-900 font-semibold' : 'bg-gray-700 hover:bg-gray-600'}` }, label);
             b.addEventListener('click', () => show(id));

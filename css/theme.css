@@ -265,3 +265,48 @@ button.control-button:hover { transform: translateY(-3px) scale(1.1); box-shadow
 }
 
 @media (max-width: 480px) { #search-input { width: 8.5rem !important; } #login-button { padding-left: 0.9rem; padding-right: 0.9rem; } }
+
+/* ───────── One vocabulary for every modal ───────── */
+#modal { --kind: #a78bfa; }
+#modal[data-kind="owner"] { --kind: #38bdf8; }
+#modal[data-kind="local"] { --kind: #2dd4bf; }
+#modal[data-kind="district"] { --kind: #f472b6; }
+#modal[data-kind="street"] { --kind: #fb923c; }
+#modal[data-kind="plotType"] { --kind: #a3e635; }
+#modal[data-kind="metroLine"], #modal[data-kind="metroStation"] { --kind: #22d3ee; }
+#modal[data-kind="merged"] { --kind: #c084fc; }
+#modal.ratusz { --kind: #fbbf24; }
+
+#modal-kind { color: var(--kind); text-shadow: 0 0 14px var(--kind); }
+#modal-title { position: relative; padding-bottom: 6px; }
+#modal-title::after { content: ''; position: absolute; left: 0; bottom: 0; width: 44px; height: 3px; border-radius: 3px; background: linear-gradient(90deg, var(--kind), transparent); box-shadow: 0 0 14px var(--kind); }
+
+.m-hero { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.01em; display: flex; align-items: center; gap: 0.5rem; }
+.m-title { display: flex; align-items: center; gap: 0.55rem; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; color: rgba(255, 255, 255, 0.78); margin-bottom: 0.6rem; }
+.m-title::before { content: ''; width: 4px; height: 14px; border-radius: 4px; background: var(--kind); box-shadow: 0 0 12px var(--kind); }
+.m-section { padding-top: 1rem; margin-top: 0.4rem; border-top: 1px solid rgba(255, 255, 255, 0.12); }
+
+.m-kv { display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 1rem; font-size: 0.875rem; padding: 0.8rem 1rem; border-radius: 16px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), inset 0 0 0 1px rgba(255, 255, 255, 0.07); }
+.m-kv > span:nth-child(odd) { color: rgba(255, 255, 255, 0.55); }
+.m-kv > span:nth-child(even) { text-align: right; font-weight: 600; }
+
+/* Census / election cards with one line per profession or candidate */
+.m-card { border-radius: 18px; padding: 0.9rem 1rem 0.6rem; margin-bottom: 0.9rem;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.03)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 10px 28px rgba(2, 4, 20, 0.25); }
+.m-card-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 0.3rem 1rem; margin-bottom: 0.6rem; padding-bottom: 0.5rem; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+.m-card-head b { font-size: 1rem; }
+.m-card-head span { font-size: 0.75rem; color: rgba(255, 255, 255, 0.6); }
+.m-line { display: grid; grid-template-columns: 1.8rem minmax(6rem, 11rem) 1fr 2.2rem 2.6rem; align-items: center; gap: 0.6rem; padding: 0.32rem 0; font-size: 0.875rem; }
+.m-icon { font-size: 1.25rem; text-align: center; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5)); }
+.m-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-count { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.m-delta { font-size: 0.7rem; font-weight: 700; opacity: 0.55; }
+.m-delta.up { color: #4ade80; opacity: 1; }
+.m-delta.down { color: #fb7185; opacity: 1; }
+.m-bar { height: 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.09); overflow: hidden; box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4); }
+.m-bar i { display: block; height: 100%; border-radius: 8px; box-shadow: 0 0 12px currentColor; animation: grow 0.9s var(--ease) both; transform-origin: left; }
+.m-line.win .m-name { color: #fde68a; font-weight: 700; }
+.m-chart { position: relative; border-radius: 18px; padding: 0.7rem; margin-bottom: 0.5rem; background: rgba(5, 8, 22, 0.35); box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.08); }
+@keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@media (max-width: 480px) { .m-line { grid-template-columns: 1.6rem minmax(4rem, 7rem) 1fr 2rem 2.2rem; gap: 0.4rem; } }

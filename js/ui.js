@@ -212,6 +212,9 @@ function renderCurrentModal() {
         }
 
         dom.modal.classList.toggle('ratusz', type === 'ratusz');
+        dom.modal.dataset.kind = type;
+        const kicker = document.getElementById('modal-kind');
+        if (kicker) kicker.textContent = MODAL_KINDS[type] ?? '';
         dom.modal.style.width = type === 'ratusz' && window.innerWidth >= 768 ? 'min(60rem, 100vw)' : '';
         dom.modalTitle.textContent = title;
         dom.modalContent.innerHTML = contentHTML;
@@ -244,16 +247,16 @@ function renderMetroLineContent(line) {
             <span class="text-gray-400 w-6 text-sm">${i + 1}.</span><span class="font-medium">${escapeHtml(s.name)}</span></div>` : '';
     }).join('');
     const pending = line.edited && isEditorUser() ? '<p class="text-xs text-yellow-300">Zmieniono w portalu — czeka na zastosowanie w grze.</p>' : '';
-    return `<div><h3 class="text-2xl font-bold flex items-center"><span class="inline-block w-4 h-4 rounded-full mr-3" style="background-color:${escapeHtml(line.hex)}"></span>${escapeHtml(line.name)}</h3>
+    return `<div><h3 class="m-hero"><span class="inline-block w-4 h-4 rounded-full mr-3" style="background-color:${escapeHtml(line.hex)}"></span>${escapeHtml(line.name)}</h3>
             <p class="text-sm ${line.running ? 'text-green-400' : 'text-gray-400'}">${line.running ? 'Kursuje' : 'Nieczynna'}</p></div>
-        <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm border-b border-gray-700 pb-3 mb-3 mt-3">
+        <div class="m-kv">
             <span class="text-gray-400">Rodzaj:</span><span class="font-medium">${kind}${line.throughLoops ? ' (przez pętle)' : ''}</span>
             <span class="text-gray-400">Prędkość:</span><span class="font-medium">${line.speed} m/s</span>
             <span class="text-gray-400">Postój:</span><span class="font-medium">${line.dwellSeconds} s</span>
             <span class="text-gray-400">Pociągi:</span><span class="font-medium">${line.shuttle ? 1 : line.trainCount}</span>
         </div>
         ${pending}
-        <h4 class="text-md font-semibold mb-2">Przystanki (${line.stationIds.length})</h4>
+        <h4 class="m-title">Przystanki (${line.stationIds.length})</h4>
         <div class="space-y-2 mb-4">${stops || '<p class="text-sm text-gray-400">Brak przystanków.</p>'}</div>
         ${editorButtonsHTML('metroLine', line.id)}`;
 }
@@ -263,13 +266,13 @@ function renderMetroStationContent(station) {
     const serving = (appData.metro?.lines ?? []).filter(l => l.stationIds.includes(station.id));
     const position = station.x === null ? 'brak platformy' : `X: ${station.x}, Z: ${station.z}`;
     const pending = station.edited && isEditorUser() ? '<p class="text-xs text-yellow-300">Nazwę zmieniono w portalu — czeka na zastosowanie w grze.</p>' : '';
-    return `<div><h3 class="text-2xl font-bold">${escapeHtml(station.name)}</h3></div>
-        <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm border-b border-gray-700 pb-3 mb-3 mt-3">
+    return `<div><h3 class="m-hero">${escapeHtml(station.name)}</h3></div>
+        <div class="m-kv">
             <span class="text-gray-400">Położenie:</span><span class="font-medium">${position}</span>
             <span class="text-gray-400">Perony:</span><span class="font-medium">${station.platformCount}</span>
         </div>
         ${pending}
-        <h4 class="text-md font-semibold mb-2">Linie</h4>
+        <h4 class="m-title">Linie</h4>
         <div class="flex flex-wrap gap-2 mb-4">${serving.map(metroLineChip).join('') || '<span class="text-sm text-gray-400">Żadna linia nie obsługuje tej stacji.</span>'}</div>
         ${editorButtonsHTML('metroStation', station.id)}`;
 }
@@ -287,11 +290,11 @@ function renderPlotContent(plot) {
     if (localsOnPlot.length === 1) {
         const singleLocal = localsOnPlot[0];
         const localTitle = esc(`Lokal #${singleLocal.klatka ? singleLocal.klatka + '/' : ''}${singleLocal.localNum}`);
-        localsHTML = `<div class="border-t border-gray-700 pt-3 mt-3">
-            <h4 class="text-md font-semibold">${localTitle}</h4>
+        localsHTML = `<div class="m-section">
+            <h4 class="m-title">${localTitle}</h4>
             <div class="space-y-3 mt-2">
                <div><span class="text-gray-400 text-sm">Najemca:</span>${createOwnerCardHTML(singleLocal.tenant || 'Brak')}</div>
-               <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm pt-3 border-t border-gray-700">
+               <div class="m-kv">
                    <span class="text-gray-400">Powierzchnia:</span><span class="font-medium">${esc(singleLocal.area)} m²</span>
                    <span class="text-gray-400">Piętro:</span><span class="font-medium">${esc(singleLocal.floor)}</span>
                    <span class="text-gray-400">Miejsca pracy:</span><span class="font-medium">${esc(singleLocal.workplaces)}</span>
@@ -307,7 +310,7 @@ function renderPlotContent(plot) {
                 <div class="font-semibold text-purple-400">${localTitle} (${esc(l.area)} m²)</div>
                 <div class="text-xs text-gray-400">Najemca: <span class="font-medium text-gray-200">${esc(l.tenant || 'Brak')}</span></div></div>`
         }).join('');
-        localsHTML = `<div class="border-t border-gray-700 pt-3 mt-3"><h4 class="text-md font-semibold mb-3">Lokale w budynku (${localsOnPlot.length})</h4><div class="space-y-2">${localDetailsList}</div></div>`;
+        localsHTML = `<div class="m-section"><h4 class="m-title">Lokale w budynku (${localsOnPlot.length})</h4><div class="space-y-2">${localDetailsList}</div></div>`;
     }
 
     let address = '';
@@ -351,8 +354,8 @@ function renderPlotContent(plot) {
             </div>`;
         }).join('');
 
-        historyHTML = `<div class="border-t border-gray-700 pt-3 mt-3">
-            <h4 class="text-md font-semibold mb-3">Historia własności</h4>
+        historyHTML = `<div class="m-section">
+            <h4 class="m-title">Historia własności</h4>
             <div class="space-y-2">${historyList}</div>
         </div>`;
     }
@@ -367,7 +370,7 @@ function renderPlotContent(plot) {
         <div class="space-y-3">
             ${createOwnerCardHTML(ownerInfo)}
             ${lotteryBadgeHTML}
-            <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm pt-3 border-t border-gray-700">
+            <div class="m-kv">
                 <span class="text-gray-400">Typ:</span><span class="font-medium flex items-center clickable" data-plot-type="${esc(plot.type)}">${typeColorDot} ${esc(plot.type || 'Brak')}</span>
                 <span class="text-gray-400">Wartość:</span><span class="font-medium flex items-center">${esc(plot.value || '0')} <img src="minecoin.webp" class="inline w-4 h-4 ml-1" alt="MC"></span>
                 <span class="text-gray-400">Powierzchnia:</span><span class="font-medium">${esc(plot.area || 'Brak')} m²</span>
@@ -407,7 +410,7 @@ function renderLocalContent(local) {
          <div class="space-y-3">
             <div><span class="text-gray-400 text-sm">Najemca:</span>${createOwnerCardHTML(local.tenant || 'Brak')}</div>
             <div><span class="text-gray-400 text-sm">Właściciel budynku:</span>${createOwnerCardHTML(plot?.owner)}</div>
-            <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm pt-3 border-t border-gray-700">
+            <div class="m-kv">
                 <span class="text-gray-400">Powierzchnia:</span><span class="font-medium">${esc(local.area)} m²</span>
                 <span class="text-gray-400">Piętro:</span><span class="font-medium">${esc(local.floor)}</span>
                 <span class="text-gray-400">Miejsca pracy:</span><span class="font-medium">${esc(local.workplaces)}</span>
@@ -429,7 +432,7 @@ async function loadMyAllowance() {
         if (!a) { box.innerHTML = ''; return; }
         const rows = ALLOWANCE_SOURCES.filter(([k]) => (a.earnings?.[k] ?? 0) > 0)
             .map(([k, label]) => `<div class="flex justify-between"><span class="text-gray-400">${esc(label)}</span><span>+${esc(a.earnings[k].toFixed(2))}</span></div>`).join('');
-        box.innerHTML = `<h4 class="font-semibold text-md mb-2">Dodatek dzienny</h4>
+        box.innerHTML = `<h4 class="m-title">Dodatek dzienny</h4>
             <div class="space-y-1 text-sm">${rows || '<p class="text-gray-500">Obecnie nic nie zarabiasz.</p>'}
             <div class="flex justify-between border-t border-gray-700 pt-1 font-semibold"><span>Razem dziennie</span><span>${esc(a.daily)}</span></div>
             <div class="flex justify-between"><span class="text-gray-400">Do odebrania</span><span>${esc(a.balance)}</span></div></div>`;
@@ -481,6 +484,8 @@ async function loadCompanyHq(ownerName) {
     } catch { /* optional info */ }
 }
 
+const MODAL_KINDS = { plot: 'Działka', merged: 'Połączone działki', local: 'Lokal', owner: 'Właściciel', district: 'Dzielnica', street: 'Ulica', plotType: 'Typ działki', metroLine: 'Metro · linia', metroStation: 'Metro · stacja', ratusz: 'Skarb Miasta' };
+
 const PAYMENT_LABELS = { requested: 'Zlecenie wysłane do gry', awaiting_account: 'Czeka na konto bankowe', pending: 'Czek wystawiony, czeka na realizację', paid: 'Opłacone' };
 
 function renderOwnerContent(ownerName) {
@@ -493,7 +498,7 @@ function renderOwnerContent(ownerName) {
     const totalPlotArea = ownedPlots.reduce((sum, p) => sum + (parseInt(p.area) || 0), 0);
     let ownerDetailsHTML = '';
     if(owner) {
-        ownerDetailsHTML += `<div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm"><span class="text-gray-400">Identyfikator${owner.type === 'prawna' ? ' firmy' : ''}:</span><span>${esc(owner.identifier || 'Brak')}</span>`;
+        ownerDetailsHTML += `<div class="m-kv"><span class="text-gray-400">Identyfikator${owner.type === 'prawna' ? ' firmy' : ''}:</span><span>${esc(owner.identifier || 'Brak')}</span>`;
         if(owner.type === 'fizyczna') ownerDetailsHTML += `<span class="text-gray-400">Wiek:</span><span>${esc(owner.age || 'Brak')}</span><span class="text-gray-400">Zawód:</span><span>${esc(owner.profession || 'Brak')}</span>`;
         else if(owner.type === 'prawna') ownerDetailsHTML += `<span class="text-gray-400">Forma Prawna:</span><span>${esc(owner.legalForm || 'Brak')}</span>`;
         ownerDetailsHTML += '</div>';
@@ -510,7 +515,7 @@ function renderOwnerContent(ownerName) {
                 <div data-plot-name="${esc(l.plotName)}" class="font-semibold text-purple-400 cursor-pointer hover:underline">${esc(l.plotName)}</div>
             </div>`;
         }).join('');
-        wonPlotsHTML = `<div class="border-t border-gray-700 pt-3"><h4 class="font-semibold text-md mb-2">Działki zdobyte w Loterii (${wonAndPaidPlots.length})</h4><div class="space-y-2">${wonList}</div></div>`;
+        wonPlotsHTML = `<div class="m-section"><h4 class="m-title">Działki zdobyte w Loterii (${wonAndPaidPlots.length})</h4><div class="space-y-2">${wonList}</div></div>`;
     }
 
     const logoutButtonHTML = (state.currentUser && state.currentUser.name === ownerName) ? 
@@ -519,13 +524,13 @@ function renderOwnerContent(ownerName) {
     return `<div class="space-y-4">${createOwnerCardHTML(ownerName, true)}
         ${ownerDetailsHTML ? `<div class="pt-3 border-t border-gray-700">${ownerDetailsHTML}</div>` : ''}
         <div id="owner-hq" class="text-sm"></div>
-        <div><h4 class="font-semibold text-md mb-2">Posiadane Działki (${ownedPlots.length})</h4>
-            <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm"><span class="text-gray-400">Łączna pow.:</span><span>${totalPlotArea.toLocaleString()} m²</span></div>
+        <div><h4 class="m-title">Posiadane Działki (${ownedPlots.length})</h4>
+            <div class="m-kv"><span class="text-gray-400">Łączna pow.:</span><span>${totalPlotArea.toLocaleString()} m²</span></div>
             ${ownedPlots.length > 0 ? `<div class="space-y-2 mt-2">${ownedPlots.map(p => createPlotListItemHTML(p)).join('')}</div>` : ''}</div>
-        <div class="border-t border-gray-700 pt-3"><h4 class="font-semibold text-md mb-1">Wynajmowane Lokale (${rentedLocals.length})</h4>
+        <div class="m-section"><h4 class="m-title">Wynajmowane Lokale (${rentedLocals.length})</h4>
             ${rentedLocals.length > 0 ? `<div class="space-y-2 mt-2">${rentedLocalsHTML}</div>` : '<p class="text-gray-500 text-sm">Brak</p>'}</div>
         ${wonPlotsHTML}
-        ${(state.currentUser && state.currentUser.name === ownerName) ? '<div id="modal-allowance" class="border-t border-gray-700 pt-3"></div>' : ''}
+        ${(state.currentUser && state.currentUser.name === ownerName) ? '<div id="modal-allowance" class="m-section"></div>' : ''}
         ${logoutButtonHTML}
         </div>`;
 }
@@ -533,7 +538,7 @@ function renderOwnerContent(ownerName) {
 function renderDistrictContent(districtName, plotsInDistrict) {
     const totalArea = plotsInDistrict.reduce((sum, p) => sum + (parseInt(p.area) || 0), 0);
     return `<div><h3 class="text-2xl font-bold text-purple-400">${esc(districtName)}</h3></div>
-        <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm border-b border-gray-700 pb-3 mb-3">
+        <div class="m-kv">
             <span>Liczba działek:</span><span class="font-medium">${plotsInDistrict.length}</span>
             <span>Łączna powierzchnia:</span><span class="font-medium">${totalArea.toLocaleString()} m²</span></div>
         <div class="space-y-2 mb-4">${plotsInDistrict.map(p => createPlotListItemHTML(p)).join('')}</div>
@@ -547,7 +552,7 @@ function renderStreetContent(streetName) {
     const plotsOnStreet = allPlots.filter(p => p.street === streetName);
     const length = street.width > street.height ? street.width : street.height;
     return `<div><h3 class="text-2xl font-bold text-blue-400">${esc(streetName)}</h3></div>
-        <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm border-b border-gray-700 pb-3 mb-3">
+        <div class="m-kv">
             <span>Długość:</span><span class="font-medium">${length} m</span>
             <span>Liczba działek:</span><span class="font-medium">${plotsOnStreet.length}</span></div>
         <div class="space-y-2 mb-4">${plotsOnStreet.map(p => createPlotListItemHTML(p)).join('')}</div>
@@ -565,8 +570,8 @@ function renderPlotTypeContent(typeName) {
     const totalBeds = localsOnPlots.reduce((s, l) => s + l.beds, 0);
     const typeColorDot = `<span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: ${getColorForType(typeName, 1)}"></span>`;
 
-    return `<div><h3 class="text-2xl font-bold flex items-center">${typeColorDot} ${esc(typeName)}</h3></div>
-        <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm border-b border-gray-700 pb-3 mb-3">
+    return `<div><h3 class="m-hero">${typeColorDot} ${esc(typeName)}</h3></div>
+        <div class="m-kv">
             <span>Liczba działek:</span><span class="font-medium">${plotsOfType.length}</span>
             <span>Łączna powierzchnia:</span><span class="font-medium">${totalArea.toLocaleString()} m²</span>
             <span>Liczba lokali:</span><span class="font-medium">${totalLocals}</span>

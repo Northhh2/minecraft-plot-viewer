@@ -357,7 +357,7 @@ function openPaymentOrderForm(plot) {
         submitLabel: 'Utwórz zlecenie',
         fields: [
             { name: 'owner', label: 'Płatnik / nabywca (wpisz numer lub nazwę)', type: 'custom', build: () => searchPicker({ items: ownerItems(), placeholder: 'np. Jan Kowalski' }) },
-            { name: 'transactionType', label: 'Typ transakcji', type: 'text', required: true, value: 'Sprzedaż' },
+            { name: 'transactionType', label: 'Typ transakcji', type: 'select', numeric: false, value: 'Sprzedaż', options: [{ value: 'Sprzedaż', label: 'Sprzedaż' }, { value: 'Darowizna', label: 'Darowizna' }] },
             { name: 'transactionValue', label: 'Kwota', type: 'text', value: plot.value, hint: ' Domyślnie wartość działki.' },
             { name: 'transactionDay', label: 'Dzień transakcji', type: 'number', required: true, value: lastDay + 1 }
         ],
