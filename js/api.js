@@ -80,9 +80,9 @@ export function snapshotToAppData(s) {
             ref: { kind: 'citizen', number: c.number }
         })),
         ...s.companies.map(c => ({
-            name: c.name, type: 'prawna', photo: c.photoUrl ?? '', identifier: c.number, age: '',
+            name: c.name, type: 'prawna', photo: c.photoUrl ?? '', identifier: c.govNumber ?? '', age: '',
             profession: '', legalForm: c.legalForm ?? '', pin: '', staff: false,
-            ref: { kind: 'company', number: c.number }
+            ref: { kind: 'company', number: c.number, govNumber: c.govNumber ?? null }
         }))
     ];
 

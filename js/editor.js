@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { API_BASE } from './config.js';
 import { authHeaders, getToken } from './auth.js';
-import { pickRect } from './map.js';
+import { pickRect, pickPlot, editRect, setViewBox } from './map.js';
 import { openNewModal } from './ui.js';
 
 // Editing UI for staff (clerk/admin), API mode only. Forms are built with DOM APIs (never innerHTML
@@ -107,6 +107,21 @@ export function openFromHash() {
  * pick:   { fields: ['x1','z1','x2','z2'] } adds a "select on map" button filling those number fields.
  * onSubmit(values) must throw on failure; its message is shown in the dialog.
  */
+let dialogOverlay = null;
+
+/** Hides the dialog and the info modal so the map is usable; returns a function that brings them back. */
+function enterMap(...bannerKids) {
+    const overlay = dialogOverlay;
+    const modal = document.getElementById('modal');
+    overlay?.classList.add('hidden');
+    modal?.classList.add('pick-hide');
+    const banner = h('div', { class: 'fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-purple-700 text-white px-4 py-2 rounded-2xl shadow-lg text-sm flex flex-wrap items-center justify-center gap-2 max-w-[94vw]' }, ...bannerKids);
+    document.body.append(banner);
+    return () => { banner.remove(); overlay?.classList.remove('hidden'); modal?.classList.remove('pick-hide'); };
+}
+
+const bannerButton = (text, onclick) => h('button', { type: 'button', class: 'px-3 py-1 rounded-full bg-white bg-opacity-20 hover:bg-opacity-30 font-semibold', onclick }, text);
+
 function openDialog({ title, fields, submitLabel = 'Zapisz', pick = null, preview = null, onSubmit }) {
     const inputs = {};
     const customs = {};
@@ -155,11 +170,9 @@ function openDialog({ title, fields, submitLabel = 'Zapisz', pick = null, previe
     const pickBtn = pick ? h('button', {
         type: 'button', class: BTN_SECONDARY + ' mt-3 w-full',
         onclick: () => {
-            overlay.classList.add('hidden');
-            const banner = showBanner('Przeciągnij myszą po mapie, aby zaznaczyć obszar. Esc — anuluj.');
+            const restore = enterMap(h('span', {}, 'Przeciągnij myszą po mapie, aby zaznaczyć obszar. Esc — anuluj.'));
             pickRect(result => {
-                banner.remove();
-                overlay.classList.remove('hidden');
+                restore();
                 if (!result) return;
                 for (const n of pick.fields) inputs[n].value = result[n];
                 refreshPreview();
@@ -167,7 +180,38 @@ function openDialog({ title, fields, submitLabel = 'Zapisz', pick = null, previe
         }
     }, 'Zaznacz na mapie') : '';
 
-    const form = h('form', { class: 'space-y-3' }, rows, pickBtn, previewEl, error,
+    const resizeBtn = pick ? h('button', {
+        type: 'button', class: BTN_SECONDARY + ' mt-2 w-full',
+        onclick: () => {
+            const raw = pick.fields.map(n => inputs[n].value);
+            const vals = raw.map(Number);
+            if (raw.some(v => v === '') || !vals.every(Number.isInteger)) {
+                error.textContent = 'Najpierw wpisz współrzędne albo użyj „Zaznacz na mapie”.';
+                error.classList.remove('hidden');
+                return;
+            }
+            error.classList.add('hidden');
+            const [x1, z1, x2, z2] = vals;
+            const start = { x1: Math.min(x1, x2), z1: Math.min(z1, z2), x2: Math.max(x1, x2), z2: Math.max(z1, z2) };
+            const info = h('span', { class: 'font-semibold' });
+            const showInfo = r => { info.textContent = `(${r.x1}, ${r.z1}) → (${r.x2}, ${r.z2}) · ${r.x2 - r.x1 + 1}×${r.z2 - r.z1 + 1}`; };
+            showInfo(start);
+            const w = start.x2 - start.x1 + 1, hgt = start.z2 - start.z1 + 1, side = Math.max(w, hgt) * 2.4 + 30;
+            setViewBox(start.x1 + w / 2 - side / 2, start.z1 + hgt / 2 - side / 2, side, side);
+            const editor = editRect(start, showInfo);
+            let restore = null;
+            const end = apply => {
+                const r = editor.get();
+                editor.stop(); restore();
+                if (!apply) return;
+                [inputs[pick.fields[0]].value, inputs[pick.fields[1]].value, inputs[pick.fields[2]].value, inputs[pick.fields[3]].value] = [r.x1, r.z1, r.x2, r.z2];
+                refreshPreview();
+            };
+            restore = enterMap(h('span', {}, 'Przeciągnij narożnik, aby zmienić rozmiar (ciało — przesunąć).'), info, bannerButton('Gotowe', () => end(true)), bannerButton('Anuluj', () => end(false)));
+        }
+    }, 'Zmień rozmiar na mapie') : '';
+
+    const form = h('form', { class: 'space-y-3' }, rows, pickBtn, resizeBtn, previewEl, error,
         h('div', { class: 'flex justify-end gap-3 pt-2' }, cancel, submit));
     form.addEventListener('submit', async e => {
         e.preventDefault();
@@ -189,6 +233,7 @@ function openDialog({ title, fields, submitLabel = 'Zapisz', pick = null, previe
                 h('button', { type: 'button', class: 'text-gray-400 hover:text-white text-2xl', onclick: () => overlay.remove() }, '×')),
             form));
     document.body.append(overlay);
+    dialogOverlay = overlay;
     refreshPreview();
 }
 
@@ -313,7 +358,19 @@ function searchPicker({ items, placeholder, initialKey = null, max = 8 }) {
         if (first) choose(first);
     });
     if (selected?.hint) info.textContent = `✓ ${selected.hint}`;
-    return { el: h('div', {}, input, results, info), read: () => selected?.key ?? null };
+    const mapBtn = h('button', {
+        type: 'button', class: 'mt-2 text-sm text-purple-300 hover:text-purple-200 underline',
+        onclick: () => {
+            let cancel = null;
+            const restore = enterMap(h('span', {}, 'Kliknij działkę na mapie.'), bannerButton('Anuluj', () => { cancel(); restore(); }));
+            cancel = pickPlot(plot => {
+                restore();
+                const item = items.find(i => i.key === plot.dbId);
+                if (item) choose(item); else info.textContent = `✗ Działki ${plot.name} nie można tu wybrać.`;
+            });
+        }
+    }, 'Wybierz na mapie');
+    return { el: h('div', {}, input, results, info, mapBtn), read: () => selected?.key ?? null };
 }
 
 const plotItems = (exclude = []) => appData.allPlots.filter(p => !exclude.includes(p.dbId)).map(p => ({

@@ -3,7 +3,7 @@ import { getColorForType, escapeHtml } from './utils.js';
 
 // Everything that reaches innerHTML below that did not originate in this file goes through esc().
 const esc = escapeHtml;
-import { setViewBox, highlightPlots, clearHighlight } from './map.js';
+import { setViewBox, highlightPlots, clearHighlight, markRatusz } from './map.js';
 import { API_BASE } from './config.js';
 import { mountCity, loadCity, mountVillager, mountBiome, professionName, biomeName, setProfessionOpener, setBiomeOpener } from './city.js';
 import { apiLogin, apiLogout, apiCurrentUser, authHeaders, getToken } from './auth.js';
@@ -73,6 +73,7 @@ function initializeRatuszButton() {
     btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="9" width="7" height="12"></rect><rect x="14" y="3" width="7" height="18"></rect><line x1="6" y1="13" x2="7" y2="13"></line><line x1="17" y1="8" x2="18" y2="8"></line></svg>';
     btn.addEventListener('click', openRatusz);
     controls.append(btn);
+    loadCity().then(c => markRatusz(c.snapshot?.ratuszPlotId)).catch(() => {});
 }
 
 export function openNewModal(stateData) {
@@ -192,7 +193,9 @@ function renderCurrentModal() {
     const currentState = state.modalHistory[state.modalHistory.length - 1];
     dom.modalContent.classList.add('fade-out');
 
+    hideTooltip();
     setTimeout(() => {
+        hideTooltip();
         const { type, data } = currentState;
         let contentHTML = '', title = '';
         let plotsToHighlight = [];
@@ -348,7 +351,7 @@ function renderPlotContent(plot) {
             }
 
             return `
-            <div class="bg-gray-700 p-2 rounded-md">
+            <div class="bg-gray-700 p-2 rounded-md m-hist">
                 <div class="flex justify-between items-center">
                     <div class="text-xs text-gray-400">${esc(t.type)}</div>
                     <div class="text-xs text-gray-300">${durationText}</div>
@@ -376,7 +379,7 @@ function renderPlotContent(plot) {
             ${lotteryBadgeHTML}
             <div class="m-kv">
                 <span class="text-gray-400">Typ:</span><span class="font-medium flex items-center clickable" data-plot-type="${esc(plot.type)}">${typeColorDot} ${esc(plot.type || 'Brak')}</span>
-                <span class="text-gray-400">Wartość:</span><span class="font-medium flex items-center">${esc(plot.value || '0')} <img src="minecoin.webp" class="inline w-4 h-4 ml-1" alt="MC"></span>
+                <span class="text-gray-400">Wartość:</span><span class="font-medium flex items-center">${esc(plot.value || '0')} <img src="img/money.png" class="coin" alt="MC"></span>
                 <span class="text-gray-400">Powierzchnia:</span><span class="font-medium">${esc(plot.area || 'Brak')} m²</span>
                 <span class="text-gray-400">Rozmiar:</span><span class="font-medium">${esc(plot.width)}x${esc(plot.height)} m</span>
             </div></div>
@@ -475,7 +478,7 @@ async function loadCompanyHq(ownerName) {
         const owner = appData.allOwners.find(o => o.name === ownerName);
         if (owner?.ref?.kind !== 'company') return;
         const city = await loadCity();
-        const company = city.snapshot?.companies?.find(c => c.number === owner.ref.number);
+        const company = owner.ref.govNumber == null ? null : city.snapshot?.companies?.find(c => c.number === owner.ref.govNumber);
         const plot = company?.hqPlotId != null ? appData.allPlots.find(p => p.id === String(company.hqPlotId)) : null;
         const treasury = company?.legalForm === 'CITY_TREASURY';
         dom.modal.classList.toggle('ratusz', treasury);

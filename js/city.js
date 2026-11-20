@@ -13,23 +13,23 @@ const TABS = [['projects', 'Projekty'], ['citizens', 'Obywatele'], ['companies',
 const PROFESSIONS = {
     farmer: 'Rolnik',
     fisherman: 'Rybak',
-    fletcher: 'Łucznik',
+    fletcher: 'Łuczarz',
     shepherd: 'Pasterz',
     librarian: 'Bibliotekarz',
     cartographer: 'Kartograf',
-    cleric: 'Kleryk',
+    cleric: 'Kapłan',
     armorer: 'Płatnerz',
-    weaponsmith: 'Kowal broni',
-    toolsmith: 'Kowal narzędzi',
+    weaponsmith: 'Zbrojmistrz',
+    toolsmith: 'Narzędziarz',
     butcher: 'Rzeźnik',
-    leatherworker: 'Garbarz',
+    leatherworker: 'Rymarz',
     mason: 'Kamieniarz',
-    nitwit: 'Safanduła',
-    none: 'Bezrobotni',
+    nitwit: 'Głupiec',
+    none: 'Bez profesji',
     children: 'Dzieci'
 };
 // Villager biomes of origin (keys are what the game's census tallies in `biomes`).
-const BIOMES = { plains: 'Równiny', desert: 'Pustynia', jungle: 'Dżungla', savanna: 'Sawanna', snow: 'Śnieg', swamp: 'Bagna', taiga: 'Tajga', unknown: 'Nieznany' };
+const BIOMES = { plains: 'Równiny', desert: 'Pustynia', jungle: 'Dżungla', savanna: 'Sawanna', snow: 'Śnieżne równiny', swamp: 'Bagno', taiga: 'Tajga', unknown: 'Nieznany' };
 const BIOME_ICONS = new Set(['desert', 'jungle', 'plains', 'savanna', 'snow', 'swamp']); // taiga has no picture yet: it falls back to plains
 const biomeImg = (key, cls) => el('img', { class: cls, src: `img/biomes/${BIOME_ICONS.has(key) ? key : 'plains'}.png`, alt: BIOMES[key] ?? key, loading: 'lazy' });
 const PALETTE = ['#a78bfa', '#38bdf8', '#f472b6', '#fbbf24', '#34d399', '#fb7185', '#60a5fa', '#c084fc', '#f97316', '#2dd4bf', '#e879f9', '#facc15', '#4ade80', '#94a3b8', '#f87171', '#22d3ee'];
@@ -165,7 +165,7 @@ async function mountTrend(root, key, field) {
     root.replaceChildren(el('div', { class: 'm-villager-layout' }, left, right));
 }
 
-const bar = (value, max, color) => el('div', { class: 'm-bar' }, el('i', { style: `width:${max ? Math.max(2, Math.round(value / max * 100)) : 0}%;background:${color}` }));
+const bar = (value, max, color) => el('div', { class: 'm-bar' }, el('i', { style: `width:${max && value ? Math.max(2, Math.round(value / max * 100)) : 0}%;background:${color}` }));
 
 function renderCensus(doc) {
     const censuses = (doc.elections ?? []).filter(e => e.type === 1).sort((a, b) => a.date - b.date || a.electionNumber - b.electionNumber);
@@ -196,7 +196,7 @@ function renderCensus(doc) {
 
     const cards = [...censuses].reverse().map((c, idx, list) => {
         const prev = list[idx + 1];
-        const max = Math.max(1, ...Object.values(c.tally ?? {}));
+        const max = Math.max(1, total(c));
         const lines = Object.entries(c.tally ?? {}).sort((a, b) => b[1] - a[1]).map(([k, n]) => {
             const [icon, name] = profession(k);
             const d = prev ? n - (prev.tally?.[k] ?? 0) : null;
@@ -207,7 +207,7 @@ function renderCensus(doc) {
             row.addEventListener('click', () => openProfession?.(k));
             return row;
         });
-        const bmax = Math.max(1, ...Object.values(c.biomes ?? {}));
+        const bmax = Math.max(1, Object.values(c.biomes ?? {}).reduce((s, n) => s + n, 0));
         const bprev = list[idx + 1]?.biomes;
         const blines = Object.entries(c.biomes ?? {}).sort((a, b) => b[1] - a[1]).map(([k, n]) => {
             const d = bprev ? n - (bprev[k] ?? 0) : null;
@@ -243,7 +243,7 @@ function renderElections(doc) {
 
     const cards = [...civic].reverse().map(e => {
         const entries = Object.entries(e.tally ?? {}).sort((a, b) => b[1] - a[1]);
-        const max = Math.max(1, ...entries.map(x => x[1]));
+        const max = Math.max(1, entries.reduce((s, x) => s + x[1], 0));
         return el('div', { class: 'm-card' },
             el('div', { class: 'm-card-head' }, el('b', {}, `Wybory #${e.electionNumber}${e.round ? ` · runda ${e.round + 1}` : ''}`), el('span', {}, `dzień ${day(e.date)} · głosów ${sum(e)}`)),
             entries.map(([k, n], i) => el('div', { class: `m-line ${i === 0 ? 'win' : ''}` },

@@ -75,7 +75,7 @@ export async function buildSnapshot(db, viewer = null) {
             number: c.number, identityNumber: c.identity_number, name: c.name,
             age: c.age, profession: c.profession, photoUrl: c.photo_url, role: c.role
         })),
-        companies: companies.map(c => ({ number: c.number, name: c.name, legalForm: c.legal_form, photoUrl: c.photo_url })),
+        companies: companies.map(c => ({ number: c.number, govNumber: c.gov_number, name: c.name, legalForm: c.legal_form, photoUrl: c.photo_url })),
         plots: plots.map(mapPlot),
         units: units.map(u => ({
             id: u.id, plotId: u.plot_id, unitNumber: u.unit_number, stairwell: u.stairwell, floor: u.floor,

@@ -103,12 +103,13 @@ body { background: #0a0e1d; }
 
 /* Dialogs: login + the editor's forms */
 #login-modal, .fixed.inset-0.z-50:not(#modal):not(#loader) {
+    overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
     background: radial-gradient(70% 60% at 50% 40%, rgba(76, 29, 149, 0.35), rgba(4, 6, 18, 0.72)) !important;
     backdrop-filter: blur(14px) saturate(140%);
     -webkit-backdrop-filter: blur(14px) saturate(140%);
 }
 #login-modal > div, .fixed.inset-0.z-50:not(#modal):not(#loader) > div {
-    border-radius: 30px !important; position: relative; overflow: hidden;
+    border-radius: 30px !important; position: relative; overflow-x: hidden; overflow-y: auto; max-height: calc(100dvh - 2rem);
     animation: pop 0.6s var(--spring) both;
 }
 #login-modal > div::before, .fixed.inset-0.z-50:not(#modal):not(#loader) > div::before {
@@ -299,8 +300,8 @@ button.control-button:hover { transform: translateY(-3px) scale(1.1); box-shadow
 .m-card-head span { font-size: 0.75rem; color: rgba(255, 255, 255, 0.6); }
 .m-line { display: grid; grid-template-columns: 1.8rem minmax(6rem, 11rem) 1fr 2.2rem 2.6rem; align-items: center; gap: 0.6rem; padding: 0.32rem 0; font-size: 0.875rem; }
 
-.m-villager { height: 2.1rem; width: auto; max-width: 100%; image-rendering: pixelated; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)); }
-.m-icon { font-size: 1.25rem; text-align: center; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5)); }
+.m-villager { height: 1.9rem; width: 1.9rem; object-fit: contain; object-position: center; image-rendering: pixelated; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)); }
+.m-icon { font-size: 1.25rem; display: grid; place-items: center; text-align: center; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5)); }
 .m-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .m-count { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
 .m-delta { font-size: 0.7rem; font-weight: 700; opacity: 0.55; }
@@ -318,10 +319,29 @@ button.control-button:hover { transform: translateY(-3px) scale(1.1); box-shadow
 .m-line.clickable:hover { background: rgba(255, 255, 255, 0.08); }
 .m-villager-layout { display: flex; gap: 1.25rem; align-items: stretch; }
 .m-villager-side { flex: 0 0 11rem; display: flex; flex-direction: column; align-items: center; gap: 0.75rem; padding: 1rem; border-radius: 1rem; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); }
-.m-villager-big { height: 12rem; width: auto; image-rendering: pixelated; filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.55)); }
+.m-villager-big { height: 9rem; width: 9rem; object-fit: contain; object-position: center; image-rendering: pixelated; filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.55)); }
 .m-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; width: 100%; }
 .m-stat { display: flex; flex-direction: column; align-items: center; font-size: 0.7rem; opacity: 0.95; }
 .m-stat b { font-size: 1.1rem; }
 .m-villager-chart { flex: 1 1 0; min-width: 0; }
 @media (max-width: 640px) { .m-villager-layout { flex-direction: column; } .m-villager-side { flex-basis: auto; } }
 .m-subhead { margin: 0.7rem 0 0.1rem; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.7; }
+
+/* Money glyph (CoreRP) without the photo frame */
+#modal-content img.coin { width: 1rem; height: 1rem; margin-left: 0.3rem; display: inline-block; image-rendering: pixelated; box-shadow: none; }
+
+/* Ownership history: one flat card, the owner line no longer a second card inside it */
+#modal-content .m-hist { padding: 0.55rem 0.8rem !important; }
+#modal-content .m-hist .bg-gray-700 { background: transparent !important; box-shadow: none !important; padding: 0.25rem 0 0 !important; border-radius: 0 !important; }
+
+/* Header buttons keep their size however narrow the pane gets */
+#close-modal, #back-modal { flex: none; }
+#modal-title { min-width: 0; overflow-wrap: anywhere; }
+
+/* Map-picking modes */
+#modal.pick-hide { visibility: hidden; pointer-events: none; }
+#map-container.picking, #map-container.picking .plot-rect { cursor: crosshair; }
+.plot-rect.ratusz-plot { stroke: #fbbf24 !important; stroke-width: 3px; filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.95)); }
+
+/* Touch screens have no hover: the plot tooltip would only linger over the modal */
+@media (hover: none) { #tooltip { display: none !important; } }

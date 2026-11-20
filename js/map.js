@@ -293,6 +293,7 @@ function drawPlots() {
         g.addEventListener('click', (e) => {
             if (state.isDragging) return;
             e.stopPropagation(); 
+            if (plotPick) { plotPick(plot); return; }
             openNewModal({type: 'plot', data: plot}); 
         });
         
@@ -371,6 +372,102 @@ function createDistrictOutline(plots) {
     const minZ = Math.min(...plots.map(p => p.z1));
     const maxZ = Math.max(...plots.map(p => p.z2));
     return `M ${minX} ${minZ} L ${maxX} ${minZ} L ${maxX} ${maxZ} L ${minX} ${maxZ} Z`;
+}
+
+let plotPick = null;
+
+/** Next click on a plot calls done(plot) instead of opening it. Returns a function that cancels the pick. */
+export function pickPlot(done) {
+    const stop = () => { plotPick = null; dom.mapContainer.classList.remove('picking'); };
+    plotPick = plot => { stop(); done(plot); };
+    dom.mapContainer.classList.add('picking');
+    return stop;
+}
+
+/** Gold outline for the Ratusz plot (the Treasury's headquarters). */
+export function markRatusz(plotId) {
+    dom.svg.querySelectorAll('.plot-rect.ratusz-plot').forEach(r => r.classList.remove('ratusz-plot'));
+    if (plotId === null || plotId === undefined) return;
+    dom.svg.querySelector(`g[data-plot-id='${plotId}'] .plot-rect`)?.classList.add('ratusz-plot');
+}
+
+/**
+ * Editable rectangle on the map: drag a corner to resize, drag the body to move. r holds inclusive block
+ * coordinates (x1..x2, z1..z2); onChange(r) fires on every change. Corner coordinates are shown next to the handles.
+ * Returns { get(), stop() }.
+ */
+export function editRect(initial, onChange) {
+    const ns = 'http://www.w3.org/2000/svg';
+    const r = { x1: initial.x1, z1: initial.z1, x2: initial.x2, z2: initial.z2 };
+    const g = document.createElementNS(ns, 'g');
+    const body = document.createElementNS(ns, 'rect');
+    body.setAttribute('fill', 'rgba(56, 189, 248, 0.25)'); body.setAttribute('stroke', '#38bdf8');
+    body.setAttribute('stroke-width', '2'); body.setAttribute('vector-effect', 'non-scaling-stroke');
+    body.style.cursor = 'move'; body.style.touchAction = 'none';
+    g.appendChild(body);
+
+    const toPoint = e => {
+        const pt = dom.svg.createSVGPoint();
+        pt.x = e.clientX; pt.y = e.clientY;
+        return pt.matrixTransform(dom.svg.getScreenCTM().inverse());
+    };
+    const corners = [[1, 1], [2, 1], [1, 2], [2, 2]].map(([sx, sz]) => {
+        const dot = document.createElementNS(ns, 'path');
+        dot.setAttribute('stroke', '#38bdf8'); dot.setAttribute('stroke-width', '22'); dot.setAttribute('stroke-linecap', 'round');
+        dot.setAttribute('vector-effect', 'non-scaling-stroke'); dot.style.cursor = 'nwse-resize'; dot.style.touchAction = 'none';
+        const label = document.createElement('div');
+        label.className = 'fixed z-50 pointer-events-none text-xs font-semibold px-1.5 py-0.5 rounded bg-gray-900 bg-opacity-85 text-sky-200 whitespace-nowrap';
+        document.body.appendChild(label);
+        g.appendChild(dot);
+        return { sx, sz, dot, label };
+    });
+
+    const edge = (side, lo, hi) => (side === 1 ? lo : hi + 1);
+    const redraw = () => {
+        body.setAttribute('x', r.x1); body.setAttribute('y', r.z1);
+        body.setAttribute('width', r.x2 - r.x1 + 1); body.setAttribute('height', r.z2 - r.z1 + 1);
+        for (const c of corners) {
+            const x = edge(c.sx, r.x1, r.x2), z = edge(c.sz, r.z1, r.z2);
+            c.dot.setAttribute('d', `M ${x} ${z} h0.001`);
+            c.label.textContent = `${c.sx === 1 ? r.x1 : r.x2}, ${c.sz === 1 ? r.z1 : r.z2}`;
+            const p = dom.svg.createSVGPoint(); p.x = x; p.y = z;
+            const s = p.matrixTransform(dom.svg.getScreenCTM());
+            c.label.style.left = `${s.x}px`; c.label.style.top = `${s.y}px`;
+            c.label.style.transform = `translate(-50%, ${c.sz === 1 ? '-150%' : '60%'})`;
+        }
+    };
+    const changed = () => { redraw(); onChange?.({ ...r }); };
+
+    const drag = (el, move) => {
+        const swallow = e => e.stopPropagation();
+        el.addEventListener('mousedown', swallow); el.addEventListener('touchstart', swallow, { passive: true });
+        el.addEventListener('pointerdown', e => {
+            e.stopPropagation(); e.preventDefault();
+            el.setPointerCapture(e.pointerId);
+            const start = toPoint(e), from = { ...r };
+            const onMove = ev => { move(toPoint(ev), start, from); changed(); };
+            const onUp = () => { el.removeEventListener('pointermove', onMove); el.removeEventListener('pointerup', onUp); el.removeEventListener('pointercancel', onUp); };
+            el.addEventListener('pointermove', onMove); el.addEventListener('pointerup', onUp); el.addEventListener('pointercancel', onUp);
+        });
+    };
+    for (const c of corners) {
+        drag(c.dot, p => {
+            if (c.sx === 1) r.x1 = Math.min(Math.round(p.x), r.x2); else r.x2 = Math.max(Math.round(p.x) - 1, r.x1);
+            if (c.sz === 1) r.z1 = Math.min(Math.round(p.y), r.z2); else r.z2 = Math.max(Math.round(p.y) - 1, r.z1);
+        });
+    }
+    drag(body, (p, start, from) => {
+        const dx = Math.round(p.x - start.x), dz = Math.round(p.y - start.y);
+        r.x1 = from.x1 + dx; r.x2 = from.x2 + dx; r.z1 = from.z1 + dz; r.z2 = from.z2 + dz;
+    });
+
+    dom.svg.appendChild(g);
+    redraw();
+    let frame = requestAnimationFrame(function loop() { redraw(); frame = requestAnimationFrame(loop); });   // follows pan and zoom
+    return {
+        get: () => ({ ...r }),
+        stop: () => { cancelAnimationFrame(frame); g.remove(); corners.forEach(c => c.label.remove()); }
+    };
 }
 
 let cancelActivePick = null;
