@@ -1,108 +1,267 @@
-/* Visual theme of the whole portal: layered on top of Tailwind's utility classes, so every modal, dialog,
-   form and button picks it up without changing markup. Colours live in the variables below. */
+/* "Liquid glass" theme for the whole portal.
+   Everything translucent blurs the map behind it; edges carry a specular highlight, a soft light follows the
+   pointer (js/fx.js sets --mx/--my), and panels spring in. Layered over Tailwind's utilities, so no markup is
+   needed for most elements. Colours live in the variables. */
+
 :root {
-    --bg-deep: #0b1020;
-    --panel-top: #1b2238;
-    --panel-bottom: #121827;
-    --panel-border: rgba(148, 163, 255, 0.22);
+    --glass-bg: rgba(18, 24, 48, 0.46);
+    --glass-bg-strong: rgba(14, 18, 38, 0.66);
+    --glass-blur: blur(26px) saturate(190%) brightness(1.05);
+    --glass-edge: inset 0 1px 0 rgba(255, 255, 255, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.13), inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+    --glass-shadow: 0 24px 70px rgba(2, 4, 20, 0.55), 0 4px 14px rgba(2, 4, 20, 0.35);
     --accent: #8b5cf6;
-    --accent-strong: #6d28d9;
-    --gold: #d4a017;
-    --glow: 0 10px 40px rgba(76, 29, 149, 0.35);
+    --accent-2: #38bdf8;
+    --accent-3: #f472b6;
+    --gold: #fbbf24;
+    --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --spot: radial-gradient(260px circle at var(--mx, 50%) var(--my, 0%), rgba(255, 255, 255, 0.16), transparent 62%);
 }
 
-body { background: radial-gradient(1200px 700px at 20% 0%, #1a2140 0%, var(--bg-deep) 60%); }
+@property --spin { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
 
-/* Scrollbars */
-* { scrollbar-width: thin; scrollbar-color: rgba(139, 92, 246, 0.6) transparent; }
+body { background: #0a0e1d; }
+
+/* The map sits on a deep gradient so glass has something colourful to refract even where the map is dark */
+#map-container::before {
+    content: ''; position: fixed; inset: -20%; z-index: -1; pointer-events: none;
+    background:
+        radial-gradient(40% 35% at 15% 20%, rgba(139, 92, 246, 0.35), transparent 70%),
+        radial-gradient(35% 40% at 85% 25%, rgba(56, 189, 248, 0.28), transparent 70%),
+        radial-gradient(45% 40% at 60% 90%, rgba(244, 114, 182, 0.22), transparent 70%);
+    animation: aurora 26s ease-in-out infinite alternate;
+}
+#map-svg { background-color: #0d1326 !important; }
+
+/* Plots light up under the cursor */
+.plot-rect { transition: filter 0.2s ease, fill-opacity 0.3s ease, stroke 0.3s, stroke-width 0.3s; }
+.plot-rect:hover { filter: drop-shadow(0 0 6px rgba(167, 139, 250, 0.95)) brightness(1.25); }
+
+* { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.28) transparent; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: rgba(139, 92, 246, 0.55); border-radius: 8px; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.25); border-radius: 8px; }
+::selection { background: rgba(139, 92, 246, 0.5); }
 
-/* Side modal */
+/* ───────── Glass surfaces ───────── */
+
+#modal,
+#login-modal > div,
+.fixed.inset-0.z-50 > div:not(.animate-spin),
+#search-suggestions,
+#tooltip {
+    background:
+        var(--spot),
+        radial-gradient(60% 40% at 0% 0%, rgba(139, 92, 246, 0.32), transparent 70%),
+        radial-gradient(55% 35% at 100% 100%, rgba(56, 189, 248, 0.22), transparent 70%),
+        var(--glass-bg) !important;
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-shadow), var(--glass-edge) !important;
+    border: 0 !important;
+}
+
+/* Side modal: a floating pane, not an edge-to-edge sidebar */
 #modal {
-    background: linear-gradient(170deg, var(--panel-top) 0%, var(--panel-bottom) 100%);
-    border-left: 1px solid var(--panel-border);
-    box-shadow: -12px 0 48px rgba(0, 0, 0, 0.5), inset 1px 0 0 rgba(255, 255, 255, 0.04);
-    backdrop-filter: blur(10px);
+    top: 12px !important; right: 12px !important; height: calc(100% - 24px) !important;
+    border-radius: 28px !important;
+    max-width: calc(100vw - 24px);
+    transform: translateX(calc(100% + 40px)) scale(0.96);
+    opacity: 0;
+    transition: transform 0.55s var(--spring), opacity 0.35s ease;
 }
-#modal-title { font-weight: 700; letter-spacing: 0.01em; }
-#modal-content > * { animation: rise 0.28s ease-out both; }
-#modal-content > *:nth-child(2) { animation-delay: 0.04s; }
-#modal-content > *:nth-child(3) { animation-delay: 0.08s; }
-#modal-content > *:nth-child(4) { animation-delay: 0.12s; }
+#modal.show { transform: none; opacity: 1; }
+#modal > div { padding: 1.6rem 1.5rem 2rem !important; }
+#modal-title { font-weight: 700; letter-spacing: -0.01em; font-size: 1.35rem !important; text-shadow: 0 2px 18px rgba(139, 92, 246, 0.55); }
+#close-modal, #back-modal {
+    width: 36px; height: 36px; border-radius: 999px; display: grid; place-items: center; line-height: 1;
+    background: rgba(255, 255, 255, 0.08); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+#close-modal:hover, #back-modal:hover { background: rgba(255, 255, 255, 0.18); transform: rotate(90deg) scale(1.08); }
+#back-modal:hover { transform: translateX(-3px) scale(1.08); }
 
-/* Cards inside modals */
-#modal-content .bg-gray-700 {
-    background: linear-gradient(135deg, rgba(55, 65, 100, 0.65), rgba(38, 46, 74, 0.65));
-    border: 1px solid rgba(148, 163, 255, 0.12);
-    border-radius: 0.6rem;
-    transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
-}
-#modal-content .clickable:hover, #modal-content .cursor-pointer:hover { border-color: rgba(167, 139, 250, 0.55); }
-#modal-content .clickable:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); }
-#modal-content h4 { letter-spacing: 0.02em; }
-#modal-content .border-t { border-color: rgba(148, 163, 255, 0.16); }
+#modal-content > * { animation: rise 0.6s var(--spring) both; }
+#modal-content > *:nth-child(2) { animation-delay: 0.05s; }
+#modal-content > *:nth-child(3) { animation-delay: 0.1s; }
+#modal-content > *:nth-child(4) { animation-delay: 0.15s; }
+#modal-content > *:nth-child(n+5) { animation-delay: 0.2s; }
 
-/* Dialogs: login and the editor's forms */
-#login-modal, .fixed.inset-0.z-50 { backdrop-filter: blur(6px); }
-#login-modal > div, .fixed.inset-0.z-50 > div {
-    background: linear-gradient(170deg, var(--panel-top) 0%, var(--panel-bottom) 100%);
-    border: 1px solid var(--panel-border);
-    border-radius: 1rem;
-    box-shadow: var(--glow);
-    animation: pop 0.22s ease-out both;
+/* Nested glass: cards inside the pane */
+#modal-content .bg-gray-700, #search-suggestions > * {
+    position: relative;
+    background: var(--spot), linear-gradient(135deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.04)) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 8px 22px rgba(2, 4, 20, 0.25);
+    border-radius: 16px !important;
+    transition: transform 0.35s var(--spring), box-shadow 0.3s ease;
 }
+#modal-content .clickable:hover, #modal-content .cursor-pointer:hover {
+    transform: translateY(-3px) scale(1.012);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), inset 0 0 0 1px rgba(167, 139, 250, 0.55), 0 14px 32px rgba(76, 29, 149, 0.4);
+}
+#modal-content h4 { font-weight: 600; letter-spacing: 0.01em; }
+#modal-content .border-t { border-color: rgba(255, 255, 255, 0.12) !important; }
+#modal-content img { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35), 0 6px 16px rgba(0, 0, 0, 0.4); }
 
-/* Inputs */
-input, select, textarea {
-    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+/* Dialogs: login + the editor's forms */
+#login-modal, .fixed.inset-0.z-50:not(#modal):not(#loader) {
+    background: radial-gradient(70% 60% at 50% 40%, rgba(76, 29, 149, 0.35), rgba(4, 6, 18, 0.72)) !important;
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
 }
+#login-modal > div, .fixed.inset-0.z-50:not(#modal):not(#loader) > div {
+    border-radius: 30px !important; position: relative; overflow: hidden;
+    animation: pop 0.6s var(--spring) both;
+}
+#login-modal > div::before, .fixed.inset-0.z-50:not(#modal):not(#loader) > div::before {
+    content: ''; position: absolute; width: 260px; height: 260px; top: -120px; right: -90px; border-radius: 50%; pointer-events: none;
+    background: conic-gradient(from var(--spin), var(--accent), var(--accent-2), var(--accent-3), var(--accent));
+    filter: blur(60px); opacity: 0.42; animation: spin 14s linear infinite;
+}
+#login-modal > div > *, .fixed.inset-0.z-50:not(#modal):not(#loader) > div > * { position: relative; }
+
+/* ───────── Controls ───────── */
+
+input, select, textarea { transition: box-shadow 0.25s ease, background-color 0.25s ease; }
 input:not([type="checkbox"]), select, textarea {
-    background-color: rgba(10, 14, 28, 0.7) !important;
-    border-color: rgba(148, 163, 255, 0.25) !important;
-    border-radius: 0.6rem !important;
+    background: rgba(5, 8, 22, 0.45) !important;
+    border: 0 !important;
+    border-radius: 14px !important;
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+    backdrop-filter: blur(8px);
 }
 input:focus, select:focus, textarea:focus {
-    outline: none;
-    border-color: var(--accent) !important;
-    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.28);
+    outline: none !important;
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(167, 139, 250, 0.9), 0 0 0 4px rgba(139, 92, 246, 0.28), 0 0 28px rgba(139, 92, 246, 0.35);
 }
-select { cursor: pointer; }
+select option { background: #151a33; color: #fff; }
+input[type="checkbox"] { accent-color: var(--accent); }
 
-/* Buttons */
-button { transition: transform 0.12s ease, box-shadow 0.15s ease, background-color 0.15s ease, border-color 0.15s ease; }
-button:active:not(:disabled) { transform: translateY(1px) scale(0.99); }
-button.bg-purple-600, button.bg-blue-600 {
-    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
-    box-shadow: 0 4px 14px rgba(109, 40, 217, 0.4);
+button { transition: transform 0.35s var(--spring), box-shadow 0.3s ease, background 0.3s ease, filter 0.3s ease; }
+button:active:not(:disabled) { transform: scale(0.94); transition-duration: 0.08s; }
+
+/* Primary pills with a liquid sheen */
+button.bg-purple-600, button.bg-blue-600, button.bg-yellow-600, #search-button, #modal-content button.bg-red-800 {
+    position: relative; overflow: hidden; border-radius: 999px !important; border: 0 !important;
+    background: linear-gradient(135deg, #a78bfa 0%, #7c3aed 45%, #4f46e5 100%) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), inset 0 -2px 6px rgba(0, 0, 0, 0.25), 0 10px 28px rgba(109, 40, 217, 0.5);
 }
-button.bg-purple-600:hover:not(:disabled) { box-shadow: 0 6px 20px rgba(139, 92, 246, 0.55); }
-.control-button {
-    background: rgba(20, 26, 46, 0.85) !important;
-    border: 1px solid var(--panel-border);
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-    backdrop-filter: blur(6px);
+button.bg-purple-600::after, button.bg-blue-600::after, button.bg-yellow-600::after, #search-button::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.45) 50%, transparent 70%);
+    transform: translateX(-130%); transition: transform 0.8s var(--ease);
 }
-.control-button:hover { transform: translateY(-1px); border-color: rgba(167, 139, 250, 0.6); }
-#open-ratusz { color: #fcd34d; border-color: rgba(212, 160, 23, 0.55); }
-#login-button, #profile-button { box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35); }
+button.bg-purple-600:hover:not(:disabled)::after, button.bg-blue-600:hover::after, button.bg-yellow-600:hover::after, #search-button:hover::after { transform: translateX(130%); }
+button.bg-purple-600:hover:not(:disabled), #search-button:hover { transform: translateY(-2px) scale(1.04); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 16px 38px rgba(139, 92, 246, 0.65); }
+button.bg-yellow-600 { background: linear-gradient(135deg, #fde68a 0%, #f59e0b 55%, #d97706 100%) !important; color: #3a2704 !important; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 10px 28px rgba(245, 158, 11, 0.45); }
+#modal-content button.bg-red-800 { background: linear-gradient(135deg, #fb7185, #be123c) !important; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 10px 26px rgba(190, 18, 60, 0.4); }
 
-/* Tables (Ratusz tabs, lists) */
-#modal table { border-collapse: separate; border-spacing: 0; width: 100%; }
-#modal th { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
-#modal tbody tr { transition: background-color 0.12s ease; }
-#modal tbody tr:hover { background: rgba(139, 92, 246, 0.1); }
+/* Secondary buttons are small glass chips */
+button.bg-gray-700, #modal-content button.bg-gray-700 {
+    background: rgba(255, 255, 255, 0.1) !important; border-radius: 999px !important; border: 0 !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+button.bg-gray-700:hover { background: rgba(255, 255, 255, 0.2) !important; transform: translateY(-1px); }
 
-/* Search box */
-#search-input { background: rgba(14, 19, 38, 0.85) !important; }
+/* Map controls: glass orbs */
+button.control-button {
+    background: var(--spot), var(--glass-bg) !important;
+    backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+    border: 0 !important; border-radius: 16px !important;
+    box-shadow: var(--glass-shadow), var(--glass-edge);
+}
+button.control-button:hover { transform: translateY(-3px) scale(1.1); box-shadow: 0 18px 40px rgba(76, 29, 149, 0.5), var(--glass-edge); }
+.toggle-button { opacity: 0.55 !important; border: 0 !important; }
+.toggle-button.active {
+    opacity: 1 !important;
+    background: linear-gradient(135deg, rgba(167, 139, 250, 0.75), rgba(79, 70, 229, 0.7)) !important;
+    box-shadow: 0 0 22px rgba(139, 92, 246, 0.7), var(--glass-edge) !important;
+}
+#open-ratusz { color: #fde68a !important; }
+#open-ratusz:hover { box-shadow: 0 0 34px rgba(251, 191, 36, 0.65), var(--glass-edge) !important; }
 
-/* Tooltip */
-#tooltip { border: 1px solid var(--panel-border); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); backdrop-filter: blur(6px); }
+/* Search pill */
+#search-bar {
+    background: var(--spot), var(--glass-bg) !important;
+    backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+    border: 0 !important; border-radius: 999px !important; overflow: hidden;
+    box-shadow: var(--glass-shadow), var(--glass-edge);
+    transition: transform 0.4s var(--spring), box-shadow 0.3s ease;
+}
+#search-bar:focus-within { transform: scale(1.03); box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.3), 0 0 44px rgba(139, 92, 246, 0.45), var(--glass-edge); }
+#search-input { background: transparent !important; box-shadow: none !important; backdrop-filter: none; border-radius: 0 !important; }
+#search-input:focus { box-shadow: none !important; }
+#search-button { border-radius: 0 !important; }
+#search-suggestions { border-radius: 20px !important; overflow: hidden; margin-top: 10px !important; animation: rise 0.4s var(--spring) both; }
 
-@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-@keyframes pop { from { opacity: 0; transform: scale(0.96) translateY(6px); } to { opacity: 1; transform: none; } }
+/* Login / profile */
+#login-button {
+    background: var(--spot), var(--glass-bg) !important; border: 0 !important; border-radius: 999px !important;
+    backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-shadow), var(--glass-edge); font-weight: 600;
+}
+#login-button:hover { transform: translateY(-2px) scale(1.05); }
+#profile-button { border: 0 !important; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.7), 0 0 0 5px rgba(139, 92, 246, 0.5), 0 10px 26px rgba(0, 0, 0, 0.5) !important; }
+#profile-button:hover { transform: scale(1.1) rotate(-4deg); }
 
-/* Ratusz keeps its own gold treatment (see plot_viewer.html); the theme must not flatten it. */
-#modal.ratusz { background: linear-gradient(160deg, #6b4f12 0%, #3a2c08 55%, #2a2006 100%); backdrop-filter: none; }
+#coords-display, #lottery-button {
+    backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+    border-radius: 999px !important; box-shadow: var(--glass-edge), 0 8px 22px rgba(0, 0, 0, 0.35);
+    background: rgba(18, 24, 48, 0.5) !important; border: 0 !important;
+}
+#lottery-button { background: linear-gradient(135deg, #fde68a, #f59e0b) !important; color: #3a2704 !important; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 10px 30px rgba(245, 158, 11, 0.5); }
+#lottery-overlay { backdrop-filter: blur(18px) saturate(140%); -webkit-backdrop-filter: blur(18px) saturate(140%); background: radial-gradient(70% 60% at 50% 40%, rgba(120, 53, 15, 0.35), rgba(4, 6, 18, 0.78)); }
 
-@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+/* Loader: a breathing glass orb */
+#loader { background: radial-gradient(60% 60% at 50% 50%, rgba(76, 29, 149, 0.4), rgba(6, 8, 20, 0.92)) !important; backdrop-filter: blur(16px); }
+#loader svg { display: none; }
+#loader > div::before {
+    content: ''; display: block; width: 74px; height: 74px; margin: 0 auto 22px; border-radius: 50%;
+    background: radial-gradient(circle at 30% 28%, rgba(255, 255, 255, 0.85), rgba(167, 139, 250, 0.55) 35%, rgba(56, 189, 248, 0.3) 70%, transparent 72%);
+    box-shadow: inset 0 0 18px rgba(255, 255, 255, 0.5), 0 0 60px rgba(139, 92, 246, 0.8);
+    animation: breathe 2.2s ease-in-out infinite;
+}
+#loader p { letter-spacing: 0.08em; text-transform: uppercase; font-size: 0.8rem !important; opacity: 0.8; }
+
+/* Tables (Ratusz tabs) */
+#modal table { border-collapse: separate; border-spacing: 0 4px; width: 100%; }
+#modal th { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; border: 0 !important; color: rgba(255, 255, 255, 0.55) !important; }
+#modal tbody tr { background: rgba(255, 255, 255, 0.05); transition: background 0.2s ease, transform 0.3s var(--spring); }
+#modal tbody tr:hover { background: rgba(255, 255, 255, 0.13); transform: scale(1.01); }
+#modal td { border: 0 !important; }
+#modal td:first-child { border-radius: 12px 0 0 12px; }
+#modal td:last-child { border-radius: 0 12px 12px 0; }
+
+/* ───────── Ratusz: golden liquid glass ───────── */
+#modal.ratusz {
+    background:
+        var(--spot),
+        radial-gradient(70% 45% at 10% 0%, rgba(251, 191, 36, 0.5), transparent 70%),
+        radial-gradient(60% 45% at 100% 100%, rgba(217, 119, 6, 0.4), transparent 70%),
+        rgba(52, 36, 8, 0.55) !important;
+    box-shadow: 0 24px 80px rgba(120, 80, 0, 0.5), inset 0 1px 0 rgba(255, 240, 190, 0.75), inset 0 0 0 1px rgba(251, 191, 36, 0.4) !important;
+}
+#modal.ratusz::before {
+    content: ''; position: sticky; top: 0; display: block; height: 3px; margin-bottom: -3px; z-index: 5;
+    background: linear-gradient(90deg, transparent, #fde68a, #f59e0b, #fde68a, transparent); background-size: 200% 100%;
+    animation: shimmer 3.2s linear infinite;
+}
+#modal.ratusz #modal-title { color: #fde68a; text-shadow: 0 0 26px rgba(251, 191, 36, 0.85); letter-spacing: 0.05em; }
+#modal.ratusz #modal-content .bg-gray-700 { box-shadow: inset 0 1px 0 rgba(255, 240, 190, 0.45), inset 0 0 0 1px rgba(251, 191, 36, 0.22), 0 8px 22px rgba(70, 40, 0, 0.35); }
+
+/* ───────── Motion ───────── */
+@keyframes rise { from { opacity: 0; transform: translateY(18px) scale(0.97); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes pop { from { opacity: 0; transform: scale(0.88) translateY(24px); filter: blur(10px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes spin { to { --spin: 360deg; } }
+@keyframes shimmer { to { background-position: -200% 0; } }
+@keyframes breathe { 0%, 100% { transform: scale(0.92); } 50% { transform: scale(1.1); } }
+@keyframes aurora { from { transform: translate3d(-3%, -2%, 0) rotate(0deg); } to { transform: translate3d(3%, 3%, 0) rotate(6deg); } }
+
+@media (max-width: 768px) {
+    #modal { top: 8px !important; right: 8px !important; height: calc(100% - 16px) !important; width: calc(100vw - 16px) !important; border-radius: 24px !important; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition-duration: 0.01ms !important; } }
+/* Browsers without backdrop-filter get an opaque pane instead of unreadable text */
+@supports not (backdrop-filter: blur(1px)) {
+    #modal, #login-modal > div, button.control-button, #search-bar { background: #161c36 !important; }
+}
+
+@media (max-width: 480px) { #search-input { width: 8.5rem !important; } #login-button { padding-left: 0.9rem; padding-right: 0.9rem; } }
