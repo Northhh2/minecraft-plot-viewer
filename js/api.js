@@ -46,7 +46,7 @@ export function snapshotToAppData(s) {
         name: p.name,
         // Full plot identifier: <sector>/<sequence number>. The sector is assigned by the portal from the coordinates.
         sector: sectors.get(p.sectorId)?.name ?? '',
-        fullId: `${sectors.get(p.sectorId)?.name ?? '?'}/${p.id}`,
+        fullId: p.id < 0 ? 'oczekuje na numer z gry' : `${sectors.get(p.sectorId)?.name ?? '?'}/${p.id}`,
         type: zoning.get(p.zoningTypeId)?.name ?? '',
         // The game may store corners in any order: normalise so x1<=x2 and z1<=z2 (the map draws from x1,z1).
         x1: Math.min(p.x1, p.x2), z1: Math.min(p.z1, p.z2), x2: Math.max(p.x1, p.x2), z2: Math.max(p.z1, p.z2),

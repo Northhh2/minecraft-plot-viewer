@@ -129,8 +129,8 @@ async function createPlot(env, viewer, body) {
     const p = await resolvePlot(env.DB, body ?? {}, null, { force: isAdmin(viewer) });
     const [res] = await env.DB.batch([
         env.DB.prepare(
-            `INSERT INTO plots (name, zoning_type_id, x1, z1, x2, z2, side_x, side_z, area, value, sector_id, district_id, street_id, building_number)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)`
+            `INSERT INTO plots (id, name, zoning_type_id, x1, z1, x2, z2, side_x, side_z, area, value, sector_id, district_id, street_id, building_number)
+             VALUES ((SELECT MIN(0, COALESCE(MIN(id), 0)) - 1 FROM plots), ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)`
         ).bind(p.name, p.zoningTypeId, p.x1, p.z1, p.x2, p.z2, p.sideX, p.sideZ, p.area, p.value, p.sectorId, p.districtId, p.streetId, p.buildingNumber),
         auditStmt(env.DB, viewer, 'plot', null, 'create', null, p)
     ]);
@@ -217,8 +217,8 @@ async function transferPlot(env, viewer, id, body) {
 
     const results = await env.DB.batch([
         env.DB.prepare(
-            `INSERT INTO ownership_history (plot_id, owner_kind, owner_number, transaction_value, transaction_day, transaction_type, payment_status, paid)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`
+            `INSERT INTO ownership_history (id, plot_id, owner_kind, owner_number, transaction_value, transaction_day, transaction_type, payment_status, paid)
+             VALUES ((SELECT MIN(0, COALESCE(MIN(id), 0)) - 1 FROM ownership_history), ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`
         ).bind(id, kind, number, value, day, type, order ? 'requested' : 'paid', paid),
         // The plot owner only changes once the transaction is paid, as in the old sheet logic.
         env.DB.prepare(
@@ -288,7 +288,7 @@ async function createStreet(env, viewer, body) {
     requireStaff(viewer);
     const s = streetFields(body ?? {}, {});
     const [res] = await env.DB.batch([
-        env.DB.prepare('INSERT INTO streets (name, x1, z1, x2, z2) VALUES (?1, ?2, ?3, ?4, ?5)').bind(s.name, s.x1, s.z1, s.x2, s.z2),
+        env.DB.prepare('INSERT INTO streets (id, name, x1, z1, x2, z2) VALUES ((SELECT MIN(0, COALESCE(MIN(id), 0)) - 1 FROM streets), ?1, ?2, ?3, ?4, ?5)').bind(s.name, s.x1, s.z1, s.x2, s.z2),
         auditStmt(env.DB, viewer, 'street', null, 'create', null, s)
     ]);
     return { status: 201, body: { street: { id: res.meta.last_row_id, ...s } } };
@@ -321,7 +321,7 @@ async function createDistrict(env, viewer, body) {
     const name = strField(body?.name, 'name', 64);
     if (await one(env.DB, 'SELECT 1 FROM districts WHERE lower(name) = lower(?1)', name)) throw new HttpError(409, 'name_taken');
     const [res] = await env.DB.batch([
-        env.DB.prepare('INSERT INTO districts (name) VALUES (?1)').bind(name),
+        env.DB.prepare('INSERT INTO districts (id, name) VALUES ((SELECT MIN(0, COALESCE(MIN(id), 0)) - 1 FROM districts), ?1)').bind(name),
         auditStmt(env.DB, viewer, 'district', null, 'create', null, { name })
     ]);
     return { status: 201, body: { district: { id: res.meta.last_row_id, name } } };
@@ -444,17 +444,17 @@ async function applyCompanyMapping(env, viewer, body) {
 
 const ROUTES = [
     ['POST', /^\/api\/plots$/, (e, v, b) => createPlot(e, v, b)],
-    ['PATCH', /^\/api\/plots\/(\d+)$/, (e, v, b, m) => updatePlot(e, v, Number(m[1]), b)],
-    ['DELETE', /^\/api\/plots\/(\d+)$/, (e, v, b, m) => deletePlot(e, v, Number(m[1]))],
-    ['POST', /^\/api\/plots\/(\d+)\/transfer$/, (e, v, b, m) => transferPlot(e, v, Number(m[1]), b)],
+    ['PATCH', /^\/api\/plots\/(-?\d+)$/, (e, v, b, m) => updatePlot(e, v, Number(m[1]), b)],
+    ['DELETE', /^\/api\/plots\/(-?\d+)$/, (e, v, b, m) => deletePlot(e, v, Number(m[1]))],
+    ['POST', /^\/api\/plots\/(-?\d+)\/transfer$/, (e, v, b, m) => transferPlot(e, v, Number(m[1]), b)],
     ['POST', /^\/api\/merges$/, (e, v, b) => mergePlots(e, v, b)],
     ['DELETE', /^\/api\/merges\/(\d+)$/, (e, v, b, m) => unmergePlots(e, v, Number(m[1]))],
     ['POST', /^\/api\/streets$/, (e, v, b) => createStreet(e, v, b)],
-    ['PATCH', /^\/api\/streets\/(\d+)$/, (e, v, b, m) => updateStreet(e, v, Number(m[1]), b)],
-    ['DELETE', /^\/api\/streets\/(\d+)$/, (e, v, b, m) => deleteStreet(e, v, Number(m[1]))],
+    ['PATCH', /^\/api\/streets\/(-?\d+)$/, (e, v, b, m) => updateStreet(e, v, Number(m[1]), b)],
+    ['DELETE', /^\/api\/streets\/(-?\d+)$/, (e, v, b, m) => deleteStreet(e, v, Number(m[1]))],
     ['POST', /^\/api\/districts$/, (e, v, b) => createDistrict(e, v, b)],
-    ['PATCH', /^\/api\/districts\/(\d+)$/, (e, v, b, m) => updateDistrict(e, v, Number(m[1]), b)],
-    ['DELETE', /^\/api\/districts\/(\d+)$/, (e, v, b, m) => deleteDistrict(e, v, Number(m[1]))],
+    ['PATCH', /^\/api\/districts\/(-?\d+)$/, (e, v, b, m) => updateDistrict(e, v, Number(m[1]), b)],
+    ['DELETE', /^\/api\/districts\/(-?\d+)$/, (e, v, b, m) => deleteDistrict(e, v, Number(m[1]))],
     ['GET', /^\/api\/admin\/company-mapping$/, (e, v) => getCompanyMapping(e, v)],
     ['POST', /^\/api\/admin\/company-mapping$/, (e, v, b) => applyCompanyMapping(e, v, b)],
     ['GET', /^\/api\/audit$/, (e, v, b, m, url) => listAudit(e, v, url)]

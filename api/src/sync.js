@@ -2,12 +2,14 @@
 //   POST /api/sync/land   game -> portal: a land export document ([gov_land_export]); replaces the land dataset
 //   POST /api/sync/city   game -> portal: a city export document ([gov_city_export]); stored as a read-only snapshot
 //   POST /api/sync/metro  game -> portal: a metro snapshot ([trn_metro_export]); refused (409) while portal edits are pending
+//   GET/POST /api/sync/land-delta, POST /api/sync/land-result   the automatic delta exchange (see delta.js); the routes above for land are the manual full ones
 //   GET  /api/sync/export portal -> game: the current land export document (what nb:land_pull_chunk receives)
 //   GET  /api/sync/metro-export  portal -> game: the metro updates document (what nb:metro_pull_chunk receives)
 //   GET  /api/city        public: the stored city snapshot
 // Unchanged documents (same hash, ignoring exportedAt) are skipped.
 import { sha256Hex, timingSafeEqual } from './auth.js';
 import { buildExport, importDoc } from './exchange.js';
+import { buildOutbox, receiveGameDelta, receiveResult, resetDelta } from './delta.js';
 import { buildUpdates, importMetroSnapshot } from './metro.js';
 
 async function authorized(env, request) {
@@ -38,8 +40,29 @@ export async function syncLand(env, request, body) {
     // viewer.number is only used for the audit log; null marks the sync agent.
     const result = await importDoc(env, { number: null, role: 'admin' }, doc, { dryRun: false })
         .catch(err => err?.status ? { status: err.status, body: err.body } : Promise.reject(err));
-    if (result.status === 200) await setMeta(env.DB, 'sync_land_hash', hash);
+    if (result.status === 200) {
+        await setMeta(env.DB, 'sync_land_hash', hash);
+        await resetDelta(env.DB);   // a full import replaces everything: the delta exchange starts over with the next game delta
+    }
     return result;
+}
+
+/** GET: the portal's changes for the game. */
+export async function syncLandDeltaOut(env, request) {
+    if (!(await authorized(env, request))) return DENIED;
+    return { status: 200, body: await buildOutbox(env.DB) };
+}
+
+/** POST: the game's changes for the portal. */
+export async function syncLandDeltaIn(env, request, body) {
+    if (!(await authorized(env, request))) return DENIED;
+    return receiveGameDelta(env.DB, body);
+}
+
+/** POST: the game's answer to a delta from syncLandDeltaOut. */
+export async function syncLandResult(env, request, body) {
+    if (!(await authorized(env, request))) return DENIED;
+    return receiveResult(env.DB, body);
 }
 
 export async function syncCity(env, request, body) {

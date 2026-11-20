@@ -143,6 +143,14 @@ CREATE TABLE IF NOT EXISTS city_snapshot (
     doc         TEXT NOT NULL
 );
 
+-- Delta sync with the game (api/src/delta.js): per record, the hash of the portal record as of the last confirmed sync.
+CREATE TABLE IF NOT EXISTS sync_base (
+    kind TEXT NOT NULL,
+    id   INTEGER NOT NULL,
+    hash TEXT NOT NULL,
+    PRIMARY KEY (kind, id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_plots_district ON plots(district_id);
 CREATE INDEX IF NOT EXISTS idx_units_plot ON units(plot_id);
 CREATE INDEX IF NOT EXISTS idx_ownership_plot ON ownership_history(plot_id);

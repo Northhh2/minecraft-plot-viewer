@@ -276,7 +276,7 @@ function drawPlots() {
         text.setAttribute('x', plot.x1 + plot.width / 2);
         text.setAttribute('y', plot.z1 + plot.height / 2);
         text.setAttribute('class', 'plot-text');
-        text.textContent = plot.id.padStart(3, '0');
+        text.textContent = plot.id.startsWith('-') ? '…' : plot.id.padStart(3, '0');   // negative id = created here, the game has not numbered it yet
         
         g.appendChild(rect);
         labels.appendChild(text);

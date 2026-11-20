@@ -48,14 +48,16 @@ export async function buildExport(db, { allowUnlinked = false } = {}) {
     const companyById = new Map(companies.map(c => [c.number, c]));
     const unlinked = new Map();
     const warnings = [];
+    const skip = new Set();   // `set:id` of records with an owner that cannot be expressed in GovBP terms (delta sync leaves them out)
 
     // Internal ref -> exchange ref. Unlinked owners cannot be expressed in GovBP terms.
-    const ref = (kind, number) => {
+    const ref = (kind, number, key) => {
         if (!kind) return null;
         const rec = (kind === 'citizen' ? citizenById : companyById).get(number);
         const ext = kind === 'citizen' ? rec?.identity_number : rec?.gov_number;
         if (ext === null || ext === undefined) {
             unlinked.set(`${kind}:${number}`, { kind, number, name: rec?.name ?? null });
+            if (key) skip.add(key);
             return null;
         }
         return { kind, number: ext };
@@ -65,21 +67,21 @@ export async function buildExport(db, { allowUnlinked = false } = {}) {
         id: p.id, name: p.name, zoningTypeId: p.zoning_type_id,
         x1: p.x1, z1: p.z1, x2: p.x2, z2: p.z2, sideX: p.side_x, sideZ: p.side_z, area: p.area, value: p.value,
         sectorId: p.sector_id, districtId: p.district_id, streetId: p.street_id, buildingNumber: p.building_number,
-        owner: ref(p.owner_kind, p.owner_number), mergedInto: p.merged_into
+        owner: ref(p.owner_kind, p.owner_number, `plots:${p.id}`), mergedInto: p.merged_into
     }));
     // Units carry no geometry here: the portal does not store it, and GovBP keeps its own units on import.
     const unitsOut = units.map(u => ({
         id: u.id, plotId: u.plot_id, unitNumber: u.unit_number ?? '', stairwell: u.stairwell ?? '', floor: toInt(u.floor), area: u.area,
-        bedCount: u.bed_count, workplaceCount: u.workplace_count, tenant: ref(u.tenant_kind, u.tenant_number)
+        bedCount: u.bed_count, workplaceCount: u.workplace_count, tenant: ref(u.tenant_kind, u.tenant_number, `units:${u.id}`)
     }));
     const ownershipOut = ownership.map(o => ({
-        id: o.id, plotId: o.plot_id, newOwner: ref(o.owner_kind, o.owner_number),
+        id: o.id, plotId: o.plot_id, newOwner: ref(o.owner_kind, o.owner_number, `ownershipHistory:${o.id}`),
         transactionValue: toMoney(o.transaction_value), transactionDay: o.transaction_day ?? 0,
         transactionType: o.transaction_type === DONATION_LABEL ? 'donation' : 'sale',
         checkNumber: o.check_number, paid: !!o.paid, paymentStatus: o.payment_status ?? null
     }));
     const lotteryOut = lottery.map(l => ({
-        id: l.id, plotId: l.plot_id, winner: ref(l.winner_kind, l.winner_number), amount: toMoney(l.amount), checkNumber: l.check_number, paid: !!l.paid, paymentStatus: l.payment_status ?? null
+        id: l.id, plotId: l.plot_id, winner: ref(l.winner_kind, l.winner_number, `lottery:${l.id}`), amount: toMoney(l.amount), checkNumber: l.check_number, paid: !!l.paid, paymentStatus: l.payment_status ?? null
     }));
     const mergesOut = merges.map(m => ({ id: m.id, mainPlotId: m.main_plot_id, mergingPlotId: m.merging_plot_id }));
 
@@ -102,7 +104,7 @@ export async function buildExport(db, { allowUnlinked = false } = {}) {
         })),
         companies: companies.filter(c => c.gov_number !== null).map(c => ({ number: c.gov_number, name: c.name, legalForm: c.legal_form }))
     };
-    return { doc, warnings, unlinked: [] };
+    return { doc, warnings, unlinked: [], skip };
 }
 
 // ─── import ──────────────────────────────────────────────────────────────────────
@@ -113,7 +115,7 @@ const bodyRefs = d => [
 ].filter(Boolean);
 
 /** Decides, for every citizen/company the document references, whether it exists, can be linked or must be created. */
-async function planOwners(db, doc, d) {
+export async function planOwners(db, doc, d) {
     const [citizens, companies] = await Promise.all([rows(db, 'SELECT number, identity_number, name FROM citizens'), rows(db, 'SELECT number, gov_number, name FROM companies')]);
     const infoCit = new Map((doc.citizens ?? []).map(c => [c.identityNumber, c]));
     const infoCom = new Map((doc.companies ?? []).map(c => [c.number, c]));
@@ -141,6 +143,30 @@ async function planOwners(db, doc, d) {
         }
     }
     return plan;
+}
+
+/** Creates/links the citizens and companies of a plan (see planOwners) and returns `own(ref)` -> [kind, portal number]. */
+export async function applyOwnerPlan(db, plan) {
+    for (const [ext, p] of plan.citizens) {
+        if (p.action === 'link') await db.prepare('UPDATE citizens SET identity_number = ?1 WHERE number = ?2').bind(ext, p.number).run();
+        if (p.action === 'create') {
+            const res = await db.prepare('INSERT INTO citizens (identity_number, name, photo_url, profession) VALUES (?1, ?2, ?3, ?4)')
+                .bind(ext, p.name, p.info?.photoUrl ?? null, p.info?.profession ?? null).run();
+            p.number = res.meta.last_row_id;
+        }
+    }
+    for (const [ext, p] of plan.companies) {
+        if (p.action === 'link') await db.prepare('UPDATE companies SET gov_number = ?1 WHERE number = ?2').bind(ext, p.number).run();
+        if (p.action === 'create') {
+            const res = await db.prepare('INSERT INTO companies (gov_number, name, legal_form) VALUES (?1, ?2, ?3)').bind(ext, p.name, p.info?.legalForm ?? null).run();
+            p.number = res.meta.last_row_id;
+        }
+    }
+    return r => {
+        if (!r) return [null, null];
+        const hit = (r.kind === 'citizen' ? plan.citizens : plan.companies).get(r.number);
+        return [r.kind, hit.number];
+    };
 }
 
 export async function importDoc(env, viewer, doc, { dryRun }) {

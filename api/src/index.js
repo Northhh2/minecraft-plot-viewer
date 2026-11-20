@@ -2,7 +2,8 @@ import { SCHEMA_VERSION, buildSnapshot } from './snapshot.js';
 import { authenticate, login, logout, syncPins } from './auth.js';
 import { handleEdit } from './edit.js';
 import { handleMetro, readMetro } from './metro.js';
-import { syncLand, syncCity, syncMetro, syncExport, syncMetroExport, readCity, readMyAllowance } from './sync.js';
+import { bumpLandRev } from './delta.js';
+import { syncLand, syncLandDeltaOut, syncLandDeltaIn, syncLandResult, syncCity, syncMetro, syncExport, syncMetroExport, readCity, readMyAllowance } from './sync.js';
 
 // The front end lives on another origin and authenticates with a bearer token (no cookies),
 // so a wildcard origin is fine: browsers never attach credentials automatically.
@@ -67,6 +68,15 @@ export default {
                 case 'POST /api/sync/land':
                     return reply(await syncLand(env, request, await readBody(request)));
 
+                case 'GET /api/sync/land-delta':
+                    return reply(await syncLandDeltaOut(env, request));
+
+                case 'POST /api/sync/land-delta':
+                    return reply(await syncLandDeltaIn(env, request, await readBody(request)));
+
+                case 'POST /api/sync/land-result':
+                    return reply(await syncLandResult(env, request, await readBody(request)));
+
                 case 'POST /api/sync/city':
                     return reply(await syncCity(env, request, await readBody(request)));
 
@@ -98,6 +108,8 @@ export default {
                     const result = await handleEdit(env, viewer, request.method, url, body)
                         ?? await handleMetro(env, viewer, request.method, url, body);
                     if (!result) return json({ error: 'not_found' }, 404);
+                    // Any successful edit may have changed land data: the next sync pass has to look for it.
+                    if (request.method !== 'GET' && result.status < 300) await bumpLandRev(env.DB);
                     if (result.raw !== undefined) {
                         return new Response(result.raw, {
                             status: result.status,

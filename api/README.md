@@ -49,15 +49,34 @@ of `GovernmentBP/src/registry/land/LandExchange.ts` (the canonical one; keep the
 (zone prices may be fractional, they are rounded only at the end of a value calculation), and an owner is `{kind, number}` where a
 citizen's number is their GovBP identity number and a company's number is its GovBP company number.
 
-**Game -> portal** (every few minutes, only when something changed): the game logs numbered `[gov_land_export]`, `[gov_city_export]`
-and `[trn_metro_export]` chunks to the content log and the agent POSTs the newest complete export of each to
-`/api/sync/land`, `/api/sync/city` and `/api/sync/metro`. A land import **replaces the whole land dataset** (accounts, roles and
-PINs are kept). The portal alone assigns a plot's sector: the sector whose box overlaps the plot's box the most, recomputed on every
-import and plot edit. A plot's full identifier is `<sector name>/<plot id>`.
+**Land: automatic two-way delta sync** (agent run from cron **every minute**; only changed records move). Code: `api/src/delta.js`,
+`GovernmentBP/src/registry/land/LandDelta.ts`, `tools/sync-agent.mjs`.
+- Each side remembers, per record, the hash of its own representation at the last confirmed sync (portal: table `sync_base`; game:
+  `gov_land_base_<set>`). A record whose hash differs is changed and goes into the next delta; nothing else is sent. The portal only
+  scans when something was edited (`meta.land_rev`), so an idle portal costs nothing.
+- **Game -> portal**: the game logs `[gov_land_delta]` chunks once a minute (only when something changed); the agent POSTs them to
+  `/api/sync/land-delta` and then acknowledges them to the game (`nb:land_delta_ack`). Upserts are idempotent, an unacknowledged delta is
+  logged again after ~2.5 minutes.
+- **Portal -> game**: the agent GETs `/api/sync/land-delta` and sends it as `nb:land_delta_chunk`; the game applies it **at once**
+  (validated as a whole with the normal import validation, so a bad record cannot damage anything) and logs `[gov_land_result]`,
+  which the agent POSTs to `/api/sync/land-result`. The portal may change plots, streets, districts and ownership history;
+  units, lottery, merges and zoning are authored in the game only, sectors only here.
+- **Conflicts: the game wins.** The game accepts a portal change to a record only if it did not change that record since the last
+  sync; otherwise the change is rejected as a `conflict` and the game's version overwrites the portal's with the next game delta.
+  Changes to different records merge. Merging plots, deleting plots/ownership and transfers to the Treasury are rejected (game only);
+  rejected records are listed in `meta.land_sync_issues`.
+- **New records get no number in the portal.** A plot/street/district/transfer created here has a negative temporary id (the map
+  shows "…", the plot "oczekuje na numer z gry"); the game assigns the real number during the sync and the result re-keys the row.
+- The first game delta after a deploy (or after `nb:land_delta_reset` in the game) is the whole dataset: it **replaces** the
+  portal's records, so make sure the last portal edits have been synced (or applied with the old `nb:land_pull_apply`) first.
+- The whole-dataset routes (`POST /api/sync/land`, `GET /api/sync/export`, `nb:land_pull_*`) remain as an emergency tool only; the
+  agent no longer uses them (`LAND_FULL=1` brings the push back, `LAND_DELTA=0` turns the delta exchange off). A full import resets
+  the delta baseline.
+- Existing deployments: run `schema.sql` once (it only adds the `sync_base` table).
 
-**Portal -> game** (`--pull`): the agent sends the portal's data as `scriptevent` chunks through the Crafty console, and applying it
-stays a manual step in the game: `/scriptevent nb:land_pull_check` then `nb:land_pull_apply` (a backup export is logged first), and
-`nb:metro_pull_check` then `nb:metro_pull_apply`. Portal edits are only pulled when the game did not change in the same pass.
+**Other data** (city, metro): the game logs `[gov_city_export]` and `[trn_metro_export]` chunks and the agent POSTs the newest complete
+one to `/api/sync/city` and `/api/sync/metro`. Portal metro data goes to the game with `--pull` as `nb:metro_pull_chunk`; applying it
+stays a manual step (`nb:metro_pull_check`, `nb:metro_pull_apply`).
 
 What the game cannot hold is skipped with a warning rather than invented: portal units have no geometry (game units stay as
 they are), transfers to the Treasury and lottery entries without a winner are dropped, and merges need the surveyed areas
