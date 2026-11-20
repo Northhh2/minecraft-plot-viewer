@@ -53,7 +53,7 @@ async function recentFails(db, key) {
 
 const publicUser = c => ({
     number: c.number, identityNumber: c.identity_number, name: c.name, role: c.role,
-    nio: c.nio, photoUrl: c.photo_url
+    photoUrl: c.photo_url
 });
 
 export async function login(env, request, body) {

@@ -467,8 +467,17 @@ async function loadCompanyHq(ownerName) {
         const city = await loadCity();
         const company = city.snapshot?.companies?.find(c => c.number === owner.ref.number);
         const plot = company?.hqPlotId != null ? appData.allPlots.find(p => p.id === String(company.hqPlotId)) : null;
-        box.innerHTML = `<span class="text-gray-400">Siedziba:</span> ${plot ? `<a data-hq-plot class="cursor-pointer font-medium text-purple-400 hover:underline">${esc(plot.name)}</a>` : '<span>Brak</span>'}`;
+        const treasury = company?.legalForm === 'CITY_TREASURY';
+        dom.modal.classList.toggle('ratusz', treasury);
+        box.innerHTML = `<span class="text-gray-400">${treasury ? 'Ratusz:' : 'Siedziba:'}</span> ${plot ? `<a data-hq-plot class="cursor-pointer font-medium text-purple-400 hover:underline">${esc(plot.name)}</a>` : '<span>Brak</span>'}`;
         box.querySelector('[data-hq-plot]')?.addEventListener('click', () => navigateToModal({ type: 'plot', data: plot }));
+        if (treasury) {
+            const open = document.createElement('button');
+            open.className = 'mt-2 w-full px-3 py-2 rounded-md bg-yellow-600 text-gray-900 font-semibold hover:bg-yellow-500';
+            open.textContent = 'Informacje o mieście';
+            open.addEventListener('click', openRatusz);
+            box.append(open);
+        }
     } catch { /* optional info */ }
 }
 
@@ -484,7 +493,7 @@ function renderOwnerContent(ownerName) {
     const totalPlotArea = ownedPlots.reduce((sum, p) => sum + (parseInt(p.area) || 0), 0);
     let ownerDetailsHTML = '';
     if(owner) {
-        ownerDetailsHTML += `<div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm"><span class="text-gray-400">NIO:</span><span>${esc(owner.nio || 'Brak')}</span>`;
+        ownerDetailsHTML += `<div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm"><span class="text-gray-400">Identyfikator${owner.type === 'prawna' ? ' firmy' : ''}:</span><span>${esc(owner.identifier || 'Brak')}</span>`;
         if(owner.type === 'fizyczna') ownerDetailsHTML += `<span class="text-gray-400">Wiek:</span><span>${esc(owner.age || 'Brak')}</span><span class="text-gray-400">Zawód:</span><span>${esc(owner.profession || 'Brak')}</span>`;
         else if(owner.type === 'prawna') ownerDetailsHTML += `<span class="text-gray-400">Forma Prawna:</span><span>${esc(owner.legalForm || 'Brak')}</span>`;
         ownerDetailsHTML += '</div>';
@@ -811,7 +820,7 @@ function showLoggedIn(user) {
 }
 
 function apiUserToCurrentUser(u) {
-    return { name: u.name, photo: u.photoUrl, nio: u.nio, role: u.role, number: u.number, staff: u.role !== 'citizen' };
+    return { name: u.name, photo: u.photoUrl, identifier: u.identityNumber, role: u.role, number: u.number, staff: u.role !== 'citizen' };
 }
 
 async function attemptAutoLogin() {
@@ -829,10 +838,10 @@ async function attemptAutoLogin() {
 function loginUser(identifier, pin, isAutoLogin = false) {
     const { allOwners } = appData;
     const identifierLower = identifier.toLowerCase();
-    const user = allOwners.find(o => o.pin === pin && o.type === 'fizyczna' && (o.nio === identifier || o.name.toLowerCase() === identifierLower));
+    const user = allOwners.find(o => o.pin === pin && o.type === 'fizyczna' && (String(o.identifier) === identifier || o.name.toLowerCase() === identifierLower));
     
     if (user) {
-        localStorage.setItem('userIdentifier', user.nio || user.name);
+        localStorage.setItem('userIdentifier', String(user.identifier || user.name));
         localStorage.setItem('userPIN', user.pin);
         showLoggedIn(user);
     } else if (!isAutoLogin) {

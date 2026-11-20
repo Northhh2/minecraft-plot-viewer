@@ -9,6 +9,8 @@ const COUNCIL_ROLE = ['', 'Radny', 'Przewodniczący'];
 const CODEX_NAMES = { civil: 'Kodeks cywilny', criminal: 'Kodeks karny', construction: 'Kodeks budowlany' };
 const TABS = [['projects', 'Projekty'], ['citizens', 'Obywatele'], ['companies', 'Firmy'], ['council', 'Rada'], ['elections', 'Wybory'], ['positions', 'Stanowiska']];
 
+const LEGAL_FORMS = { SOLE_PROPRIETORSHIP: 'Działalność jednoosobowa', PARTNERSHIP: 'Spółka osobowa', FOUNDATION: 'Fundacja', RELIGIOUS_INSTITUTION: 'Instytucja religijna', PUBLIC_INSTITUTION: 'Instytucja publiczna', OTHER: 'Inne', CITY_TREASURY: 'Skarb Miasta' };
+
 const day = d => (d === null || d === undefined ? '—' : d + 1); // game days are 0-indexed
 const num = n => Number(n ?? 0).toLocaleString('pl-PL');
 
@@ -39,7 +41,7 @@ function renderCitizens(doc) {
 function renderCompanies(doc) {
     const names = new Map(doc.citizens.map(c => [c.identityNumber, c.name]));
     return table(['#', 'Nazwa', 'Forma', 'Założona', 'Członkowie'], doc.companies.map(c => [
-        c.number, c.name, c.legalForm ?? '—', day(c.founded),
+        c.number, c.name, LEGAL_FORMS[c.legalForm] ?? c.legalForm ?? '—', day(c.founded),
         (c.members ?? []).map(m => names.get(m.identityNumber) ?? `#${m.identityNumber}`).join(', ') || '—'
     ]));
 }

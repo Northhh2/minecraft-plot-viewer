@@ -75,12 +75,12 @@ export function snapshotToAppData(s) {
     // Never expose PIN data to the client; login moves to the API in a later stage.
     const allOwners = [
         ...s.citizens.map(c => ({
-            name: c.name, type: 'fizyczna', photo: c.photoUrl ?? '', nio: c.nio ?? '', age: c.age ?? '',
+            name: c.name, type: 'fizyczna', photo: c.photoUrl ?? '', identifier: c.identityNumber ?? '', age: c.age ?? '',
             profession: c.profession ?? '', legalForm: '', pin: '', staff: c.role !== 'citizen',
             ref: { kind: 'citizen', number: c.number }
         })),
         ...s.companies.map(c => ({
-            name: c.name, type: 'prawna', photo: c.photoUrl ?? '', nio: '', age: '',
+            name: c.name, type: 'prawna', photo: c.photoUrl ?? '', identifier: c.number, age: '',
             profession: '', legalForm: c.legalForm ?? '', pin: '', staff: false,
             ref: { kind: 'company', number: c.number }
         }))

@@ -55,7 +55,7 @@ export async function buildSnapshot(db, viewer = null) {
             all(db, 'SELECT * FROM sectors ORDER BY id'),
             all(db, 'SELECT * FROM streets ORDER BY id'),
             // PIN data and role-less private fields are never part of the public snapshot.
-            all(db, 'SELECT number, identity_number, name, nio, age, profession, photo_url, role FROM citizens ORDER BY number'),
+            all(db, 'SELECT number, identity_number, name, age, profession, photo_url, role FROM citizens ORDER BY number'),
             all(db, 'SELECT * FROM companies ORDER BY number'),
             all(db, 'SELECT * FROM plots ORDER BY id'),
             all(db, 'SELECT * FROM units ORDER BY id'),
@@ -72,7 +72,7 @@ export async function buildSnapshot(db, viewer = null) {
         sectors: sectors.map(s => ({ id: s.id, name: s.name, x1: s.x1, z1: s.z1, x2: s.x2, z2: s.z2 })),
         streets: streets.map(s => ({ id: s.id, name: s.name, x1: s.x1, z1: s.z1, x2: s.x2, z2: s.z2 })),
         citizens: citizens.map(c => ({
-            number: c.number, identityNumber: c.identity_number, name: c.name, nio: c.nio,
+            number: c.number, identityNumber: c.identity_number, name: c.name,
             age: c.age, profession: c.profession, photoUrl: c.photo_url, role: c.role
         })),
         companies: companies.map(c => ({ number: c.number, name: c.name, legalForm: c.legal_form, photoUrl: c.photo_url })),
