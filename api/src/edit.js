@@ -193,27 +193,28 @@ async function transferPlot(env, viewer, id, body) {
         if (kind !== 'citizen' && kind !== 'company') throw new HttpError(400, 'invalid_field', { field: 'newOwner.kind' });
         const table = kind === 'citizen' ? 'citizens' : 'companies';
         if (!await one(env.DB, `SELECT 1 FROM ${table} WHERE number = ?1`, number)) throw new HttpError(400, 'unknown_reference', { field: 'newOwner' });
+        // The game only knows citizens with an identity number; an order to anyone else would be dropped there.
+        if (kind === 'citizen' && !await one(env.DB, 'SELECT 1 FROM citizens WHERE number = ?1 AND identity_number IS NOT NULL', number)) throw new HttpError(400, 'owner_not_linked', { field: 'newOwner' });
     }
     const day = intField(body.transactionDay, 'transactionDay', { min: 0, max: 1_000_000 });
     const type = strField(body.transactionType, 'transactionType', 32);
     const valueRaw = strField(body.transactionValue, 'transactionValue', 32, { required: false });
-    const check = strField(body.checkNumber, 'checkNumber', 32, { required: false });
     // A payment order is a transaction addressed to one specific person that stays unpaid (the plot keeps its
     // owner) until it is settled. The amount defaults to the plot's value.
-    const order = body.paymentOrder === true;
+    // Every transfer to a person is a payment order: the game issues the cheque and reports back; the portal never takes a cheque number.
+    const order = kind !== null;
     if (order) {
-        if (kind === null) throw new HttpError(400, 'invalid_field', { field: 'newOwner.number' });
         const last = await one(env.DB, 'SELECT paid FROM ownership_history WHERE plot_id = ?1 ORDER BY transaction_day DESC, id DESC LIMIT 1', id);
         if (last && !last.paid) throw new HttpError(409, 'payment_pending');
     }
     const value = order && valueRaw === null ? String(plot.value) : valueRaw;
-    const paid = !order && body.paid === true ? 1 : 0;
+    const paid = order ? 0 : 1;
 
     const results = await env.DB.batch([
         env.DB.prepare(
-            `INSERT INTO ownership_history (plot_id, owner_kind, owner_number, transaction_value, transaction_day, transaction_type, check_number, paid)
+            `INSERT INTO ownership_history (plot_id, owner_kind, owner_number, transaction_value, transaction_day, transaction_type, payment_status, paid)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`
-        ).bind(id, kind, number, value, day, type, check, paid),
+        ).bind(id, kind, number, value, day, type, order ? 'requested' : 'paid', paid),
         // The plot owner only changes once the transaction is paid, as in the old sheet logic.
         env.DB.prepare(
             `UPDATE plots SET owner_kind = CASE WHEN ?2 = 1 THEN ?3 ELSE owner_kind END,
@@ -222,7 +223,7 @@ async function transferPlot(env, viewer, id, body) {
              WHERE id = ?1 AND version = ?5`
         ).bind(id, paid, kind, number, version),
         auditStmt(env.DB, viewer, 'plot', id, order ? 'payment_order' : 'transfer', { owner: mapPlot(plot).owner },
-            { newOwner: kind ? { kind, number } : null, day, type, value, check, paid: !!paid }, { onlyIfChanged: true })
+            { newOwner: kind ? { kind, number } : null, day, type, value, paid: !!paid }, { onlyIfChanged: true })
     ]);
     if (results[1].meta.changes === 0) {
         // The insert already ran; undo it so history never shows a transfer the plot version rejected.

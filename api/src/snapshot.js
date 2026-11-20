@@ -35,7 +35,7 @@ function visibleOwnership(rows, viewer) {
                 id: o.id, plotId: o.plot_id, newOwner: owner(o.owner_kind, o.owner_number),
                 transactionValue: canSee ? o.transaction_value : null,
                 transactionDay: o.transaction_day, transactionType: o.transaction_type,
-                checkNumber: canSee ? o.check_number : null, paid: !!o.paid
+                checkNumber: null, paid: !!o.paid, paymentStatus: canSee ? (o.paid ? 'paid' : o.payment_status ?? null) : null
             });
         });
     }
@@ -85,8 +85,8 @@ export async function buildSnapshot(db, viewer = null) {
         ownershipHistory: visibleOwnership(ownership, viewer),
         lottery: lottery.map(l => ({
             id: l.id, plotId: l.plot_id, winner: owner(l.winner_kind, l.winner_number),
-            amount: isStaff(viewer) ? l.amount : null, checkNumber: isStaff(viewer) ? l.check_number : null,
-            paid: !!l.paid
+            amount: isStaff(viewer) ? l.amount : null, checkNumber: null,
+            paid: !!l.paid, paymentStatus: isStaff(viewer) ? (l.paid ? 'paid' : l.payment_status ?? null) : null
         })),
         merges: merges.map(m => ({ id: m.id, mainPlotId: m.main_plot_id, mergingPlotId: m.merging_plot_id })),
         settings: Object.fromEntries(settings.map(s => [s.key, !!s.value]))

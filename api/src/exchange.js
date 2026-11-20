@@ -76,10 +76,10 @@ export async function buildExport(db, { allowUnlinked = false } = {}) {
         id: o.id, plotId: o.plot_id, newOwner: ref(o.owner_kind, o.owner_number),
         transactionValue: toMoney(o.transaction_value), transactionDay: o.transaction_day ?? 0,
         transactionType: o.transaction_type === DONATION_LABEL ? 'donation' : 'sale',
-        checkNumber: o.check_number, paid: !!o.paid
+        checkNumber: o.check_number, paid: !!o.paid, paymentStatus: o.payment_status ?? null
     }));
     const lotteryOut = lottery.map(l => ({
-        id: l.id, plotId: l.plot_id, winner: ref(l.winner_kind, l.winner_number), amount: toMoney(l.amount), checkNumber: l.check_number, paid: !!l.paid
+        id: l.id, plotId: l.plot_id, winner: ref(l.winner_kind, l.winner_number), amount: toMoney(l.amount), checkNumber: l.check_number, paid: !!l.paid, paymentStatus: l.payment_status ?? null
     }));
     const mergesOut = merges.map(m => ({ id: m.id, mainPlotId: m.main_plot_id, mergingPlotId: m.merging_plot_id }));
 
@@ -223,14 +223,14 @@ export async function importDoc(env, viewer, doc, { dryRun }) {
         }
         for (const o of d.ownershipHistory) {
             const [kind, number] = own(o.newOwner);
-            add(`INSERT INTO ownership_history (id, plot_id, owner_kind, owner_number, transaction_value, transaction_day, transaction_type, check_number, paid)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
-            o.id, o.plotId, kind, number, String(o.transactionValue), o.transactionDay, o.transactionType === 'donation' ? DONATION_LABEL : SALE_LABEL, o.checkNumber, o.paid ? 1 : 0);
+            add(`INSERT INTO ownership_history (id, plot_id, owner_kind, owner_number, transaction_value, transaction_day, transaction_type, check_number, paid, payment_status)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
+            o.id, o.plotId, kind, number, String(o.transactionValue), o.transactionDay, o.transactionType === 'donation' ? DONATION_LABEL : SALE_LABEL, o.checkNumber, o.paid ? 1 : 0, o.paid ? 'paid' : (o.paymentStatus ?? null));
         }
         for (const l of d.lottery) {
             const [kind, number] = own(l.winner);
-            add('INSERT INTO lottery (id, plot_id, winner_kind, winner_number, amount, check_number, paid) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)',
-                l.id, l.plotId, kind, number, String(l.amount), l.checkNumber, l.paid ? 1 : 0);
+            add('INSERT INTO lottery (id, plot_id, winner_kind, winner_number, amount, check_number, paid, payment_status) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)',
+                l.id, l.plotId, kind, number, String(l.amount), l.checkNumber, l.paid ? 1 : 0, l.paid ? 'paid' : (l.paymentStatus ?? null));
         }
         for (const m of d.merges) add('INSERT INTO merges (id, main_plot_id, merging_plot_id) VALUES (?1, ?2, ?3)', m.id, m.mainPlotId, m.mergingPlotId);
     }

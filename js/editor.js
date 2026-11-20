@@ -67,6 +67,7 @@ function describeError(err) {
         case 'client': return d.message;
         case 'already_merged': return 'Jedna z tych działek jest już połączona (jako dołączana albo główna dla innych) — nie można utworzyć łańcucha scaleń.';
         case 'payment_pending': return 'Ta działka ma już nieopłaconą transakcję. Najpierw rozlicz poprzednie zlecenie.';
+        case 'owner_not_linked': return 'Ten obywatel nie ma jeszcze powiązanego numeru tożsamości z gry — zlecenie nie dotarłoby do gry.';
         case 'forbidden': return 'Brak uprawnień do tej operacji.';
         case 'unauthorized': return 'Sesja wygasła. Zaloguj się ponownie.';
         case 'too_many_attempts': return 'Zbyt wiele prób. Spróbuj później.';
@@ -246,21 +247,19 @@ function openTransferForm(plot) {
         ...appData.allOwners.filter(o => o.ref).map(o => ({ value: `${o.ref.kind}:${o.ref.number}`, label: `${o.name} (${o.type})` }))];
     openDialog({
         title: `Przekaż własność: ${plot.name}`,
-        submitLabel: 'Zapisz transakcję',
+        submitLabel: 'Wyślij zlecenie płatności do gry',
         fields: [
             { name: 'owner', label: 'Nowy właściciel', type: 'select', numeric: false, value: '', options: owners },
             { name: 'transactionType', label: 'Typ transakcji', type: 'text', required: true, value: 'Sprzedaż' },
-            { name: 'transactionValue', label: 'Wartość transakcji', type: 'text' },
-            { name: 'checkNumber', label: 'Numer czeku', type: 'text' },
-            { name: 'transactionDay', label: 'Dzień transakcji', type: 'number', required: true, value: lastDay + 1 },
-            { name: 'paid', label: 'Opłacone (zmienia aktualnego właściciela)', type: 'checkbox', value: true }
+            { name: 'transactionValue', label: 'Wartość transakcji (domyślnie wartość działki)', type: 'text' },
+            { name: 'transactionDay', label: 'Dzień transakcji', type: 'number', required: true, value: lastDay + 1 }
         ],
         onSubmit: async v => {
             let newOwner = null;
             if (v.owner) { const [kind, number] = v.owner.split(':'); newOwner = { kind, number: Number(number) }; }
             await request('POST', `/api/plots/${plot.dbId}/transfer`, {
                 version: plot.version, newOwner, transactionDay: v.transactionDay, transactionType: v.transactionType,
-                transactionValue: v.transactionValue, checkNumber: v.checkNumber, paid: v.paid
+                transactionValue: v.transactionValue
             });
             reload(plot.name);
         }

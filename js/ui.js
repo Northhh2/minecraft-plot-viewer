@@ -317,7 +317,7 @@ function renderPlotContent(plot) {
             let confidentialInfo = '';
             if (state.currentUser && (t.newOwner === state.currentUser.name || (index > 0 && reversedHistory[index - 1].newOwner === state.currentUser.name) )) {
                  confidentialInfo = `
-                    <div class="text-xs text-gray-400 mt-1">Wartość: ${esc(t.transactionValue || 'Brak')} | Czek: #${esc(t.checkNumber || 'Brak')}</div>
+                    <div class="text-xs text-gray-400 mt-1">Wartość: ${esc(t.transactionValue || 'Brak')} | ${esc(PAYMENT_LABELS[t.paymentStatus] || 'Rozliczone')}</div>
                  `;
             }
 
@@ -416,6 +416,8 @@ async function loadMyAllowance() {
             <div class="flex justify-between"><span class="text-gray-400">Do odebrania</span><span>${esc(a.balance)}</span></div></div>`;
     } catch { box.innerHTML = ''; }
 }
+
+const PAYMENT_LABELS = { requested: 'Zlecenie wysłane do gry', awaiting_account: 'Czeka na konto bankowe', pending: 'Czek wystawiony, czeka na realizację', paid: 'Opłacone' };
 
 function renderOwnerContent(ownerName) {
     if (state.currentUser && state.currentUser.name === ownerName) setTimeout(loadMyAllowance, 0);

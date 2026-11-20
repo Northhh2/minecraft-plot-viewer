@@ -98,7 +98,8 @@ CREATE TABLE IF NOT EXISTS ownership_history (
     transaction_day   INTEGER,
     transaction_type  TEXT,
     check_number      TEXT,
-    paid              INTEGER NOT NULL DEFAULT 0
+    paid              INTEGER NOT NULL DEFAULT 0,
+    payment_status    TEXT
 );
 
 CREATE TABLE IF NOT EXISTS lottery (
@@ -108,7 +109,8 @@ CREATE TABLE IF NOT EXISTS lottery (
     winner_number INTEGER,
     amount        TEXT,
     check_number  TEXT,
-    paid          INTEGER NOT NULL DEFAULT 0
+    paid          INTEGER NOT NULL DEFAULT 0,
+    payment_status TEXT
 );
 
 CREATE TABLE IF NOT EXISTS merges (

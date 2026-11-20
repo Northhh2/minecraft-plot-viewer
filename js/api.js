@@ -37,7 +37,7 @@ export function snapshotToAppData(s) {
         transactionValue: o.transactionValue ?? '',
         date: String(o.transactionDay ?? ''),
         type: o.transactionType ?? '',
-        checkNumber: o.checkNumber ?? '',
+        paymentStatus: o.paymentStatus ?? null,
         paid: o.paid
     }));
 

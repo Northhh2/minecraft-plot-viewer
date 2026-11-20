@@ -31,11 +31,15 @@ export interface UnitRec extends XZRect {
     id: number; plotId: number; unitNumber: string; stairwell: string; floor: number;
     sideX: number; sideZ: number; area: number; bedCount: number; workplaceCount: number; tenant: OwnerRef | null;
 }
+export type PaymentStatus = "requested" | "awaiting_account" | "pending" | "paid";
+const PAYMENT_STATUSES: PaymentStatus[] = ["requested", "awaiting_account", "pending", "paid"];
+const paymentStatus = (v: unknown): PaymentStatus | null => PAYMENT_STATUSES.includes(v as PaymentStatus) ? v as PaymentStatus : null;
+
 export interface OwnershipRec {
     id: number; plotId: number; newOwner: OwnerRef | null; transactionValue: number; transactionDay: number;
-    transactionType: TransactionType; checkNumber: string | null; paid: boolean;
+    transactionType: TransactionType; checkNumber: string | null; paid: boolean; paymentStatus: PaymentStatus | null;
 }
-export interface LotteryRec { id: number; plotId: number; winner: OwnerRef | null; amount: number; checkNumber: string | null; paid: boolean }
+export interface LotteryRec { id: number; plotId: number; winner: OwnerRef | null; amount: number; checkNumber: string | null; paid: boolean; paymentStatus: PaymentStatus | null }
 export interface MergeRec {
     id: number; mainPlotId: number; mergingPlotId: number;
     originalCombinedArea: number; combinedAreaAfter: number; areaDifference: number; fee: number; day: number;
@@ -324,7 +328,7 @@ export function parseImport(raw: unknown, ctx: ImportContext): ImportReport {
                 id: id(r, w), plotId: plotRef(r.plotId, w), newOwner: owner(r.newOwner, w),
                 transactionValue: num(r.transactionValue ?? 0, w, "transactionValue", 0), transactionDay: num(r.transactionDay, w, "transactionDay", 0),
                 transactionType: r.transactionType === "donation" ? "donation" : "sale",
-                checkNumber: nullableStr(r.checkNumber), paid: r.paid === true
+                checkNumber: nullableStr(r.checkNumber), paid: r.paid === true, paymentStatus: paymentStatus(r.paymentStatus)
             });
         });
         if (skipped > 0) warnings.push(`Pominięto ${skipped} zmian własności bez nowego właściciela (przekazanie do Skarbu Miasta).`);
@@ -341,7 +345,8 @@ export function parseImport(raw: unknown, ctx: ImportContext): ImportReport {
             if ((r.winner === null || r.winner === undefined) && !ctx.lenient) { skipped++; return; }
             kept.push({
                 id: id(r, w), plotId: plotRef(r.plotId, w), winner: owner(r.winner, w),
-                amount: num(r.amount ?? 0, w, "amount", 0), checkNumber: nullableStr(r.checkNumber), paid: r.paid === true
+                amount: num(r.amount ?? 0, w, "amount", 0), checkNumber: nullableStr(r.checkNumber), paid: r.paid === true,
+                paymentStatus: paymentStatus(r.paymentStatus)
             });
         });
         if (skipped > 0) warnings.push(`Pominięto ${skipped} wpisów loterii bez zwycięzcy.`);
