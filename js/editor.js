@@ -250,7 +250,7 @@ function openTransferForm(plot) {
         submitLabel: 'Wyślij zlecenie płatności do gry',
         fields: [
             { name: 'owner', label: 'Nowy właściciel', type: 'select', numeric: false, value: '', options: owners },
-            { name: 'transactionType', label: 'Typ transakcji', type: 'text', required: true, value: 'Sprzedaż' },
+            { name: 'transactionType', label: 'Typ transakcji', type: 'select', numeric: false, value: 'Sprzedaż', options: [{ value: 'Sprzedaż', label: 'Sprzedaż' }, { value: 'Darowizna', label: 'Darowizna' }] },
             { name: 'transactionValue', label: 'Wartość transakcji (domyślnie wartość działki)', type: 'text' },
             { name: 'transactionDay', label: 'Dzień transakcji', type: 'number', required: true, value: lastDay + 1 }
         ],

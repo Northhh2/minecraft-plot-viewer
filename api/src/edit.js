@@ -198,6 +198,7 @@ async function transferPlot(env, viewer, id, body) {
     }
     const day = intField(body.transactionDay, 'transactionDay', { min: 0, max: 1_000_000 });
     const type = strField(body.transactionType, 'transactionType', 32);
+    if (type !== 'Sprzedaż' && type !== 'Darowizna') throw new HttpError(400, 'invalid_field', { field: 'transactionType' });
     const valueRaw = strField(body.transactionValue, 'transactionValue', 32, { required: false });
     // A payment order is a transaction addressed to one specific person that stays unpaid (the plot keeps its
     // owner) until it is settled. The amount defaults to the plot's value.
