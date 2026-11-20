@@ -48,8 +48,9 @@ export function snapshotToAppData(s) {
         sector: sectors.get(p.sectorId)?.name ?? '',
         fullId: `${sectors.get(p.sectorId)?.name ?? '?'}/${p.id}`,
         type: zoning.get(p.zoningTypeId)?.name ?? '',
-        x1: p.x1, z1: p.z1, x2: p.x2, z2: p.z2,
-        width: p.sideX, height: p.sideZ,
+        // The game may store corners in any order: normalise so x1<=x2 and z1<=z2 (the map draws from x1,z1).
+        x1: Math.min(p.x1, p.x2), z1: Math.min(p.z1, p.z2), x2: Math.max(p.x1, p.x2), z2: Math.max(p.z1, p.z2),
+        width: Math.abs(p.x2 - p.x1) + 1, height: Math.abs(p.z2 - p.z1) + 1,
         area: String(p.area), value: String(p.value),
         owner: TREASURY, status: 'owned',
         district: districts.get(p.districtId)?.name ?? '',
