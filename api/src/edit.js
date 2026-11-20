@@ -196,19 +196,23 @@ async function transferPlot(env, viewer, id, body) {
         // The game only knows citizens with an identity number; an order to anyone else would be dropped there.
         if (kind === 'citizen' && !await one(env.DB, 'SELECT 1 FROM citizens WHERE number = ?1 AND identity_number IS NOT NULL', number)) throw new HttpError(400, 'owner_not_linked', { field: 'newOwner' });
     }
-    const day = intField(body.transactionDay, 'transactionDay', { min: 0, max: 1_000_000 });
+    // The transaction day is the game's current day, taken from the latest city snapshot (the sync agent keeps it fresh).
+    const dayRow = await one(env.DB, "SELECT json_extract(doc, '$.day') AS day FROM city_snapshot WHERE id = 1");
+    const day = Number.isInteger(dayRow?.day) ? dayRow.day : null;
+    if (day === null) throw new HttpError(503, 'game_day_unknown');
     const type = strField(body.transactionType, 'transactionType', 32);
     if (type !== 'Sprzedaż' && type !== 'Darowizna') throw new HttpError(400, 'invalid_field', { field: 'transactionType' });
     const valueRaw = strField(body.transactionValue, 'transactionValue', 32, { required: false });
     // A payment order is a transaction addressed to one specific person that stays unpaid (the plot keeps its
     // owner) until it is settled. The amount defaults to the plot's value.
     // Every transfer to a person is a payment order: the game issues the cheque and reports back; the portal never takes a cheque number.
-    const order = kind !== null;
+    // A donation is never paid for: no cheque, no amount, the plot changes hands at once.
+    const order = kind !== null && type !== 'Darowizna';
     if (order) {
         const last = await one(env.DB, 'SELECT paid FROM ownership_history WHERE plot_id = ?1 ORDER BY transaction_day DESC, id DESC LIMIT 1', id);
         if (last && !last.paid) throw new HttpError(409, 'payment_pending');
     }
-    const value = order && valueRaw === null ? String(plot.value) : valueRaw;
+    const value = type === 'Darowizna' ? '0' : (order && valueRaw === null ? String(plot.value) : valueRaw);
     const paid = order ? 0 : 1;
 
     const results = await env.DB.batch([

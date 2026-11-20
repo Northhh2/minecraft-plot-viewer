@@ -68,6 +68,7 @@ function describeError(err) {
         case 'already_merged': return 'Jedna z tych działek jest już połączona (jako dołączana albo główna dla innych) — nie można utworzyć łańcucha scaleń.';
         case 'payment_pending': return 'Ta działka ma już nieopłaconą transakcję. Najpierw rozlicz poprzednie zlecenie.';
         case 'owner_not_linked': return 'Ten obywatel nie ma jeszcze powiązanego numeru tożsamości z gry — zlecenie nie dotarłoby do gry.';
+        case 'game_day_unknown': return 'Portal nie zna jeszcze bieżącego dnia w grze (brak danych miasta z synchronizacji).';
         case 'forbidden': return 'Brak uprawnień do tej operacji.';
         case 'unauthorized': return 'Sesja wygasła. Zaloguj się ponownie.';
         case 'too_many_attempts': return 'Zbyt wiele prób. Spróbuj później.';
@@ -163,9 +164,16 @@ function openDialog({ title, fields, submitLabel = 'Zapisz', pick = null, previe
         }
         return out;
     };
-    function refreshPreview() { previewEl.textContent = preview ? preview(read()) : ''; }
+    const rowOf = {};
+    fields.forEach((f, i) => { rowOf[f.name] = rows[i]; });
+    function refreshPreview() {
+        const v = read();
+        previewEl.textContent = preview ? preview(v) : '';
+        for (const f of fields) if (f.showIf) rowOf[f.name].classList.toggle('hidden', !f.showIf(v));
+        if (typeof submitLabel === 'function') submit.textContent = submitLabel(v);
+    }
 
-    const submit = h('button', { type: 'submit', class: BTN_PRIMARY }, submitLabel);
+    const submit = h('button', { type: 'submit', class: BTN_PRIMARY }, typeof submitLabel === 'function' ? '' : submitLabel);
     const cancel = h('button', { type: 'button', class: BTN_SECONDARY, onclick: () => overlay.remove() }, 'Anuluj');
     const pickBtn = pick ? h('button', {
         type: 'button', class: BTN_SECONDARY + ' mt-3 w-full',
@@ -287,23 +295,22 @@ function openPlotForm(plot) {
 }
 
 function openTransferForm(plot) {
-    const lastDay = Math.max(0, ...((plot.history ?? []).map(t => parseInt(t.date, 10) || 0)));
     const owners = [{ value: '', label: 'Skarb Miasta' },
         ...appData.allOwners.filter(o => o.ref).map(o => ({ value: `${o.ref.kind}:${o.ref.number}`, label: `${o.name} (${o.type})` }))];
     openDialog({
         title: `Przekaż własność: ${plot.name}`,
-        submitLabel: 'Wyślij zlecenie płatności do gry',
+        submitLabel: v => (v.transactionType === 'Darowizna' ? 'Przekaż w darowiźnie' : 'Wyślij zlecenie płatności do gry'),
         fields: [
             { name: 'owner', label: 'Nowy właściciel', type: 'select', numeric: false, value: '', options: owners },
             { name: 'transactionType', label: 'Typ transakcji', type: 'select', numeric: false, value: 'Sprzedaż', options: [{ value: 'Sprzedaż', label: 'Sprzedaż' }, { value: 'Darowizna', label: 'Darowizna' }] },
-            { name: 'transactionValue', label: 'Wartość transakcji (domyślnie wartość działki)', type: 'text' },
-            { name: 'transactionDay', label: 'Dzień transakcji', type: 'number', required: true, value: lastDay + 1 }
+            { name: 'transactionValue', label: 'Wartość transakcji (domyślnie wartość działki)', type: 'text', showIf: v => v.transactionType !== 'Darowizna' }
         ],
+        preview: v => (v.transactionType === 'Darowizna' ? 'Darowizna: bez płatności, własność zmienia się od razu. Dzień transakcji to bieżący dzień w grze.' : 'Dzień transakcji to bieżący dzień w grze.'),
         onSubmit: async v => {
             let newOwner = null;
             if (v.owner) { const [kind, number] = v.owner.split(':'); newOwner = { kind, number: Number(number) }; }
             await request('POST', `/api/plots/${plot.dbId}/transfer`, {
-                version: plot.version, newOwner, transactionDay: v.transactionDay, transactionType: v.transactionType,
+                version: plot.version, newOwner, transactionType: v.transactionType,
                 transactionValue: v.transactionValue
             });
             reload(plot.name);
@@ -408,15 +415,12 @@ function openMergeForm(plot = null) {
 }
 
 function openPaymentOrderForm(plot) {
-    const lastDay = Math.max(0, ...((plot.history ?? []).map(t => parseInt(t.date, 10) || 0)));
     openDialog({
         title: `Zlecenie płatności: ${plot.name}`,
         submitLabel: 'Utwórz zlecenie',
         fields: [
             { name: 'owner', label: 'Płatnik / nabywca (wpisz numer lub nazwę)', type: 'custom', build: () => searchPicker({ items: ownerItems(), placeholder: 'np. Jan Kowalski' }) },
-            { name: 'transactionType', label: 'Typ transakcji', type: 'select', numeric: false, value: 'Sprzedaż', options: [{ value: 'Sprzedaż', label: 'Sprzedaż' }, { value: 'Darowizna', label: 'Darowizna' }] },
-            { name: 'transactionValue', label: 'Kwota', type: 'text', value: plot.value, hint: ' Domyślnie wartość działki.' },
-            { name: 'transactionDay', label: 'Dzień transakcji', type: 'number', required: true, value: lastDay + 1 }
+            { name: 'transactionValue', label: 'Kwota', type: 'text', value: plot.value, hint: ' Domyślnie wartość działki.' }
         ],
         preview: () => 'Zlecenie pozostaje nieopłacone — działka zmieni właściciela po jego opłaceniu.',
         onSubmit: async v => {
@@ -424,7 +428,7 @@ function openPaymentOrderForm(plot) {
             const [kind, number] = v.owner.split(':');
             await request('POST', `/api/plots/${plot.dbId}/transfer`, {
                 version: plot.version, newOwner: { kind, number: Number(number) }, paymentOrder: true,
-                transactionDay: v.transactionDay, transactionType: v.transactionType, transactionValue: v.transactionValue
+                transactionType: 'Sprzedaż', transactionValue: v.transactionValue
             });
             reload(plot.name);
         }
