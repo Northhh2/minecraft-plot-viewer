@@ -1,13 +1,14 @@
 // City information shown inside the Ratusz modal (the City Treasury's headquarters): the snapshot pushed by the sync agent
 // (GET /api/city). Public, no login.
 import { API_BASE } from './config.js';
+import { state } from './state.js';
 
-const MOTION_TYPES = ['Zmiana kodeksu', 'Debata', 'Absolutorium', 'Wniosek formalny', 'Wniosek o wybory', 'Odwołanie', 'Budżet', 'Wotum zaufania', 'Komisja', 'Zmiana dodatku', 'Projekt miejski'];
+const MOTION_TYPES = ['Zmiana kodeksu', 'Debata', 'Absolutorium', 'Wniosek formalny', 'Wniosek o wybory', 'Odwołanie', 'Budżet', 'Wotum zaufania', 'Komisja', 'Zmiana dodatku', 'Projekt miejski', 'Głosowanie nad zmienną'];
 const PROJECT_STATUS = { draft: 'Szkic', proposed: 'U Rady', approved: 'Zatwierdzony', collecting: 'Zbiórka', completed: 'Ukończony', rejected: 'Odrzucony', cancelled: 'Anulowany' };
 const CITIZEN_STATUS = ['—', 'Wniosek', 'Obywatel', 'Odrzucony'];
 const COUNCIL_ROLE = ['', 'Radny', 'Przewodniczący'];
 const CODEX_NAMES = { civil: 'Kodeks cywilny', criminal: 'Kodeks karny', construction: 'Kodeks budowlany' };
-const TABS = [['projects', 'Projekty'], ['citizens', 'Obywatele'], ['companies', 'Firmy'], ['council', 'Rada'], ['census', 'Cenzusy'], ['elections', 'Wybory'], ['positions', 'Stanowiska']];
+const TABS = [['projects', 'Projekty'], ['citizens', 'Obywatele'], ['companies', 'Firmy'], ['permits', 'Pozwolenia'], ['variables', 'Zmienne'], ['council', 'Rada'], ['census', 'Cenzusy'], ['elections', 'Wybory'], ['positions', 'Stanowiska']];
 
 // Villager professions: icon + Polish name (keys are what the game's census tallies).
 const PROFESSIONS = {
@@ -267,7 +268,107 @@ function renderPositions(doc) {
     return table(['Stanowisko', 'Piastuje'], (doc.positions ?? []).map(p => [p.name, (p.holders ?? []).map(n => names.get(n) ?? `#${n}`).join(', ') || 'wakat']));
 }
 
-const RENDER = { census: renderCensus, positions: renderPositions, citizens: renderCitizens, companies: renderCompanies, projects: renderProjects, council: renderCouncil, elections: renderElections };
+// ─── Building permits and city variables ────────────────────────────────────
+
+const PERMIT_STATUS = { pending_payment: 'Czeka na opłatę', issued: 'Wydane', inspection: 'Odbiór w toku', corrections: 'Do poprawek', completed: 'Odebrane', rejected: 'Odrzucone', cancelled: 'Anulowane' };
+const PERMIT_COLORS = { pending_payment: '#fbbf24', issued: '#38bdf8', inspection: '#a78bfa', corrections: '#f97316', completed: '#34d399', rejected: '#f87171', cancelled: '#94a3b8' };
+const BUILDING_TYPES = { residential: 'Mieszkalny', service: 'Usługowy', mixed: 'Mieszkalno-usługowy', public: 'Użyteczności publicznej', industrial: 'Przemysłowy', other: 'Inny' };
+const INVESTMENT = { finished: 'Inwestycja ukończona', minor_defects: 'Drobne usterki', unfinished: 'Inwestycja niedokończona' };
+const PAYMENT = { requested: 'do zapłaty (zlecenie w grze)', awaiting_account: 'brak powiązanego konta bankowego', pending: 'czek wystawiony', paid: 'opłacona' };
+const BUILD_STATE = { built: 'Zabudowana', inspection: 'Odbiór w toku', permit: 'Pozwolenie wydane, w budowie', unbuilt: 'Niezabudowana' };
+/** Permits that are still in progress (their plot gets a marker on the map). */
+export const OPEN_PERMIT_STATUSES = ['pending_payment', 'issued', 'inspection', 'corrections'];
+export const permitStatusName = status => PERMIT_STATUS[status] ?? status;
+export const buildStateName = key => BUILD_STATE[key] ?? key;
+
+/** A plot counts as built only once a permit for it was completed (accepted at inspection); otherwise unbuilt. */
+export function plotBuildInfo(snapshot, plotId) {
+    const permits = (snapshot?.permits ?? []).filter(p => p.plotId === Number(plotId));
+    const has = s => permits.some(p => p.status === s);
+    const key = has('completed') ? 'built' : has('inspection') ? 'inspection' : permits.some(p => OPEN_PERMIT_STATUSES.includes(p.status)) ? 'permit' : 'unbuilt';
+    return { key, label: BUILD_STATE[key], permits };
+}
+
+const STEPS = [['pending_payment', 'Opłata'], ['issued', 'Pozwolenie'], ['inspection', 'Odbiór'], ['completed', 'Odebrane']];
+const stepIndex = status => ({ pending_payment: 0, issued: 1, corrections: 1, inspection: 2, completed: 3 })[status] ?? -1;
+
+/** One permit: status tracker, its parameters, the inspection report and the history. Used by the Permits tab and the plot modal. */
+export function permitCard(p, doc, { showPlot = true } = {}) {
+    const current = stepIndex(p.status);
+    const done = p.status === 'completed';
+    const stepper = el('div', { class: 'flex gap-1 my-2' }, STEPS.map(([key, label], i) => {
+        const active = current >= 0 && (i < current || (i === current && done) || i === current);
+        const failed = current < 0;
+        return el('div', { class: 'flex-1 text-center text-xs rounded px-1 py-1', style: `background:${failed ? '#4b5563' : active ? (i === current && !done ? PERMIT_COLORS[p.status] : '#34d399') : '#374151'};color:${active && !failed ? '#111827' : '#d1d5db'}` }, label);
+    }));
+    const kv = (k, v) => [el('span', { class: 'text-gray-400' }, k), el('span', { class: 'font-medium' }, v)];
+    const project = p.projectId != null ? (doc.projects ?? []).find(x => x.id === p.projectId) : null;
+    const rows = el('div', { class: 'm-kv' },
+        kv('Odpowiedzialny:', `${p.responsible?.name ?? '—'}${p.responsible?.kind === 'company' ? ' (firma)' : ''}`),
+        kv('Typ budynku:', BUILDING_TYPES[p.buildingType] ?? p.buildingType),
+        kv('Planowane lokale:', `mieszkalne ${p.plannedResidential}, usługowe ${p.plannedService}`),
+        kv('Kondygnacje:', p.floors),
+        kv('Wydane (dzień):', day(p.issuedDay)),
+        kv('Planowane zakończenie:', p.plannedEndDay === null || p.plannedEndDay === undefined ? '—' : `dzień ${day(p.plannedEndDay)}`),
+        kv('Opłata administracyjna:', `${num(p.fee)} — ${PAYMENT[p.paymentStatus] ?? '—'}`),
+        project ? kv('Projekt miejski:', `#${project.id} ${project.name}`) : null,
+        p.retroactive ? kv('Rodzaj:', 'pozwolenie wsteczne (budynek już stał)') : null);
+    const insp = p.inspection;
+    const inspection = insp ? el('div', { class: 'mt-2 text-sm' },
+        el('div', { class: 'font-semibold' }, 'Odbiór'),
+        el('div', { class: 'text-gray-300' }, `Lokale: ${insp.singleUnit ? 'jeden lokal zajmuje cały budynek' : insp.units}${insp.investmentState ? ` · ${INVESTMENT[insp.investmentState] ?? insp.investmentState}` : ''}`),
+        insp.description ? el('div', { class: 'text-gray-300' }, insp.description) : null,
+        insp.note ? el('div', { class: 'text-yellow-300' }, insp.note) : null) : null;
+    const history = (p.history ?? []).length ? el('div', { class: 'text-xs text-gray-400 mt-2' }, (p.history).map(h => `dz. ${day(h.day)}: ${PERMIT_STATUS[h.status] ?? h.status}${h.note ? ` (${h.note})` : ''}`).join(' → ')) : null;
+    return el('div', { class: 'bg-gray-700 p-3 rounded-md mb-3' },
+        el('div', { class: 'flex justify-between items-center gap-2' },
+            el('b', {}, showPlot ? [`Pozwolenie #${p.id} · `, plotLink(p.plotId)] : `Pozwolenie #${p.id}`),
+            el('span', { class: 'text-xs px-2 py-0.5 rounded', style: `background:${PERMIT_COLORS[p.status] ?? '#6b7280'};color:#111827` }, PERMIT_STATUS[p.status] ?? p.status)),
+        stepper, rows, p.notes ? el('p', { class: 'text-sm text-gray-300 mt-2' }, p.notes) : null, inspection, history);
+}
+
+let permitScope = 'all';
+function renderPermits(doc) {
+    const me = Number(state.currentUser?.identifier ?? state.currentUser?.identityNumber ?? NaN);
+    const myCompanies = new Set((doc.companies ?? []).filter(c => (c.members ?? []).some(m => m.identityNumber === me)).map(c => c.number));
+    const mine = p => p.responsible && ((p.responsible.kind === 'citizen' && p.responsible.number === me) || (p.responsible.kind === 'company' && myCompanies.has(p.responsible.number)));
+    const all = [...(doc.permits ?? [])].sort((a, b) => b.id - a.id);
+    const list = permitScope === 'mine' ? all.filter(mine) : all;
+    const counts = Object.keys(PERMIT_STATUS).map(s => [s, all.filter(p => p.status === s).length]).filter(([, n]) => n > 0);
+
+    const toggle = el('div', { class: 'flex gap-2 mb-3 items-center' },
+        ...[['all', 'Wszystkie'], ['mine', 'Moje i mojej firmy']].map(([id, label]) => {
+            const b = el('button', { class: `px-3 py-1 rounded-md text-sm ${permitScope === id ? 'bg-purple-600 font-semibold' : 'bg-gray-700 hover:bg-gray-600'}` }, label);
+            b.addEventListener('click', () => { permitScope = id; rerender?.('permits'); });
+            return b;
+        }),
+        el('span', { class: 'text-xs text-gray-400' }, state.currentUser ? '' : 'Zaloguj się, aby zobaczyć tylko swoje pozwolenia.'));
+    const summary = el('p', { class: 'text-xs text-gray-400 mb-3' }, counts.map(([s, n]) => `${PERMIT_STATUS[s]}: ${n}`).join(' · ') || 'Brak pozwoleń.');
+    return [
+        el('p', { class: 'text-sm text-gray-300 mb-2' }, 'Budowa na każdej działce wymaga pozwolenia. Działka bez pozwolenia jest niezabudowana — zabudowaną staje się po opłaceniu pozwolenia i odbiorze budynku.'),
+        toggle, summary, list.length ? list.map(p => permitCard(p, doc)) : el('p', { class: 'text-gray-400 text-sm' }, 'Brak pozwoleń do wyświetlenia.')
+    ];
+}
+
+function renderVariables(doc) {
+    const v = doc.variables ?? { definitions: [], scheduled: [], history: [] };
+    const label = new Map(v.definitions.map(d => [d.key, d.label]));
+    const scheduled = new Map(v.scheduled.map(s => [s.key, s]));
+    const defs = v.definitions.map(d => {
+        const s = scheduled.get(d.key);
+        return [d.label, el('b', {}, num(d.value)), num(d.default), `${num(d.min)} – ${num(d.max)}`, s ? `${num(s.value)} od dnia ${day(s.effectiveDay)} (${s.source})` : '—'];
+    });
+    const history = [...v.history].reverse().slice(0, 40).map(h => [day(h.day), label.get(h.key) ?? h.key, `${num(h.from)} → ${num(h.to)}`, h.source]);
+    return [
+        el('p', { class: 'text-sm text-gray-300 mb-3' }, 'Zmienne miasta zmienia Rada w głosowaniu parametryzowanym: radny wybiera zmienną i proponuje wartość, inni zgłaszają inne wartości, a wygrywa ta z największą liczbą głosów za (remis — dogrywka). Nowa wartość obowiązuje od następnego dnia.'),
+        section('Rejestr zmiennych', table(['Zmienna', 'Wartość', 'Domyślna', 'Zakres', 'Zaplanowana'], defs)),
+        section('Historia zmian', table(['Dzień', 'Zmienna', 'Zmiana', 'Źródło'], history))
+    ];
+}
+
+let rerender = null;
+
+const RENDER = { permits: renderPermits, variables: renderVariables, census: renderCensus, positions: renderPositions, citizens: renderCitizens, companies: renderCompanies, projects: renderProjects, council: renderCouncil, elections: renderElections };
 
 let cache = null;
 
@@ -299,6 +400,7 @@ export async function mountCity(root) {
         root.replaceChildren(
             el('p', { class: 'text-xs text-yellow-200 opacity-80 mb-3' }, `Stan gry: dzień ${day(data.snapshot.day)} · dane odebrane ${data.receivedAt} UTC`), tabs, el('div', {}, content));
     };
+    rerender = show;
     show('projects');
     return data.snapshot;
 }

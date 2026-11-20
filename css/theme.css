@@ -346,3 +346,5 @@ button.control-button:hover { transform: translateY(-3px) scale(1.1); box-shadow
 /* Touch screens have no hover: the plot tooltip would only linger over the modal */
 @media (hover: none) { #tooltip { display: none !important; } }
 .plot-rect.project-plot { stroke: #22d3ee !important; stroke-width: 2.5px; stroke-dasharray: 5 3; filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.8)); }
+
+.plot-rect.permit-plot { stroke: #f97316 !important; stroke-width: 2.5px; stroke-dasharray: 2 3; filter: drop-shadow(0 0 5px rgba(249, 115, 22, 0.85)); }

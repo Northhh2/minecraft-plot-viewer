@@ -3,9 +3,9 @@ import { getColorForType, escapeHtml } from './utils.js';
 
 // Everything that reaches innerHTML below that did not originate in this file goes through esc().
 const esc = escapeHtml;
-import { setViewBox, highlightPlots, clearHighlight, markRatusz, markProjectPlots } from './map.js';
+import { setViewBox, highlightPlots, clearHighlight, markRatusz, markProjectPlots, markPermitPlots } from './map.js';
 import { API_BASE } from './config.js';
-import { mountCity, loadCity, mountVillager, mountBiome, professionName, biomeName, setProfessionOpener, setBiomeOpener, setPlotOpener, projectStatusName, ACTIVE_PROJECT_STATUSES } from './city.js';
+import { mountCity, loadCity, mountVillager, mountBiome, professionName, biomeName, setProfessionOpener, setBiomeOpener, setPlotOpener, projectStatusName, ACTIVE_PROJECT_STATUSES, plotBuildInfo, permitCard, OPEN_PERMIT_STATUSES } from './city.js';
 import { apiLogin, apiLogout, apiCurrentUser, authHeaders, getToken } from './auth.js';
 import { initializeEditor, refreshEditorUI, editorButtonsHTML, wireEditorButtons } from './editor.js';
 
@@ -76,6 +76,7 @@ function initializeRatuszButton() {
     loadCity().then(c => {
         markRatusz(c.snapshot?.ratuszPlotId);
         markProjectPlots((c.snapshot?.projects ?? []).filter(p => p.plotId != null && ACTIVE_PROJECT_STATUSES.includes(p.status)).map(p => p.plotId));
+        markPermitPlots((c.snapshot?.permits ?? []).filter(p => OPEN_PERMIT_STATUSES.includes(p.status)).map(p => p.plotId));
     }).catch(() => {});
 }
 
@@ -291,6 +292,7 @@ const isEditorUser = () => state.currentUser && (state.currentUser.role === 'cle
 
 function renderPlotContent(plot) {
     setTimeout(() => loadPlotProjects(plot), 0);
+    setTimeout(() => loadPlotPermits(plot), 0);
     const { allLocals, lotteryHistory } = appData;
     const status = getPlotStatusInfo(plot);
     const ownerInfo = plot.owner || 'Skarb Miasta';
@@ -388,6 +390,7 @@ function renderPlotContent(plot) {
                 <span class="text-gray-400">Rozmiar:</span><span class="font-medium">${esc(plot.width)}x${esc(plot.height)} m</span>
             </div></div>
         ${historyHTML}
+        <div id="plot-permits" class="m-section"></div>
         <div id="plot-projects"></div>
         ${localsHTML}
         ${editorButtonsHTML('plot', plot)}`;
@@ -498,6 +501,25 @@ async function loadCompanyHq(ownerName) {
             box.append(open);
         }
     } catch { /* optional info */ }
+}
+
+/** Fills the "Zabudowa" section of a plot modal: built / unbuilt state and the permits (status, parameters) from the city snapshot. */
+async function loadPlotPermits(plot) {
+    await Promise.resolve();
+    const box = document.getElementById('plot-permits');
+    if (!box) return;
+    try {
+        const city = await loadCity();
+        if (!city.snapshot) { box.remove(); return; }
+        const info = plotBuildInfo(city.snapshot, plot.id);
+        const color = { built: '#34d399', inspection: '#a78bfa', permit: '#38bdf8', unbuilt: '#9ca3af' }[info.key];
+        const head = document.createElement('div');
+        head.innerHTML = `<h4 class="m-title">Zabudowa</h4><div class="mb-2"><span class="text-xs px-2 py-0.5 rounded" style="background:${color};color:#111827">${esc(info.label)}</span></div>`;
+        const list = document.createElement('div');
+        [...info.permits].sort((a, b) => b.id - a.id).forEach(p => list.append(permitCard(p, city.snapshot, { showPlot: false })));
+        if (info.permits.length === 0) list.innerHTML = '<p class="text-xs text-gray-400">Brak pozwolenia na budowę — działka jest uznawana za niezabudowaną.</p>';
+        box.replaceChildren(head, list);
+    } catch { box.remove(); }
 }
 
 /** Fills the "Projekty miejskie" section of a plot modal from the city snapshot. */

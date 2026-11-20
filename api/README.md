@@ -81,3 +81,11 @@ delivers the `metro-updates` document (`GET /api/sync/metro-export`); in the gam
 compiled and started again from the controller. Line names stay as they are (the voice announcements only know M1-M12).
 
 Rows edited in the portal are marked (`portal_edited`) until the game's next export replaces them.
+
+## Building permits and city variables
+Both arrive in the city snapshot (`permits`, `variables`; no schema change, served by `GET /api/city`). The Ratusz modal has
+*Pozwolenia* (status tracker per permit, "mine" filter) and *Zmienne* (registry, scheduled values, history); a plot modal has a
+*Zabudowa* section. A plot counts as built only when one of its permits is `completed`; plots with a permit in progress get an
+orange dashed outline on the map. The allowance's variables (`allowance.*`) and Council motions about them are stripped from the
+public response, like the rest of the allowance config.
+

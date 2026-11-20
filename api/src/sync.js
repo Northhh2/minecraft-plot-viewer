@@ -95,6 +95,20 @@ export async function readCity(db) {
     if (!row) return { snapshot: null };
     const { allowance, ...doc } = row.doc;
     doc.citizens = (doc.citizens ?? []).map(({ allowance: _a, ...c }) => c);
+    // City variables are public, except the allowance parameters (like the rest of the allowance config).
+    if (doc.variables) {
+        const open = d => d.group !== 'allowance';
+        const keys = new Set((doc.variables.definitions ?? []).filter(open).map(d => d.key));
+        doc.variables = {
+            definitions: (doc.variables.definitions ?? []).filter(open),
+            scheduled: (doc.variables.scheduled ?? []).filter(s => keys.has(s.key)),
+            history: (doc.variables.history ?? []).filter(h => keys.has(h.key))
+        };
+    }
+    if (doc.council?.motions) {
+        doc.council.motions = doc.council.motions.map(m => m.variableVote?.key?.startsWith('allowance.')
+            ? { ...m, variableVote: null, title: 'Głosowanie nad parametrem dodatku', description: '' } : m);
+    }
     return { snapshot: doc, receivedAt: row.receivedAt };
 }
 

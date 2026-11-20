@@ -390,6 +390,12 @@ export function markProjectPlots(plotIds) {
     for (const id of plotIds) dom.svg.querySelector(`g[data-plot-id='${id}'] .plot-rect`)?.classList.add('project-plot');
 }
 
+/** Dashed orange outline for plots with a building permit still in progress (paid or not, before the inspection is accepted). */
+export function markPermitPlots(plotIds) {
+    dom.svg.querySelectorAll('.plot-rect.permit-plot').forEach(r => r.classList.remove('permit-plot'));
+    for (const id of plotIds) dom.svg.querySelector(`g[data-plot-id='${id}'] .plot-rect`)?.classList.add('permit-plot');
+}
+
 /** Gold outline for the Ratusz plot (the Treasury's headquarters). */
 export function markRatusz(plotId) {
     dom.svg.querySelectorAll('.plot-rect.ratusz-plot').forEach(r => r.classList.remove('ratusz-plot'));
