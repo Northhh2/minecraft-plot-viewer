@@ -178,7 +178,7 @@ for (const { tag, path: apiPath, key, changed } of PUSHES) {
 
 /** Every complete chunked group of one tag in the log: [{ id, doc }] in log order. Lines: `[tag] <id> <i>/<n> <chunk>`. */
 function completeGroups(lines, tag) {
-    const LINE = new RegExp(`\[${tag}\] (\S+) (\d+)/(\d+) ?(.*?)\r?$`);
+    const LINE = new RegExp(String.raw`\[${tag}\] (\S+) (\d+)/(\d+) ?(.*?)\r?$`);
     const groups = new Map();
     lines.forEach((line, no) => {
         const m = LINE.exec(line);
