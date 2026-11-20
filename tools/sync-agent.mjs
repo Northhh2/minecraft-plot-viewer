@@ -233,7 +233,7 @@ async function runLandDelta(lines) {
     if (!id) return;
     const last = state.outbox;
     if (last?.id === id && Date.now() - last.at < 4 * 60_000) return;
-    const json = JSON.stringify(delta).replace(/ /g, '\u0020');
+    const json = JSON.stringify(delta).replace(/ /g, '\\u0020');
     const total = Math.max(1, Math.ceil(json.length / chunkSize));
     log(`land delta ${id} (portal -> game): ${total} chunk(s)${dry ? ' [dry]' : ''}`);
     if (dry) return;
