@@ -11,12 +11,26 @@ const TABS = [['projects', 'Projekty'], ['citizens', 'Obywatele'], ['companies',
 
 // Villager professions: icon + Polish name (keys are what the game's census tallies).
 const PROFESSIONS = {
-    farmer: ['🌾', 'Rolnik'], fisherman: ['🎣', 'Rybak'], fletcher: ['🏹', 'Łucznik'], shepherd: ['🐑', 'Pasterz'], librarian: ['📚', 'Bibliotekarz'],
-    cartographer: ['🗺️', 'Kartograf'], cleric: ['⚗️', 'Kleryk'], armorer: ['🛡️', 'Płatnerz'], weaponsmith: ['⚔️', 'Kowal broni'], toolsmith: ['🔧', 'Kowal narzędzi'],
-    butcher: ['🥩', 'Rzeźnik'], leatherworker: ['🧥', 'Garbarz'], mason: ['🧱', 'Kamieniarz'], nitwit: ['🤪', 'Safanduła'], none: ['🚫', 'Bezrobotni'], children: ['🧒', 'Dzieci']
+    farmer: 'Rolnik',
+    fisherman: 'Rybak',
+    fletcher: 'Łucznik',
+    shepherd: 'Pasterz',
+    librarian: 'Bibliotekarz',
+    cartographer: 'Kartograf',
+    cleric: 'Kleryk',
+    armorer: 'Płatnerz',
+    weaponsmith: 'Kowal broni',
+    toolsmith: 'Kowal narzędzi',
+    butcher: 'Rzeźnik',
+    leatherworker: 'Garbarz',
+    mason: 'Kamieniarz',
+    nitwit: 'Safanduła',
+    none: 'Bezrobotni',
+    children: 'Dzieci'
 };
 const PALETTE = ['#a78bfa', '#38bdf8', '#f472b6', '#fbbf24', '#34d399', '#fb7185', '#60a5fa', '#c084fc', '#f97316', '#2dd4bf', '#e879f9', '#facc15', '#4ade80', '#94a3b8', '#f87171', '#22d3ee'];
-const profession = key => PROFESSIONS[key] ?? ['👤', key];
+/** [icon element, Polish name]; icons are the wiki's villager renders in img/villagers/<key>.png. */
+const profession = key => [el('img', { class: 'm-villager', src: `img/villagers/${PROFESSIONS[key] ? key : 'none'}.png`, alt: '', loading: 'lazy' }), PROFESSIONS[key] ?? key];
 
 const LEGAL_FORMS = { SOLE_PROPRIETORSHIP: 'Działalność jednoosobowa', PARTNERSHIP: 'Spółka osobowa', FOUNDATION: 'Fundacja', RELIGIOUS_INSTITUTION: 'Instytucja religijna', PUBLIC_INSTITUTION: 'Instytucja publiczna', OTHER: 'Inne', CITY_TREASURY: 'Skarb Miasta' };
 
@@ -120,7 +134,7 @@ function renderCensus(doc) {
             labels,
             datasets: [
                 { label: 'Razem', data: censuses.map(total), borderColor: '#ffffff', borderDash: [6, 4], borderWidth: 2, pointRadius: 3, tension: 0.35 },
-                ...keys.map((k, i) => ({ label: `${profession(k)[0]} ${profession(k)[1]}`, data: censuses.map(c => c.tally?.[k] ?? 0), borderColor: PALETTE[i % PALETTE.length], backgroundColor: PALETTE[i % PALETTE.length], borderWidth: 2, pointRadius: 2, tension: 0.35, hidden: i > 5 }))
+                ...keys.map((k, i) => ({ label: profession(k)[1], data: censuses.map(c => c.tally?.[k] ?? 0), borderColor: PALETTE[i % PALETTE.length], backgroundColor: PALETTE[i % PALETTE.length], borderWidth: 2, pointRadius: 2, tension: 0.35, hidden: i > 5 }))
             ]
         },
         options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, usePointStyle: true } } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }

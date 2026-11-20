@@ -298,6 +298,8 @@ button.control-button:hover { transform: translateY(-3px) scale(1.1); box-shadow
 .m-card-head b { font-size: 1rem; }
 .m-card-head span { font-size: 0.75rem; color: rgba(255, 255, 255, 0.6); }
 .m-line { display: grid; grid-template-columns: 1.8rem minmax(6rem, 11rem) 1fr 2.2rem 2.6rem; align-items: center; gap: 0.6rem; padding: 0.32rem 0; font-size: 0.875rem; }
+
+.m-villager { height: 2.1rem; width: auto; max-width: 100%; image-rendering: pixelated; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)); }
 .m-icon { font-size: 1.25rem; text-align: center; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5)); }
 .m-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .m-count { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
