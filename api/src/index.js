@@ -2,7 +2,7 @@ import { SCHEMA_VERSION, buildSnapshot } from './snapshot.js';
 import { authenticate, login, logout, syncPins } from './auth.js';
 import { handleEdit } from './edit.js';
 import { handleMetro, readMetro } from './metro.js';
-import { syncLand, syncCity, syncMetro, syncExport, syncMetroExport, readCity } from './sync.js';
+import { syncLand, syncCity, syncMetro, syncExport, syncMetroExport, readCity, readMyAllowance } from './sync.js';
 
 // The front end lives on another origin and authenticates with a bearer token (no cookies),
 // so a wildcard origin is fine: browsers never attach credentials automatically.
@@ -78,6 +78,12 @@ export default {
 
                 case 'GET /api/sync/metro-export':
                     return reply(await syncMetroExport(env, request));
+
+                case 'GET /api/me/allowance': {
+                    const viewer = await authenticate(env, request);
+                    if (!viewer) return json({ error: 'unauthorized' }, 401, { 'Cache-Control': 'no-store' });
+                    return json(await readMyAllowance(env.DB, viewer), 200, { 'Cache-Control': 'private, no-store' });
+                }
 
                 case 'GET /api/city':
                     return json(await readCity(env.DB), 200, { 'Cache-Control': 'public, max-age=30' });

@@ -84,8 +84,25 @@ export async function syncExport(env, request) {
     return { status: 200, body: { doc: result.doc, warnings: result.warnings, hash: await hashDoc(result.doc) } };
 }
 
-export async function readCity(db) {
+/** The stored snapshot. The public view never contains allowance data (config, history or per-citizen amounts). */
+async function readCitySnapshot(db) {
     const row = await db.prepare('SELECT received_at, doc FROM city_snapshot WHERE id = 1').first();
+    return row ? { doc: JSON.parse(row.doc), receivedAt: row.received_at } : null;
+}
+
+export async function readCity(db) {
+    const row = await readCitySnapshot(db);
     if (!row) return { snapshot: null };
-    return { snapshot: JSON.parse(row.doc), receivedAt: row.received_at };
+    const { allowance, ...doc } = row.doc;
+    doc.citizens = (doc.citizens ?? []).map(({ allowance: _a, ...c }) => c);
+    return { snapshot: doc, receivedAt: row.receivedAt };
+}
+
+/** What the signed-in citizen really earns per day per source (never the parameter values). */
+export async function readMyAllowance(db, viewer) {
+    const row = await readCitySnapshot(db);
+    const c = row?.doc.citizens?.find(x => x.identityNumber === viewer.identityNumber);
+    if (!c?.allowance) return { allowance: null };
+    const { earnings, daily, balance, paidTotal, functions } = c.allowance;
+    return { allowance: { earnings, daily, balance, paidTotal, functions }, receivedAt: row.receivedAt };
 }

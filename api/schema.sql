@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS meta (
 CREATE TABLE IF NOT EXISTS zoning_types (
     id                   INTEGER PRIMARY KEY,
     name                 TEXT NOT NULL UNIQUE,
-    price_per_100_blocks REAL NOT NULL DEFAULT 0
+    price_per_100_blocks REAL NOT NULL DEFAULT 0,
+    counts_for_allowance INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS districts (

@@ -91,7 +91,7 @@ export async function buildExport(db, { allowUnlinked = false } = {}) {
 
     const doc = {
         schemaVersion: EXCHANGE_VERSION, source: 'portal', exportedAt: new Date().toISOString(),
-        zoningTypes: zoning.map(z => ({ id: z.id, name: z.name, pricePer100Blocks: z.price_per_100_blocks })),
+        zoningTypes: zoning.map(z => ({ id: z.id, name: z.name, pricePer100Blocks: z.price_per_100_blocks, countsForAllowance: z.counts_for_allowance === 1 })),
         districts: districts.map(d => ({ id: d.id, name: d.name })),
         sectors: sectors.map(s => ({ id: s.id, name: s.name, x1: s.x1, z1: s.z1, x2: s.x2, z2: s.z2 })),
         streets: streets.map(s => ({ id: s.id, name: s.name, x1: s.x1, z1: s.z1, x2: s.x2, z2: s.z2 })),
@@ -202,7 +202,7 @@ export async function importDoc(env, viewer, doc, { dryRun }) {
 
     if (present.length) {
         for (const t of ['merges', 'lottery', 'ownership_history', 'units', 'plots', 'streets', 'sectors', 'districts', 'zoning_types']) add(`DELETE FROM ${t}`);
-        for (const z of d.zoningTypes) add('INSERT INTO zoning_types (id, name, price_per_100_blocks) VALUES (?1, ?2, ?3)', z.id, z.name, z.pricePer100Blocks);
+        for (const z of d.zoningTypes) add('INSERT INTO zoning_types (id, name, price_per_100_blocks, counts_for_allowance) VALUES (?1, ?2, ?3, ?4)', z.id, z.name, z.pricePer100Blocks, z.countsForAllowance ? 1 : 0);
         for (const x of d.districts) add('INSERT INTO districts (id, name) VALUES (?1, ?2)', x.id, x.name);
         for (const s of d.sectors) add('INSERT INTO sectors (id, name, x1, z1, x2, z2) VALUES (?1, ?2, ?3, ?4, ?5, ?6)', s.id, s.name, s.x1, s.z1, s.x2, s.z2);
         for (const s of d.streets) add('INSERT INTO streets (id, name, x1, z1, x2, z2) VALUES (?1, ?2, ?3, ?4, ?5, ?6)', s.id, s.name, s.x1, s.z1, s.x2, s.z2);

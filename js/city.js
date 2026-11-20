@@ -6,7 +6,7 @@ const PROJECT_STATUS = { draft: 'Szkic', proposed: 'U Rady', approved: 'Zatwierd
 const CITIZEN_STATUS = ['—', 'Wniosek', 'Obywatel', 'Odrzucony'];
 const COUNCIL_ROLE = ['', 'Radny', 'Przewodniczący'];
 const CODEX_NAMES = { civil: 'Kodeks cywilny', criminal: 'Kodeks karny', construction: 'Kodeks budowlany' };
-const TABS = [['allowance', 'Dodatek'], ['citizens', 'Obywatele'], ['companies', 'Firmy'], ['projects', 'Projekty'], ['council', 'Rada'], ['elections', 'Wybory']];
+const TABS = [['citizens', 'Obywatele'], ['companies', 'Firmy'], ['projects', 'Projekty'], ['council', 'Rada'], ['elections', 'Wybory']];
 
 const day = d => (d === null || d === undefined ? '—' : d + 1); // game days are 0-indexed
 const num = n => Number(n ?? 0).toLocaleString('pl-PL');
@@ -27,29 +27,12 @@ function table(headers, rows) {
 
 const section = (title, ...kids) => el('div', { class: 'mb-6' }, el('h3', { class: 'text-lg font-semibold mb-2' }, title), kids);
 
-function renderAllowance(doc) {
-    const c = doc.allowance?.config ?? {};
-    const values = [
-        ['Stawka za działki (‰ wartości dziennie)', c.plotRatePermille], ['Waluta za punkt donacji (dziennie)', c.donationRate],
-        ['Minimalny czas online (ticki)', c.minOnlineTicks], ['Staż do maksymalnego mnożnika (dni)', c.tenureCapDays],
-        ['Maksymalny mnożnik (%)', c.tenureMaxMultiplierPercent], ['Dodatek przewodniczącego', c.chairmanPay],
-        ['Dodatek radnego', c.radnyPay], ['Limit zgromadzonej kwoty', c.balanceCap], ['Konto Skarbu Miasta', c.treasuryAccount ?? '(konto systemowe banku)']
-    ];
-    const history = [...(doc.allowance?.history ?? [])].reverse();
-    return [
-        section('Obowiązujące wartości', table(['Parametr', 'Wartość'], values.map(([k, v]) => [k, v === undefined ? '—' : typeof v === 'number' ? num(v) : v]))),
-        section('Funkcje miejskie', table(['Funkcja', 'Dodatek'], (c.functions ?? []).map(f => [f.name, num(f.pay)]))),
-        section('Historia zmian (uchwały Rady)', table(['Dzień', 'Źródło', 'Zmiany'], history.map(h => [day(h.day), h.source === 'direct' ? 'bezpośrednio' : h.source, (h.changes ?? []).map(c => `${c.label}: ${c.from} → ${c.to}`).join('; ')])))
-    ];
-}
-
 function renderCitizens(doc) {
     const rows = [...doc.citizens].sort((a, b) => a.identityNumber - b.identityNumber).map(c => [
         c.identityNumber, c.name, CITIZEN_STATUS[c.status] ?? c.status, day(c.since), c.profession ?? '—',
-        COUNCIL_ROLE[c.councilRole] || '—', c.allowance ? num(c.allowance.daily) : '—', c.allowance ? num(c.allowance.balance) : '—',
-        c.allowance ? c.allowance.donationPoints : '—', (c.allowance?.functions ?? []).join(', ') || '—'
+        COUNCIL_ROLE[c.councilRole] || '—'
     ]);
-    return table(['#', 'Imię', 'Status', 'Od dnia', 'Zawód', 'Rada', 'Dodatek/dzień', 'Do odebrania', 'Pkt donacji', 'Funkcje'], rows);
+    return table(['#', 'Imię', 'Status', 'Od dnia', 'Zawód', 'Rada'], rows);
 }
 
 function renderCompanies(doc) {
@@ -103,7 +86,7 @@ function renderElections(doc) {
     return table(['Wybory', 'Rodzaj', 'Dzień', 'Wynik', 'Głosy'], rows);
 }
 
-const RENDER = { allowance: renderAllowance, citizens: renderCitizens, companies: renderCompanies, projects: renderProjects, council: renderCouncil, elections: renderElections };
+const RENDER = { citizens: renderCitizens, companies: renderCompanies, projects: renderProjects, council: renderCouncil, elections: renderElections };
 
 let overlay = null;
 
@@ -124,7 +107,7 @@ async function open() {
         return;
     }
     if (!data.snapshot) { overlay.replaceChildren(header(null), el('p', { class: 'p-6 text-gray-300' }, 'Brak danych: serwer jeszcze nie wysłał eksportu miasta.')); return; }
-    show(data, 'allowance');
+    show(data, 'citizens');
 }
 
 function header(data) {

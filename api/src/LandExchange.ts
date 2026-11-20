@@ -17,7 +17,7 @@ export interface OwnerRef { kind: OwnerKind; number: number }
 export type TransactionType = "donation" | "sale";
 
 export interface XZRect { x1: number; z1: number; x2: number; z2: number }
-export interface ZoningTypeRec { id: number; name: string; pricePer100Blocks: number }
+export interface ZoningTypeRec { id: number; name: string; pricePer100Blocks: number; countsForAllowance: boolean }
 export interface NamedRec { id: number; name: string }
 export interface SectorRec extends XZRect { id: number; name: string }
 export interface StreetRec extends XZRect { id: number; name: string }
@@ -214,7 +214,8 @@ export function parseImport(raw: unknown, ctx: ImportContext): ImportReport {
     if (zoning) {
         data.zoningTypes = uniqueIds(zoning.map((r, i) => ({
             id: id(r, `Typ strefy [${i}]`), name: String(r.name ?? "").trim(),
-            pricePer100Blocks: nonNegNumber(r.pricePer100Blocks, `Typ strefy [${i}]`, "pricePer100Blocks")
+            pricePer100Blocks: nonNegNumber(r.pricePer100Blocks, `Typ strefy [${i}]`, "pricePer100Blocks"),
+            countsForAllowance: r.countsForAllowance === true
         })), "Typy stref");
     }
     const districts = list("districts");

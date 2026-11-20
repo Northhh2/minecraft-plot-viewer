@@ -67,7 +67,7 @@ export async function buildSnapshot(db, viewer = null) {
 
     return {
         schemaVersion: SCHEMA_VERSION,
-        zoningTypes: zoning.map(z => ({ id: z.id, name: z.name, pricePer100Blocks: z.price_per_100_blocks })),
+        zoningTypes: zoning.map(z => ({ id: z.id, name: z.name, pricePer100Blocks: z.price_per_100_blocks, countsForAllowance: z.counts_for_allowance === 1 })),
         districts: districts.map(d => ({ id: d.id, name: d.name })),
         sectors: sectors.map(s => ({ id: s.id, name: s.name, x1: s.x1, z1: s.z1, x2: s.x2, z2: s.z2 })),
         streets: streets.map(s => ({ id: s.id, name: s.name, x1: s.x1, z1: s.z1, x2: s.x2, z2: s.z2 })),

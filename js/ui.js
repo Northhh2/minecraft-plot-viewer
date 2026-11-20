@@ -5,7 +5,7 @@ import { getColorForType, escapeHtml } from './utils.js';
 const esc = escapeHtml;
 import { setViewBox, highlightPlots, clearHighlight } from './map.js';
 import { API_BASE } from './config.js';
-import { apiLogin, apiLogout, apiCurrentUser } from './auth.js';
+import { apiLogin, apiLogout, apiCurrentUser, authHeaders, getToken } from './auth.js';
 import { initializeEditor, refreshEditorUI, editorButtonsHTML, wireEditorButtons } from './editor.js';
 
 let appData;
@@ -396,7 +396,29 @@ function renderLocalContent(local) {
             </div></div>`;
 }
 
+const ALLOWANCE_SOURCES = [['plots', 'Działki'], ['lottery', 'Działki z loterii'], ['donations', 'Donacje na projekty miejskie'], ['roles', 'Funkcja w Radzie'], ['functions', 'Stanowiska miejskie']];
+
+/** Fills the "Dodatek" box of the signed-in user's modal: what each source really earns per day. */
+async function loadMyAllowance() {
+    await Promise.resolve();
+    const box = document.getElementById('modal-allowance');
+    if (!box) return;
+    try {
+        const res = await fetch(`${API_BASE}/api/me/allowance`, { headers: authHeaders(getToken()) });
+        const data = res.ok ? await res.json() : null;
+        const a = data?.allowance;
+        if (!a) { box.innerHTML = ''; return; }
+        const rows = ALLOWANCE_SOURCES.filter(([k]) => (a.earnings?.[k] ?? 0) > 0)
+            .map(([k, label]) => `<div class="flex justify-between"><span class="text-gray-400">${esc(label)}</span><span>+${esc(a.earnings[k].toFixed(2))}</span></div>`).join('');
+        box.innerHTML = `<h4 class="font-semibold text-md mb-2">Dodatek dzienny</h4>
+            <div class="space-y-1 text-sm">${rows || '<p class="text-gray-500">Obecnie nic nie zarabiasz.</p>'}
+            <div class="flex justify-between border-t border-gray-700 pt-1 font-semibold"><span>Razem dziennie</span><span>${esc(a.daily)}</span></div>
+            <div class="flex justify-between"><span class="text-gray-400">Do odebrania</span><span>${esc(a.balance)}</span></div></div>`;
+    } catch { box.innerHTML = ''; }
+}
+
 function renderOwnerContent(ownerName) {
+    if (state.currentUser && state.currentUser.name === ownerName) setTimeout(loadMyAllowance, 0);
     const { allOwners, allPlots, allLocals, lotteryHistory } = appData;
     const owner = allOwners.find(o => o.name === ownerName);
     const ownedPlots = allPlots.filter(p => p.owner === ownerName);
@@ -435,6 +457,7 @@ function renderOwnerContent(ownerName) {
         <div class="border-t border-gray-700 pt-3"><h4 class="font-semibold text-md mb-1">Wynajmowane Lokale (${rentedLocals.length})</h4>
             ${rentedLocals.length > 0 ? `<div class="space-y-2 mt-2">${rentedLocalsHTML}</div>` : '<p class="text-gray-500 text-sm">Brak</p>'}</div>
         ${wonPlotsHTML}
+        ${(state.currentUser && state.currentUser.name === ownerName) ? '<div id="modal-allowance" class="border-t border-gray-700 pt-3"></div>' : ''}
         ${logoutButtonHTML}
         </div>`;
 }
