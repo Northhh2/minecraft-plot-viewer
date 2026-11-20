@@ -3,9 +3,9 @@ import { getColorForType, escapeHtml } from './utils.js';
 
 // Everything that reaches innerHTML below that did not originate in this file goes through esc().
 const esc = escapeHtml;
-import { setViewBox, highlightPlots, clearHighlight, markRatusz } from './map.js';
+import { setViewBox, highlightPlots, clearHighlight, markRatusz, markProjectPlots } from './map.js';
 import { API_BASE } from './config.js';
-import { mountCity, loadCity, mountVillager, mountBiome, professionName, biomeName, setProfessionOpener, setBiomeOpener } from './city.js';
+import { mountCity, loadCity, mountVillager, mountBiome, professionName, biomeName, setProfessionOpener, setBiomeOpener, setPlotOpener, projectStatusName, ACTIVE_PROJECT_STATUSES } from './city.js';
 import { apiLogin, apiLogout, apiCurrentUser, authHeaders, getToken } from './auth.js';
 import { initializeEditor, refreshEditorUI, editorButtonsHTML, wireEditorButtons } from './editor.js';
 
@@ -73,7 +73,10 @@ function initializeRatuszButton() {
     btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="9" width="7" height="12"></rect><rect x="14" y="3" width="7" height="18"></rect><line x1="6" y1="13" x2="7" y2="13"></line><line x1="17" y1="8" x2="18" y2="8"></line></svg>';
     btn.addEventListener('click', openRatusz);
     controls.append(btn);
-    loadCity().then(c => markRatusz(c.snapshot?.ratuszPlotId)).catch(() => {});
+    loadCity().then(c => {
+        markRatusz(c.snapshot?.ratuszPlotId);
+        markProjectPlots((c.snapshot?.projects ?? []).filter(p => p.plotId != null && ACTIVE_PROJECT_STATUSES.includes(p.status)).map(p => p.plotId));
+    }).catch(() => {});
 }
 
 export function openNewModal(stateData) {
@@ -287,6 +290,7 @@ function renderMetroStationContent(station) {
 const isEditorUser = () => state.currentUser && (state.currentUser.role === 'clerk' || state.currentUser.role === 'admin');
 
 function renderPlotContent(plot) {
+    setTimeout(() => loadPlotProjects(plot), 0);
     const { allLocals, lotteryHistory } = appData;
     const status = getPlotStatusInfo(plot);
     const ownerInfo = plot.owner || 'Skarb Miasta';
@@ -384,6 +388,7 @@ function renderPlotContent(plot) {
                 <span class="text-gray-400">Rozmiar:</span><span class="font-medium">${esc(plot.width)}x${esc(plot.height)} m</span>
             </div></div>
         ${historyHTML}
+        <div id="plot-projects"></div>
         ${localsHTML}
         ${editorButtonsHTML('plot', plot)}`;
 }
@@ -447,6 +452,7 @@ async function loadMyAllowance() {
 }
 
 /** Opens the Ratusz modal from anywhere (map button, Treasury owner card). */
+setPlotOpener(id => { const plot = appData.allPlots.find(p => p.id === String(id)); if (plot) openNewModal({ type: 'plot', data: plot }); }, id => appData.allPlots.find(p => p.id === String(id))?.name ?? `#${id}`);
 setBiomeOpener(key => openNewModal({ type: 'biome', data: key }));
 setProfessionOpener(key => openNewModal({ type: 'villager', data: key }));
 
@@ -491,6 +497,26 @@ async function loadCompanyHq(ownerName) {
             open.addEventListener('click', openRatusz);
             box.append(open);
         }
+    } catch { /* optional info */ }
+}
+
+/** Fills the "Projekty miejskie" section of a plot modal from the city snapshot. */
+async function loadPlotProjects(plot) {
+    await Promise.resolve();
+    const box = document.getElementById('plot-projects');
+    if (!box) return;
+    try {
+        const city = await loadCity();
+        const projects = (city.snapshot?.projects ?? []).filter(p => p.plotId === Number(plot.id));
+        if (projects.length === 0) return;
+        box.className = 'm-section';
+        box.innerHTML = `<h4 class="m-title">Projekty miejskie (${projects.length})</h4><div class="space-y-2">${projects.map(p => {
+            const need = (p.items ?? []).reduce((s, i) => s + i.target, 0);
+            const got = (p.items ?? []).reduce((s, i) => s + Math.min(i.target, p.progress?.[i.typeId] ?? 0), 0);
+            const pct = need ? Math.round(got / need * 100) : 0;
+            return `<div class="bg-gray-700 p-2 rounded-md cursor-pointer" data-open-projects><div class="font-semibold text-purple-400">${esc(p.name)}</div><div class="text-xs text-gray-400">${esc(projectStatusName(p.status))}${need ? ` · ${pct}%` : ''}</div></div>`;
+        }).join('')}</div>`;
+        box.querySelectorAll('[data-open-projects]').forEach(n => n.addEventListener('click', openRatusz));
     } catch { /* optional info */ }
 }
 

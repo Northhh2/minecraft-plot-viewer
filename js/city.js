@@ -75,7 +75,9 @@ function renderCompanies(doc) {
 
 let openPlot = null;
 /** ui.js registers how to open a plot's modal by its id. */
-export function setPlotOpener(fn) { openPlot = fn; }
+let plotLabel = id => `#${id}`;
+export function setPlotOpener(fn, label) { openPlot = fn; if (label) plotLabel = label; }
+const plotLink = id => { const a = el('a', { class: 'cursor-pointer font-semibold text-purple-300 hover:underline' }, plotLabel(id)); a.addEventListener('click', () => openPlot?.(id)); return a; };
 export const projectStatusName = status => PROJECT_STATUS[status] ?? status;
 /** Projects still running (their plot gets a marker on the map). */
 export const ACTIVE_PROJECT_STATUSES = ['proposed', 'approved', 'collecting'];
@@ -90,7 +92,7 @@ function renderProjects(doc) {
         const donors = Object.entries({ ...p.points }).map(([id, pts]) => `${names.get(Number(id)) ?? `#${id}`}: ${pts}${p.bonus?.[id] ? ` (+${p.bonus[id]})` : ''}`);
         return section(`#${p.id} ${p.name} — ${PROJECT_STATUS[p.status] ?? p.status}`,
             p.description ? el('p', { class: 'text-sm text-gray-300 mb-2' }, p.description) : null,
-            p.plotId != null ? el('p', { class: 'text-sm mb-2' }, 'Działka: ', el('a', { class: 'cursor-pointer font-semibold text-purple-300 hover:underline', onclick: () => openPlot?.(p.plotId) }, `#${p.plotId}`)) : null,
+            p.plotId != null ? el('p', { class: 'text-sm mb-2' }, 'Działka: ', plotLink(p.plotId)) : null,
             el('p', { class: 'text-xs text-gray-400 mb-2' }, `Utworzony: dzień ${day(p.createdDay)}${p.completedDay !== null && p.completedDay !== undefined ? `, ukończony: dzień ${day(p.completedDay)}` : ''}${p.motionIdentifier ? `, uchwała ${p.motionIdentifier}` : ''}`),
             table(['Przedmiot', 'Postęp', ''], rows),
             donors.length ? el('p', { class: 'text-sm mt-2' }, `Darczyńcy (punkty): ${donors.join('; ')}`) : null);

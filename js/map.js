@@ -384,6 +384,12 @@ export function pickPlot(done) {
     return stop;
 }
 
+/** Dashed cyan outline for plots that have a running city project. */
+export function markProjectPlots(plotIds) {
+    dom.svg.querySelectorAll('.plot-rect.project-plot').forEach(r => r.classList.remove('project-plot'));
+    for (const id of plotIds) dom.svg.querySelector(`g[data-plot-id='${id}'] .plot-rect`)?.classList.add('project-plot');
+}
+
 /** Gold outline for the Ratusz plot (the Treasury's headquarters). */
 export function markRatusz(plotId) {
     dom.svg.querySelectorAll('.plot-rect.ratusz-plot').forEach(r => r.classList.remove('ratusz-plot'));
