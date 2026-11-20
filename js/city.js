@@ -28,6 +28,10 @@ const PROFESSIONS = {
     none: 'Bezrobotni',
     children: 'Dzieci'
 };
+// Villager biomes of origin (keys are what the game's census tallies in `biomes`).
+const BIOMES = { plains: 'Równiny', desert: 'Pustynia', jungle: 'Dżungla', savanna: 'Sawanna', snow: 'Śnieg', swamp: 'Bagna', taiga: 'Tajga', unknown: 'Nieznany' };
+const BIOME_ICONS = new Set(['desert', 'jungle', 'plains', 'savanna', 'snow', 'swamp']); // taiga has no picture yet: it falls back to plains
+const biomeImg = (key, cls) => el('img', { class: cls, src: `img/biomes/${BIOME_ICONS.has(key) ? key : 'plains'}.png`, alt: BIOMES[key] ?? key, loading: 'lazy' });
 const PALETTE = ['#a78bfa', '#38bdf8', '#f472b6', '#fbbf24', '#34d399', '#fb7185', '#60a5fa', '#c084fc', '#f97316', '#2dd4bf', '#e879f9', '#facc15', '#4ade80', '#94a3b8', '#f87171', '#22d3ee'];
 /** [icon element, Polish name]; icons are the wiki's villager renders in img/villagers/<key>.png. */
 const profession = key => [el('img', { class: 'm-villager', src: `img/villagers/${PROFESSIONS[key] ? key : 'none'}.png`, alt: '', loading: 'lazy' }), PROFESSIONS[key] ?? key];
@@ -123,30 +127,39 @@ let openProfession = null;
 /** ui.js registers how to open a profession's modal (city.js cannot import ui.js: circular). */
 export function setProfessionOpener(fn) { openProfession = fn; }
 export const professionName = key => PROFESSIONS[key] ?? key;
+export const biomeName = key => BIOMES[key] ?? key;
+let openBiome = null;
+export function setBiomeOpener(fn) { openBiome = fn; }
 
 /** Modal body for one profession: the villager picture on the left, the count trend across censuses on the right. */
-export async function mountVillager(root, key) {
+export const mountVillager = (root, key) => mountTrend(root, key, 'tally');
+/** Same modal for a biome of origin. */
+export const mountBiome = (root, key) => mountTrend(root, key, 'biomes');
+
+async function mountTrend(root, key, field) {
+    const isBiome = field === 'biomes';
+    const names = isBiome ? BIOMES : PROFESSIONS;
     root.replaceChildren(el('p', { class: 'text-sm text-gray-300' }, 'Pobieranie danych miasta...'));
     let data;
     try { data = await loadCity(); } catch (err) { root.replaceChildren(el('p', { class: 'text-red-300 text-sm' }, `Nie udało się pobrać danych: ${err.message}`)); return; }
-    const censuses = (data.snapshot?.elections ?? []).filter(e => e.type === 1).sort((a, b) => a.date - b.date || a.electionNumber - b.electionNumber);
-    if (censuses.length === 0) { root.replaceChildren(el('p', { class: 'text-sm text-gray-300' }, 'Brak przeprowadzonych cenzusów.')); return; }
-    const series = censuses.map(c => c.tally?.[key] ?? 0);
-    const totals = censuses.map(c => Object.values(c.tally ?? {}).reduce((s, n) => s + n, 0));
+    const censuses = (data.snapshot?.elections ?? []).filter(e => e.type === 1 && (!isBiome || e.biomes)).sort((a, b) => a.date - b.date || a.electionNumber - b.electionNumber);
+    if (censuses.length === 0) { root.replaceChildren(el('p', { class: 'text-sm text-gray-300' }, isBiome ? 'Brak cenzusów z danymi o biomach.' : 'Brak przeprowadzonych cenzusów.')); return; }
+    const series = censuses.map(c => c[field]?.[key] ?? 0);
+    const totals = censuses.map(c => Object.values(c[field] ?? {}).reduce((s, n) => s + n, 0));
     const last = series.length - 1;
     const delta = last > 0 ? series[last] - series[last - 1] : null;
     const stat = (label, value) => el('div', { class: 'm-stat' }, el('b', {}, value), el('span', {}, label));
     const left = el('div', { class: 'm-villager-side' },
-        el('img', { class: 'm-villager-big', src: `img/villagers/${PROFESSIONS[key] ? key : 'none'}.png`, alt: PROFESSIONS[key] ?? key }),
+        isBiome ? biomeImg(key, 'm-villager-big') : el('img', { class: 'm-villager-big', src: `img/villagers/${PROFESSIONS[key] ? key : 'none'}.png`, alt: PROFESSIONS[key] ?? key }),
         el('div', { class: 'm-stats' },
             stat('obecnie', num(series[last])),
             stat('zmiana', delta === null ? '—' : `${delta > 0 ? '▲' : delta < 0 ? '▼' : ''}${Math.abs(delta)}`),
             stat('udział', totals[last] ? `${Math.round(series[last] / totals[last] * 100)}%` : '—'),
             stat('rekord', num(Math.max(...series)))));
-    const color = PALETTE[Object.keys(PROFESSIONS).indexOf(key) % PALETTE.length] ?? PALETTE[0];
+    const color = PALETTE[Object.keys(names).indexOf(key) % PALETTE.length] ?? PALETTE[0];
     const right = el('div', { class: 'm-villager-chart' }, el('h3', { class: 'text-lg font-semibold mb-2' }, 'Zmiany liczebności'), chart({
         type: 'line',
-        data: { labels: censuses.map(c => `#${c.electionNumber} · dz. ${day(c.date)}`), datasets: [{ label: PROFESSIONS[key] ?? key, data: series, borderColor: color, backgroundColor: color + '33', fill: true, borderWidth: 3, pointRadius: 4, tension: 0.3 }] },
+        data: { labels: censuses.map(c => `#${c.electionNumber} · dz. ${day(c.date)}`), datasets: [{ label: names[key] ?? key, data: series, borderColor: color, backgroundColor: color + '33', fill: true, borderWidth: 3, pointRadius: 4, tension: 0.3 }] },
         options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
     }, 260));
     root.replaceChildren(el('div', { class: 'm-villager-layout' }, left, right));
@@ -173,6 +186,14 @@ function renderCensus(doc) {
         options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, usePointStyle: true } } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
     }, 280));
 
+    const biomeKeys = [...new Set(censuses.flatMap(c => Object.keys(c.biomes ?? {})))];
+    const withBiomes = censuses.filter(c => c.biomes);
+    const biomeTrend = biomeKeys.length === 0 ? null : section('Biomy pochodzenia — trendy', chart({
+        type: 'line',
+        data: { labels: withBiomes.map(c => `#${c.electionNumber} · dz. ${day(c.date)}`), datasets: biomeKeys.map((k, i) => ({ label: BIOMES[k] ?? k, data: withBiomes.map(c => c.biomes[k] ?? 0), borderColor: PALETTE[i % PALETTE.length], backgroundColor: PALETTE[i % PALETTE.length], borderWidth: 2, pointRadius: 2, tension: 0.35 })) },
+        options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, usePointStyle: true } } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+    }, 240));
+
     const cards = [...censuses].reverse().map((c, idx, list) => {
         const prev = list[idx + 1];
         const max = Math.max(1, ...Object.values(c.tally ?? {}));
@@ -186,10 +207,22 @@ function renderCensus(doc) {
             row.addEventListener('click', () => openProfession?.(k));
             return row;
         });
+        const bmax = Math.max(1, ...Object.values(c.biomes ?? {}));
+        const bprev = list[idx + 1]?.biomes;
+        const blines = Object.entries(c.biomes ?? {}).sort((a, b) => b[1] - a[1]).map(([k, n]) => {
+            const d = bprev ? n - (bprev[k] ?? 0) : null;
+            const row = el('div', { class: 'm-line clickable', title: 'Pokaż trend' },
+                el('span', { class: 'm-icon' }, biomeImg(k, 'm-villager')), el('span', { class: 'm-name' }, BIOMES[k] ?? k), bar(n, bmax, PALETTE[biomeKeys.indexOf(k) % PALETTE.length]),
+                el('span', { class: 'm-count' }, n),
+                el('span', { class: `m-delta ${d > 0 ? 'up' : d < 0 ? 'down' : ''}` }, d === null || d === 0 ? '' : `${d > 0 ? '▲' : '▼'}${Math.abs(d)}`));
+            row.addEventListener('click', () => openBiome?.(k));
+            return row;
+        });
         return el('div', { class: 'm-card' },
-            el('div', { class: 'm-card-head' }, el('b', {}, `Cenzus #${c.electionNumber}`), el('span', {}, `dzień ${day(c.date)} · razem ${total(c)}${c.excludedCount ? ` · wykluczeni ${c.excludedCount}` : ''}`)), lines);
+            el('div', { class: 'm-card-head' }, el('b', {}, `Cenzus #${c.electionNumber}`), el('span', {}, `dzień ${day(c.date)} · razem ${total(c)}${c.excludedCount ? ` · wykluczeni ${c.excludedCount}` : ''}`)), lines,
+            blines.length ? [el('div', { class: 'm-subhead' }, 'Biom pochodzenia'), blines] : null);
     });
-    return [trend, section('Historia', cards)];
+    return [trend, biomeTrend, section('Historia', cards)];
 }
 
 function renderElections(doc) {

@@ -324,3 +324,4 @@ button.control-button:hover { transform: translateY(-3px) scale(1.1); box-shadow
 .m-stat b { font-size: 1.1rem; }
 .m-villager-chart { flex: 1 1 0; min-width: 0; }
 @media (max-width: 640px) { .m-villager-layout { flex-direction: column; } .m-villager-side { flex-basis: auto; } }
+.m-subhead { margin: 0.7rem 0 0.1rem; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.7; }
