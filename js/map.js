@@ -102,17 +102,21 @@ function drawMetro() {
         for (const id of line.stationIds) if (!lineColorOfStation.has(id)) lineColorOfStation.set(id, line.hex);
     }
 
+    // One dot per platform, so a station shows on both sides of a double track; stations the game exported without platform
+    // positions (older exports) fall back to their single position.
     for (const s of metro.stations) {
-        if (s.x === null) continue;
-        const dot = make('circle', {
-            cx: s.x + 0.5, cy: s.z + 0.5, r: 5, fill: '#ffffff', stroke: lineColorOfStation.get(s.id) ?? '#111827', 'stroke-width': 3,
-            'vector-effect': 'non-scaling-stroke', 'data-station-id': s.id, style: 'cursor:pointer'
-        });
-        dot.addEventListener('mouseenter', e => showTip(e, s.name));
-        dot.addEventListener('mousemove', moveTooltip);
-        dot.addEventListener('mouseleave', hideTooltip);
-        dot.addEventListener('click', () => { if (!state.isDragging) openNewModal({ type: 'metroStation', data: s.id }); });
-        layers.metro.append(dot);
+        const spots = s.platforms?.length ? s.platforms.map(p => [p[0], p[1]]) : (s.x === null ? [] : [[s.x, s.z]]);
+        for (const [px, pz] of spots) {
+            const dot = make('circle', {
+                cx: px + 0.5, cy: pz + 0.5, r: 5, fill: '#ffffff', stroke: lineColorOfStation.get(s.id) ?? '#111827', 'stroke-width': 3,
+                'vector-effect': 'non-scaling-stroke', 'data-station-id': s.id, style: 'cursor:pointer'
+            });
+            dot.addEventListener('mouseenter', e => showTip(e, s.name));
+            dot.addEventListener('mousemove', moveTooltip);
+            dot.addEventListener('mouseleave', hideTooltip);
+            dot.addEventListener('click', () => { if (!state.isDragging) openNewModal({ type: 'metroStation', data: s.id }); });
+            layers.metro.append(dot);
+        }
     }
 
     const legend = document.createElement('div');

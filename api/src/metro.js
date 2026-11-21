@@ -19,7 +19,7 @@ class HttpError extends Error {
 const rows = async (db, sql, ...args) => (await db.prepare(sql).bind(...args).all()).results;
 const json = (v, fallback) => { try { return JSON.parse(v); } catch { return fallback; } };
 
-const stationOut = s => ({ id: s.id, name: s.name, x: s.x, y: s.y, z: s.z, platformCount: s.platform_count, edited: !!s.portal_edited });
+const stationOut = s => ({ id: s.id, name: s.name, x: s.x, y: s.y, z: s.z, platformCount: s.platform_count, platforms: json(s.platforms, []), edited: !!s.portal_edited });
 const lineOut = l => ({
     id: l.id, name: l.name, color: l.color, hex: hexOfColor(l.color), speed: l.speed, dwellSeconds: l.dwell_seconds, trainCount: l.train_count,
     circular: !!l.circular, throughLoops: !!l.through_loops, shuttle: !!l.shuttle, running: !!l.running,
@@ -77,7 +77,7 @@ export async function importMetroSnapshot(env, viewer, doc, { dryRun, refuseOver
     const db = env.DB;
     const stmts = [db.prepare('DELETE FROM metro_lines'), db.prepare('DELETE FROM metro_stations')];
     for (const s of d.stations) {
-        stmts.push(db.prepare('INSERT INTO metro_stations (id, name, x, y, z, platform_count) VALUES (?1, ?2, ?3, ?4, ?5, ?6)').bind(s.id, s.name, s.x, s.y, s.z, s.platforms.length));
+        stmts.push(db.prepare('INSERT INTO metro_stations (id, name, x, y, z, platform_count, platforms) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)').bind(s.id, s.name, s.x, s.y, s.z, s.platforms.length, JSON.stringify(s.platforms.map(p => [p.x, p.z, p.direction]))));
     }
     for (const l of d.lines) {
         stmts.push(db.prepare(

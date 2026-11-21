@@ -163,6 +163,7 @@ CREATE TABLE IF NOT EXISTS metro_stations (
     name            TEXT NOT NULL,
     x INTEGER, y INTEGER, z INTEGER,       -- NULL when the station has no platform in the world
     platform_count  INTEGER NOT NULL DEFAULT 0,
+    platforms       TEXT NOT NULL DEFAULT '[]',   -- JSON: [[x, z, direction], ...], one entry per platform (both sides of a line)
     portal_edited   INTEGER NOT NULL DEFAULT 0
 );
 
