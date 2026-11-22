@@ -7,7 +7,7 @@
 // LAND is exchanged automatically in both directions as small deltas (only changed records), see runLandDelta() below; run
 // the agent from cron every minute. The old whole-dataset land push/pull is gone (set LAND_FULL=1 to bring the push back).
 //
-// Game -> portal: GovernmentBP and TransportationBP write [gov_land_export] / [gov_city_export] / [trn_metro_export]
+// Game -> portal: GovernmentBP and TransportationBP write [gov_land_export] / [gov_city_export] / [trn_metro_export] (and NetworkingBP: [net_coverage_export])
 //   chunks to the content log (every 10 min, only when something changed). The agent rebuilds the newest complete
 //   export of each and POSTs it.
 // Portal -> game: with --pull the portal's land and metro data is cut into `scriptevent nb:land_pull_chunk` /
@@ -98,7 +98,7 @@ async function sendCommand(command) {
 
 /** Newest complete export per tag. Lines look like: [...] [gov_land_export] <id> <i>/<n> <chunk> */
 function newestExports(lines) {
-    const LINE = /\[(gov_land_export|gov_city_export|trn_metro_export)\] (\S+) (\d+)\/(\d+) ?(.*?)\r?$/;
+    const LINE = /\[(gov_land_export|gov_city_export|trn_metro_export|net_coverage_export)\] (\S+) (\d+)\/(\d+) ?(.*?)\r?$/;
     const sets = new Map();
     lines.forEach((line, no) => {
         const m = LINE.exec(line);
@@ -155,7 +155,8 @@ const found = newestExports(allLines);
 const PUSHES = [
     ...(env.LAND_FULL === '1' ? [{ tag: 'gov_land_export', path: '/api/sync/land', key: 'landHash', changed: 'land' }] : []),
     { tag: 'gov_city_export', path: '/api/sync/city', key: 'cityHash' },
-    { tag: 'trn_metro_export', path: '/api/sync/metro', key: 'metroHash', changed: 'metro' }
+    { tag: 'trn_metro_export', path: '/api/sync/metro', key: 'metroHash', changed: 'metro' },
+    { tag: 'net_coverage_export', path: '/api/sync/network', key: 'networkHash' }
 ];
 
 for (const { tag, path: apiPath, key, changed } of PUSHES) {

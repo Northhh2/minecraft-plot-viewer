@@ -3,7 +3,7 @@ import { authenticate, login, logout, syncPins } from './auth.js';
 import { handleEdit } from './edit.js';
 import { handleMetro, readMetro } from './metro.js';
 import { bumpLandRev } from './delta.js';
-import { syncLand, syncLandDeltaOut, syncLandDeltaIn, syncLandResult, syncCity, syncMetro, syncExport, syncMetroExport, readCity, readMyAllowance } from './sync.js';
+import { syncLand, syncLandDeltaOut, syncLandDeltaIn, syncLandResult, syncCity, syncMetro, syncNetwork, readNetwork, syncExport, syncMetroExport, readCity, readMyAllowance } from './sync.js';
 
 // The front end lives on another origin and authenticates with a bearer token (no cookies),
 // so a wildcard origin is fine: browsers never attach credentials automatically.
@@ -48,6 +48,9 @@ export default {
                 case 'GET /api/metro':
                     return json(await readMetro(env.DB), 200, { 'Cache-Control': 'public, max-age=30' });
 
+                case 'GET /api/network':
+                    return json(await readNetwork(env.DB), 200, { 'Cache-Control': 'public, max-age=30' });
+
                 case 'POST /api/login':
                     return reply(await login(env, request, await readBody(request)));
 
@@ -82,6 +85,9 @@ export default {
 
                 case 'POST /api/sync/metro':
                     return reply(await syncMetro(env, request, await readBody(request)));
+
+                case 'POST /api/sync/network':
+                    return reply(await syncNetwork(env, request, await readBody(request)));
 
                 case 'GET /api/sync/export':
                     return reply(await syncExport(env, request));

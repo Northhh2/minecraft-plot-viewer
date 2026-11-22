@@ -5,6 +5,7 @@ import { getColorForType, escapeHtml } from './utils.js';
 
 let appData;
 let dom;
+let networkVisible = false; // the Magenta coverage overlay is off by default
 const layers = {};
 
 export function initializeMap(data) {
@@ -41,7 +42,7 @@ export function drawMap() {
     cityImage.setAttribute('preserveAspectRatio', 'none');
     dom.svg.appendChild(cityImage);
 
-    ['districts', 'merged', 'streets', 'plots', 'metro'].forEach(layerId => {
+    ['districts', 'merged', 'streets', 'plots', 'network', 'metro'].forEach(layerId => {
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         g.id = `${layerId}-layer`;
         layers[layerId] = g;
@@ -52,9 +53,45 @@ export function drawMap() {
     drawPlots();
     drawMergedPlots();
     drawDistrictBoundaries();
+    drawNetwork();
     drawMetro();
     
     calculateInitialViewBox();
+}
+
+/** Magenta network coverage: a disc per active tower/antenna (outer = strongest phone's range, inner = weakest's).
+ *  An overlay, off by default; the toggle only appears once the game has exported towers. */
+function drawNetwork() {
+    const net = appData.network;
+    const toggle = document.getElementById('toggle-network');
+    const towers = net?.towers ?? [];
+    if (towers.length === 0) { toggle?.classList.add('hidden'); return; }
+    toggle?.classList.remove('hidden');
+    toggle?.classList.toggle('active', networkVisible);
+    layers.network.classList.toggle('hidden', !networkVisible);
+    layers.network.setAttribute('pointer-events', 'none');
+
+    const NS = 'http://www.w3.org/2000/svg';
+    const COLOR = '#e20074';
+    const make = (tag, attrs) => {
+        const el = document.createElementNS(NS, tag);
+        for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+        return el;
+    };
+    const outer = net.rangeMax || 100, inner = net.rangeMin || 60;
+    for (const t of towers.filter(t => t.active)) {
+        layers.network.append(
+            make('circle', { cx: t.x + 0.5, cy: t.z + 0.5, r: outer, fill: COLOR, 'fill-opacity': 0.12, stroke: COLOR, 'stroke-opacity': 0.5, 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }),
+            make('circle', { cx: t.x + 0.5, cy: t.z + 0.5, r: inner, fill: COLOR, 'fill-opacity': 0.12 })
+        );
+    }
+    for (const t of towers) {
+        const dot = make('circle', { cx: t.x + 0.5, cy: t.z + 0.5, r: 4, fill: t.active ? COLOR : '#6b7280', stroke: '#ffffff', 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' });
+        const title = make('title', {});
+        title.textContent = `${net.operator ?? 'Magenta'}: ${t.type === 'antenna' ? 'antena' : 'wieża'} (${t.active ? 'aktywna' : 'nieaktywna'})`;
+        dot.append(title);
+        layers.network.append(dot);
+    }
 }
 
 /** Metro lines (their compiled route, or straight links between stops when the game could not compile one),
@@ -634,6 +671,7 @@ function setupMapControls() {
     document.getElementById('toggle-districts').addEventListener('click', () => toggleLayer('districts'));
     document.getElementById('toggle-merged').addEventListener('click', () => toggleLayer('merged'));
     document.getElementById('toggle-metro').addEventListener('click', () => toggleLayer('metro'));
+    document.getElementById('toggle-network').addEventListener('click', () => toggleLayer('network'));
 }
 
 function toggleLayer(layerId) {
@@ -641,6 +679,7 @@ function toggleLayer(layerId) {
     const button = document.getElementById(`toggle-${layerId}`);
     const isHidden = layer.classList.toggle('hidden');
     button.classList.toggle('active', !isHidden);
+    if (layerId === 'network') networkVisible = !isHidden;
     if (layerId === 'metro') document.getElementById('metro-legend')?.classList.toggle('hidden', isHidden);
 }
 

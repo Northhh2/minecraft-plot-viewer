@@ -5,6 +5,7 @@
 //   GET/POST /api/sync/land-delta, POST /api/sync/land-result   the automatic delta exchange (see delta.js); the routes above for land are the manual full ones
 //   GET  /api/sync/export portal -> game: the current land export document (what nb:land_pull_chunk receives)
 //   GET  /api/sync/metro-export  portal -> game: the metro updates document (what nb:metro_pull_chunk receives)
+//   POST /api/sync/network  game -> portal: Magenta network coverage ([net_coverage_export]); GET /api/network is the public read
 //   GET  /api/city        public: the stored city snapshot
 // Unchanged documents (same hash, ignoring exportedAt) are skipped.
 import { sha256Hex, timingSafeEqual } from './auth.js';
@@ -93,6 +94,32 @@ export async function syncMetro(env, request, body) {
         .catch(err => err?.status ? { status: err.status, body: err.body } : Promise.reject(err));
     if (result.status === 200) await setMeta(env.DB, 'sync_metro_hash', hash);
     return result;
+}
+
+/** Game -> portal: the Magenta network coverage ([net_coverage_export], NetworkingBP). Kept as one JSON document in `meta`. */
+export async function syncNetwork(env, request, body) {
+    if (!(await authorized(env, request))) return DENIED;
+    const doc = body?.doc ?? body;
+    if (doc === null || typeof doc !== 'object' || !Array.isArray(doc.towers)) return { status: 400, body: { error: 'invalid_document' } };
+
+    const num = v => (Number.isFinite(v) ? Math.round(v) : null);
+    const clean = {
+        operator: String(doc.operator ?? 'Magenta').slice(0, 40),
+        rangeMin: num(doc.rangeMin) ?? 60,
+        rangeMax: num(doc.rangeMax) ?? 100,
+        towers: doc.towers.slice(0, 2000)
+            .map(t => ({ x: num(t?.x), z: num(t?.z), type: t?.type === 'antenna' ? 'antenna' : 'tower', active: t?.active === true }))
+            .filter(t => t.x !== null && t.z !== null)
+    };
+    const json = JSON.stringify(clean);
+    if (await getMeta(env.DB, 'network_coverage') === json) return { status: 200, body: { ok: true, unchanged: true } };
+    await setMeta(env.DB, 'network_coverage', json);
+    return { status: 200, body: { ok: true, towers: clean.towers.length } };
+}
+
+/** Public: the stored coverage (no towers until the game has exported once). */
+export async function readNetwork(db) {
+    try { return JSON.parse(await getMeta(db, 'network_coverage')) ?? { towers: [] }; } catch { return { towers: [] }; }
 }
 
 export async function syncMetroExport(env, request) {

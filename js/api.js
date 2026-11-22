@@ -4,16 +4,20 @@ import { authHeaders, getToken } from './auth.js';
 // Loads app data from the Worker API.
 export async function loadAppData() {
     try {
-        const [res, metroRes] = await Promise.all([
+        const [res, metroRes, networkRes] = await Promise.all([
             fetch(`${API_BASE}/api/snapshot`, { headers: authHeaders(getToken()) }),
             // Revalidate: an admin's import or edit must show up on the reload that follows it, not 30 s later.
-            fetch(`${API_BASE}/api/metro`, { cache: 'no-cache' }).catch(() => null)
+            fetch(`${API_BASE}/api/metro`, { cache: 'no-cache' }).catch(() => null),
+            fetch(`${API_BASE}/api/network`).catch(() => null)
         ]);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const appData = snapshotToAppData(await res.json());
         // The metro is optional: a failure here must not take the rest of the portal down.
         appData.metro = metroRes?.ok ? await metroRes.json().catch(() => null) : null;
         if (!appData.metro) appData.metro = { palette: [], stations: [], lines: [] };
+        // Magenta network coverage is optional too.
+        appData.network = networkRes?.ok ? await networkRes.json().catch(() => null) : null;
+        if (!appData.network?.towers) appData.network = { towers: [] };
         return appData;
     } catch (error) {
         console.error("Błąd podczas pobierania danych z API:", error);
